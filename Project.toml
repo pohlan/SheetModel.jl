@@ -1,0 +1,4 @@
+name = "SheetModel"
+uuid = "3921df55-cb7d-45ab-ac85-2571596d0d4e"
+authors = ["Annegret Pohle <apohle@ethz.ch>"]
+version = "0.1.0"
