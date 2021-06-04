@@ -13,18 +13,18 @@ export Para
     ρi::F    = 910.0             # ice density, kg/m^3
     α::F     = 1.25              # first sheet flow exponent
     β::F     = 1.5               # second sheet flow exponent
-    k::F     = 0.01              # sheet conductivity, m^(7/4)kg^(-1/2)
+    k::F     = 0.005             # sheet conductivity, m^(7/4)kg^(-1/2)
     n::F     = 3.0               # Glen's flow law exponent
-    A::F     = 5e-25             # ice flow constant, Pa^(-n)s^(-1)
-    ev::F    = 1e-3              # englacial void ratio
+    A::F     = 3.375e-24         # ice flow constant, Pa^(-n)s^(-1)
+    ev::F    = 0.0               # englacial void ratio; SHMIP: 0 for ice-sheet, 1e-3 for valley glacier
     lr::F    = 2.0               # horizontal cavity spacing, m
     hr::F    = 0.1               # bedrock bump height, m
+    ub::F    = 1e-6              # basal sliding speed, m/s
 
     # Field parameters (defined on every grid point)
     H::Arr  # ice thickness, m
     zb::Arr # bed elevation, m
     m::Arr  # source term, m/s
-    ub::Arr # basal sliding speed, m/s
 
     # Numerical domain
     lx::F         # domain size
@@ -72,7 +72,7 @@ function scaling(p::Para)
     H_ = mean(H)
     zb_ = H_ / r_ρ # ?
     m_ = mean(m)
-    ub_ = mean(ub)
+    ub_ = ub
 
     ϕ_ = g_ * H_ * ρ_ / r_ρ
     q_ = k_ * h_^α * ( ϕ_  / xy_ )^(β-1)
@@ -90,12 +90,12 @@ function scaling(p::Para)
         A = A / A_,
         lr = lr / lr_,
         hr = hr / h_,
+        ub = ub / ub_,
 
         # Field parameters (defined on every grid point)
         H = H ./ H_,
         zb = zb ./ zb_,
         m = m ./ m_,
-        ub = ub ./ ub_,
 
         # Numerical domain
         lx = lx ./ xy_,
@@ -171,7 +171,7 @@ Calculates opening rate
 """
 function calc_vo(h, p::Para)
     @unpack ub, hr, lr = p
-    return ub .* (hr .- h) ./ lr
+    return ub * (hr .- h) ./ lr
 end
 
 
