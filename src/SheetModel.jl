@@ -1,41 +1,12 @@
 module SheetModel
 
+#using Core: ScalarIndex
 using Base: Float64
-using PyPlot, Printf, LinearAlgebra, Parameters
+using LinearAlgebra, Parameters, Statistics, PyPlot
 
-export Params
+export Para
 
-function scaling(p::Params)
-    @unpack H, ub, m, lx, lr, g, A, hr, ρw, r_ρ, α, β, n = p
-
-    # Scaling factors
-    H_ = mean(H)
-    ub_ = ub
-    m_ = mean(m)
-    x_ = lx
-    lr_ = lr
-    g_ = g
-    A_ = A
-    h_ = hr
-    ρ_ = ρw
-    t_ = x_ * h_ / q_
-    ϕ_ = g_ * H_ * ρ_ / r_ρ
-    q_ = k_ * h_^α * (ϕ_/x_)^(β-1)
-    vo_ = ub_ * h_ / lr_
-    vc_ = A_ * h_ * ϕ_^n
-
-    # Dimensionless parameters
-    Scaled_Params = Params(p,
-    g = g / g_,
-    ρw = ρw / ρ_,
-
-    )
-
-end
-
-
-
-@with_kw struct Params{F<:Float64, I<:Int64, Arr<:Array{Float64}, Lin<:LinRange{Float64}}
+@with_kw struct Para{F<:Float64, I<:Int64, Arr<:Array{Float64}, Lin<:LinRange{Float64}}
     # Scalars (one global value)
     g::F     = 9.81              # gravitational acceleration, m/s^2
     ρw::F    = 1000.0            # water density, kg/m^3
@@ -48,7 +19,12 @@ end
     ev::F    = 1e-3              # englacial void ratio
     lr::F    = 2.0               # horizontal cavity spacing, m
     hr::F    = 0.1               # bedrock bump height, m
-    ub::F    = 1e-6              # basal sliding speed, m/s
+
+    # Field parameters (defined on every grid point)
+    H::Arr  # ice thickness, m
+    zb::Arr # bed elevation, m
+    m::Arr  # source term, m/s
+    ub::Arr # basal sliding speed, m/s
 
     # Numerical domain
     lx::F         # domain size
@@ -60,17 +36,6 @@ end
     xc::Lin = LinRange(dx/2, lx-dx/2, nx) # vector of x-coordinates
     yc::Lin = LinRange(dy/2, ly-dy/2, ny) # vector of y-coordinates
 
-    # Field parameters (defined on every grid point)
-    H::Arr  # ice thickness
-    zb::Arr # bed elevation
-    m::Arr  # source term
-
-    # Dimensionless numbers
-    Σ::F   = nothing
-    Γ::F   = nothing
-    Λ::F   = nothing
-    r_ρ::F = ρw / ρi
-
     # Physical time stepping
     ttot::F        # total simulation time
     dt::F          # physical time step
@@ -80,52 +45,75 @@ end
     itMax::I  = 10^3       # max number of iterations
     damp::F   = 1-41/nx    # damping (this is a tuning parameter, dependent on e.g. grid resolution) # TODO: define how?
     dτ::F     = (1.0/(dx^2/k/2.1) + 1.0/dt)^-1 # pseudo-time step; TODO: define how?
+
+    # Dimensionless numbers
+    Σ::F   = NaN
+    Γ::F   = NaN
+    Λ::F   = NaN
+    r_ρ::F = ρw / ρi
 end
 
+function scaling(p::Para)
+    @unpack g, ρw, k, A, lr, hr,
+            H, zb, m, ub,
+            lx, ly, dx, dy, xc, yc,
+            ttot, dt, dτ,
+            r_ρ, α, β, n = p
 
+    # Scaling factors
+    g_ = g
+    ρ_ = ρw
+    k_ = k
+    A_ = A
+    lr_ = lr
+    h_ = hr
+    xy_ = max(lx, ly) # ?
 
-# @with_kw struct Para{F<:Float64, I<:Int64, Arr<:Array{Float64}, Lin<:LinRange{Float64}}
-#     # Scalars (one global value)
-#     g::F     = 1.0              # gravitational acceleration
-#     ρw::F    = 1.0              # water density
-#     ρi::F    = 910.0 / 1000.0
-#     α::F     = 1.25
-#     β::F     = 1.5
-#     k::F     = 1.0
-#     n::F     = 3.0
-#     A::F     = 1.0
-#     ev::F    = 0.5
-#     lr::F    = 1.0              # horizontal cavity spacing, spatially uniform
-#     hr::F    = 1.0              # bedrock bump height, spatially uniform
-#     # Numerical domain
-#     lx::F = 12.0       # domain size
-#     ly::F = 10.0
-#     nx::I = 64         # number of grids
-#     ny::I = 32
-#     dx::F = lx/nx      # grid size
-#     dy::F = ly/ny
-#     xc::Lin = LinRange(dx/2, lx-dx/2, nx) # vector of x-coordinates
-#     yc::Lin = LinRange(dy/2, ly-dy/2, ny) # vector of y-coordinates
-#     # Field parameters (defined on every grid point)
-#     zs::Arr = 1/lx * xc * ones(ny)' # surface elevation
-#     zb::Arr = zeros(nx, ny) # bed elevation
-#     m::Arr  = zeros(nx-2, ny-2)  # source term
-#     ub::Arr = zeros(nx, ny) # basal sliding speed
-#     # Dimensionless numbers
-#     Σ::F   = 1e2
-#     Γ::F   = 1e5
-#     Λ::F   = 0.5
-#     r_ρ::F = 1000 / 910 # ρw / ρi
-#     # Physical time stepping
-#     ttot::F   = 2.0        # total simulation time
-#     dt::F     = 0.1        # physical time step
-#     # Pseudo-time iteration
-#     tol::F    = 1e-6       # tolerance
-#     itMax::I  = 10^3        # max number of iterations
-#     damp::F   = 1-41/nx    # damping (this is a tuning parameter, dependent on e.g. grid resolution) # TODO: define how?
-#     dτ::F     = (1.0/(dx^2/k/2.1) + 1.0/dt)^-1 # pseudo-time step; TODO: define how?
-# end
+    H_ = mean(H)
+    zb_ = H_ / r_ρ # ?
+    m_ = mean(m)
+    ub_ = mean(ub)
 
+    ϕ_ = g_ * H_ * ρ_ / r_ρ
+    q_ = k_ * h_^α * ( ϕ_  / xy_ )^(β-1)
+    t_ = xy_ * h_ / q_
+    vo_ = ub_ * h_ / lr_
+    vc_ = A_ * h_ * ϕ_ ^n
+
+    # Dimensionless parameters
+    scaled_params = Para(p,
+        # Scalars (one global value)
+        g = g / g_,
+        ρw = ρw / ρ_,
+        ρi = ρw / r_ρ,
+        k = k / k_,
+        A = A / A_,
+        lr = lr / lr_,
+        hr = hr / h_,
+
+        # Field parameters (defined on every grid point)
+        H = H ./ H_,
+        zb = zb ./ zb_,
+        m = m ./ m_,
+        ub = ub ./ ub_,
+
+        # Numerical domain
+        lx = lx ./ xy_,
+        ly = ly ./ xy_,
+        dx = dx ./ xy_,
+        dy = dy ./ xy_,
+        xc = xc ./ xy_,
+        yc = yc ./ xy_,
+
+        ttot = ttot / t_,
+        dt = dt / t_,
+        dτ = dτ / t_, # ?
+
+        Σ = vo_ * xy_ / q_,
+        Γ = vc_ * xy_ / q_
+        )
+    return scaled_params
+end
 
 
 """
@@ -164,9 +152,9 @@ end
 Calculates effective pressure
 """
 function calc_N(ϕ, p::Para)
-    @unpack ρi, g, zs, zb = p
+    @unpack ρi, g, H = p
     pw = calc_pw(ϕ, p)
-    return ρi * g * (zs .- zb) .- pw
+    return ρi * g * H .- pw
 end
 
 """
@@ -188,25 +176,18 @@ end
 
 
 
-function runthemodel()
+function runthemodel(input::Para, ϕ0, h0)
 
-
-    Params = Para()
-    @unpack ev, g, ρw, Σ, Γ, Λ, m, lx, ly, nx, ny, dx, dy, xc, yc, dt, ttot, tol, itMax, damp, dτ = Params
+    params = scaling(input)
+    @unpack ev, g, ρw, Σ, Γ, Λ, m, dx, dy, xc, yc, dt, ttot, tol, itMax, damp, dτ = params
 
     # Array allocation
-    qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(Params)
+    qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
 
-    # Initial condition
-    #ϕ0    = exp.(- 1e-2*(xc.-lx/2).^2) * exp.(-1e-2*(yc.-ly/2).^2)'
-     ϕ0 = 1/lx * xc * ones(ny)'
-    # ϕ0 = rand(nx, ny)
     ϕ_old   = copy(ϕ0)
-    ϕ      = copy(ϕ0)
-
-    h0 = 0.5 * ones(nx, ny)
-    h_old = copy(h0)
-    h = copy(h0)
+    ϕ       = copy(ϕ0)
+    h_old   = copy(h0)
+    h       = copy(h0)
 
     t = 0.0; it = 0; ittot = 0
 
@@ -217,10 +198,10 @@ function runthemodel()
         # Pseudo-transient iteration
         while max(err_ϕ, err_h) >tol && iter<itMax
             dϕ_dx, dϕ_dy = diff(ϕ, dims=1) ./ dx, diff(ϕ, dims=2) ./ dy   # hydraulic gradient
-            qx, qy     = calc_q(h[1:end-1, :], dϕ_dx, Params), calc_q(h[:, 1:end-1], dϕ_dy, Params) # TODO: which h values to take?!
+            qx, qy     = calc_q(h[1:end-1, :], dϕ_dx, params), calc_q(h[:, 1:end-1], dϕ_dy, params) # TODO: which h values to take?!
 
-            vo     = calc_vo(h, Params)                   # opening rate
-            vc     = calc_vc(ϕ, h, Params)  # closure rate
+            vo     = calc_vo(h, params)                   # opening rate
+            vc     = calc_vc(ϕ, h, params)  # closure rate
 
             # calculate residuals
             Res_ϕ        =    - ev/(ρw*g) * (ϕ[2:end-1, 2:end-1] .- ϕ_old[2:end-1, 2:end-1])/dt .-    # dhe/dt
@@ -253,6 +234,7 @@ function runthemodel()
 end
 
 function plot_output(xc, yc, ϕ0, ϕ)
+    pygui(true)
     figure()
     subplot(1, 2, 1)
     pcolor(xc, yc, ϕ0')
