@@ -3,54 +3,129 @@ module SheetModel
 using Base: Float64
 using PyPlot, Printf, LinearAlgebra, Parameters
 
-export Para
+export Params
 
-@with_kw struct Para{F<:Float64, I<:Int64, Arr<:Array{Float64}, Lin<:LinRange{Float64}}
+function scaling(p::Params)
+    @unpack H, ub, m, lx, lr, g, A, hr, ρw, r_ρ, α, β, n = p
+
+    # Scaling factors
+    H_ = mean(H)
+    ub_ = ub
+    m_ = mean(m)
+    x_ = lx
+    lr_ = lr
+    g_ = g
+    A_ = A
+    h_ = hr
+    ρ_ = ρw
+    t_ = x_ * h_ / q_
+    ϕ_ = g_ * H_ * ρ_ / r_ρ
+    q_ = k_ * h_^α * (ϕ_/x_)^(β-1)
+    vo_ = ub_ * h_ / lr_
+    vc_ = A_ * h_ * ϕ_^n
+
+    # Dimensionless parameters
+    Scaled_Params = Params(p,
+    g = g / g_,
+    ρw = ρw / ρ_,
+
+    )
+
+end
+
+
+
+@with_kw struct Params{F<:Float64, I<:Int64, Arr<:Array{Float64}, Lin<:LinRange{Float64}}
     # Scalars (one global value)
-    g::F     = 1.0              # gravitational acceleration
-    ρw::F    = 1.0              # water density
-    ρi::F    = 910.0 / 1000.0
-    α::F     = 1.25
-    β::F     = 1.5
-    k::F     = 1.0
-    n::F     = 3.0
-    A::F     = 1.0
-    ev::F    = 0.5
-    lr::F    = 1.0              # horizontal cavity spacing, spatially uniform
-    hr::F    = 1.0              # bedrock bump height, spatially uniform
+    g::F     = 9.81              # gravitational acceleration, m/s^2
+    ρw::F    = 1000.0            # water density, kg/m^3
+    ρi::F    = 910.0             # ice density, kg/m^3
+    α::F     = 1.25              # first sheet flow exponent
+    β::F     = 1.5               # second sheet flow exponent
+    k::F     = 0.01              # sheet conductivity, m^(7/4)kg^(-1/2)
+    n::F     = 3.0               # Glen's flow law exponent
+    A::F     = 5e-25             # ice flow constant, Pa^(-n)s^(-1)
+    ev::F    = 1e-3              # englacial void ratio
+    lr::F    = 2.0               # horizontal cavity spacing, m
+    hr::F    = 0.1               # bedrock bump height, m
+    ub::F    = 1e-6              # basal sliding speed, m/s
 
     # Numerical domain
-    lx::F = 12.0       # domain size
-    ly::F = 10.0
-    nx::I = 64         # number of grids
-    ny::I = 32
+    lx::F         # domain size
+    ly::F
+    nx::I         # number of grids
+    ny::I
     dx::F = lx/nx      # grid size
     dy::F = ly/ny
     xc::Lin = LinRange(dx/2, lx-dx/2, nx) # vector of x-coordinates
     yc::Lin = LinRange(dy/2, ly-dy/2, ny) # vector of y-coordinates
 
     # Field parameters (defined on every grid point)
-    zs::Arr = 1/lx * xc * ones(ny)' # surface elevation
-    zb::Arr = zeros(nx, ny) # bed elevation
-    m::Arr  = zeros(nx-2, ny-2)  # source term
-    ub::Arr = zeros(nx, ny) # basal sliding speed
+    H::Arr  # ice thickness
+    zb::Arr # bed elevation
+    m::Arr  # source term
 
     # Dimensionless numbers
-    Σ::F   = 1e2
-    Γ::F   = 1e5
-    Λ::F   = 0.5
-    r_ρ::F = 1000 / 910 # ρw / ρi
+    Σ::F   = nothing
+    Γ::F   = nothing
+    Λ::F   = nothing
+    r_ρ::F = ρw / ρi
 
     # Physical time stepping
-    ttot::F   = 2.0        # total simulation time
-    dt::F     = 0.1        # physical time step
+    ttot::F        # total simulation time
+    dt::F          # physical time step
 
     # Pseudo-time iteration
     tol::F    = 1e-6       # tolerance
-    itMax::I  = 10^3        # max number of iterations
+    itMax::I  = 10^3       # max number of iterations
     damp::F   = 1-41/nx    # damping (this is a tuning parameter, dependent on e.g. grid resolution) # TODO: define how?
     dτ::F     = (1.0/(dx^2/k/2.1) + 1.0/dt)^-1 # pseudo-time step; TODO: define how?
 end
+
+
+
+# @with_kw struct Para{F<:Float64, I<:Int64, Arr<:Array{Float64}, Lin<:LinRange{Float64}}
+#     # Scalars (one global value)
+#     g::F     = 1.0              # gravitational acceleration
+#     ρw::F    = 1.0              # water density
+#     ρi::F    = 910.0 / 1000.0
+#     α::F     = 1.25
+#     β::F     = 1.5
+#     k::F     = 1.0
+#     n::F     = 3.0
+#     A::F     = 1.0
+#     ev::F    = 0.5
+#     lr::F    = 1.0              # horizontal cavity spacing, spatially uniform
+#     hr::F    = 1.0              # bedrock bump height, spatially uniform
+#     # Numerical domain
+#     lx::F = 12.0       # domain size
+#     ly::F = 10.0
+#     nx::I = 64         # number of grids
+#     ny::I = 32
+#     dx::F = lx/nx      # grid size
+#     dy::F = ly/ny
+#     xc::Lin = LinRange(dx/2, lx-dx/2, nx) # vector of x-coordinates
+#     yc::Lin = LinRange(dy/2, ly-dy/2, ny) # vector of y-coordinates
+#     # Field parameters (defined on every grid point)
+#     zs::Arr = 1/lx * xc * ones(ny)' # surface elevation
+#     zb::Arr = zeros(nx, ny) # bed elevation
+#     m::Arr  = zeros(nx-2, ny-2)  # source term
+#     ub::Arr = zeros(nx, ny) # basal sliding speed
+#     # Dimensionless numbers
+#     Σ::F   = 1e2
+#     Γ::F   = 1e5
+#     Λ::F   = 0.5
+#     r_ρ::F = 1000 / 910 # ρw / ρi
+#     # Physical time stepping
+#     ttot::F   = 2.0        # total simulation time
+#     dt::F     = 0.1        # physical time step
+#     # Pseudo-time iteration
+#     tol::F    = 1e-6       # tolerance
+#     itMax::I  = 10^3        # max number of iterations
+#     damp::F   = 1-41/nx    # damping (this is a tuning parameter, dependent on e.g. grid resolution) # TODO: define how?
+#     dτ::F     = (1.0/(dx^2/k/2.1) + 1.0/dt)^-1 # pseudo-time step; TODO: define how?
+# end
+
 
 
 """
