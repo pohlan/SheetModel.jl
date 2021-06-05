@@ -33,8 +33,8 @@ export Para
     ny::I
     dx::F = lx/nx      # grid size
     dy::F = ly/ny
-    xc::Lin = LinRange(dx/2, lx-dx/2, nx) # vector of x-coordinates
-    yc::Lin = LinRange(dy/2, ly-dy/2, ny) # vector of y-coordinates
+    xc::Lin = LinRange(0.0, lx, nx) # vector of x-coordinates
+    yc::Lin = LinRange(0.0, ly, ny) # vector of y-coordinates
 
     # Physical time stepping
     ttot::F        # total simulation time
@@ -42,7 +42,7 @@ export Para
 
     # Pseudo-time iteration
     tol::F    = 1e-6       # tolerance
-    itMax::I  = 10^3       # max number of iterations
+    itMax::I  = 60       # max number of iterations
     damp::F   = 1-41/nx    # damping (this is a tuning parameter, dependent on e.g. grid resolution) # TODO: define how?
     dτ::F     = (1.0/(dx^2/k/2.1) + 1.0/dt)^-1 # pseudo-time step; TODO: define how?
 
@@ -53,7 +53,7 @@ export Para
     r_ρ::F = ρw / ρi
 end
 
-function scaling(p::Para)
+function scaling(p::Para, ϕ0, h0)
     @unpack g, ρw, k, A, lr, hr,
             H, zb, m, ub,
             lx, ly, dx, dy, xc, yc,
@@ -85,7 +85,7 @@ function scaling(p::Para)
         # Scalars (one global value)
         g = g / g_,
         ρw = ρw / ρ_,
-        ρi = ρw / r_ρ,
+        ρi = ρw / ρ_ / r_ρ,
         k = k / k_,
         A = A / A_,
         lr = lr / lr_,
@@ -113,7 +113,12 @@ function scaling(p::Para)
         Γ = vc_ * xy_ / q_,
         Λ = m_ * xy_ / q_
         )
-    return scaled_params
+
+    # variables
+    ϕ0 = ϕ0 ./ ϕ_
+    h0 = h0 ./ h_
+
+    return scaled_params, ϕ0, h0
 end
 
 
@@ -138,6 +143,7 @@ Calculates discharge
 function calc_q(h, dϕ_du, p::Para) # u can be x or y
     @unpack k, α, β = p
     q = - k .* h.^α .* abs.(dϕ_du).^(β-2) .* dϕ_du
+    q[isnan.(q)] .= 0.0  # if dϕ_du is zero, Inf *
     return q
 end
 
@@ -172,14 +178,16 @@ Calculates opening rate
 """
 function calc_vo(h, p::Para)
     @unpack ub, hr, lr = p
-    return ub * (hr .- h) ./ lr
+    h[h .< hr] = ub * (hr .- h[h .< hr]) ./ lr
+    h[h .>= hr] .= 0.0
+    return h
 end
 
 
 
 function runthemodel(input::Para, ϕ0, h0)
 
-    params = scaling(input)
+    params, ϕ0, h0 = scaling(input, ϕ0, h0)
     @unpack ev, g, ρw, Σ, Γ, Λ, m, dx, dy, xc, yc, dt, ttot, tol, itMax, damp, dτ = params
 
     # Array allocation
@@ -223,8 +231,10 @@ function runthemodel(input::Para, ϕ0, h0)
             err_ϕ = norm(Res_ϕ)/length(Res_ϕ)
             err_h   = norm(Res_h)/length(Res_h)
             iter += 1
+
         end
         ittot += iter; it += 1; t += dt
+        print(iter)
 
         ϕ_old .= ϕ
         h_old .= h

@@ -8,14 +8,14 @@ S = SheetModel
 # Define numerical domain and input parameters
 
 # TODO: shouldn't be necessary in the end
-Lx = 1000e3
+Lx = 100e3
 Ly = 20e3
-Nx = 265
-Ny = 128
+Nx = 16
+Ny = 8
 dx = Lx/Nx      # grid size
 dy = Ly/Ny
-xc = LinRange(dx/2, Lx-dx/2, Nx) # vector of x-coordinates
-yc = LinRange(dy/2, Ly-dy/2, Ny) # vector of y-coordinates
+xc = LinRange(0, Lx, Nx) # vector of x-coordinates
+yc = LinRange(0, Ly, Ny) # vector of y-coordinates
 
 input_params = S.Para(
     lx = Lx, # domain length in x-direction, m
@@ -23,8 +23,8 @@ input_params = S.Para(
     nx = Nx,
     ny = Ny,
     dx = dx,
-    ttot = 10*24*3600.0,
-    dt = 0.1,
+    ttot = 10000.0,
+    dt = 100.0,
 
     H = (6 .*( sqrt.(xc.+5e3) .- sqrt(5e3) ) .+ 1 ) .* ones(Ny)', # ice thickness, m
     zb = zeros(Nx, Ny), # bed elevation, m
@@ -34,10 +34,10 @@ input_params = S.Para(
 # Initial condition
 @unpack nx, ny, H = input_params
 #ϕ0    = exp.(- 1e-2*(xc.-Lx/2).^2) * exp.(-1e-2*(yc.-Ly/2).^2)'
-#ϕ0 = 1/Lx * xc * ones(Ny)'
-ϕ0 = 1e6*rand(Nx, Ny)
+ϕ0 = 1e6/Lx * xc * ones(Ny)'
+#ϕ0 = 1e6*rand(Nx, Ny)
 #ϕ0 = 5e6 * rand(nx, ny)
-h0 = 1e-3 * H
+h0 = 0.5/Lx * xc * ones(Ny)'
 
 xc, yc, ϕ0, ϕ = S.runthemodel(input_params, ϕ0, h0);
 S.plot_output(xc, yc, ϕ0, ϕ)
