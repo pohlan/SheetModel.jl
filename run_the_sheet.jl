@@ -37,7 +37,7 @@ input_params = S.Para(
 ϕ0 = 1e6/Lx * xc * ones(Ny)'
 #ϕ0 = 1e6*rand(Nx, Ny)
 #ϕ0 = 5e6 * rand(nx, ny)
-h0 = 0.5/Lx * xc * ones(Ny)'
+h0 = 0.05/Lx * xc * ones(Ny)'
 
 xc, yc, ϕ0, ϕ = S.runthemodel(input_params, ϕ0, h0);
 S.plot_output(xc, yc, ϕ0, ϕ)

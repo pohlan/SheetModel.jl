@@ -107,7 +107,7 @@ function scaling(p::Para, ϕ0, h0)
 
         ttot = ttot / t_,
         dt = dt / t_,
-        dτ = dτ / t_, # ?
+        #dτ = dτ / t_, # ?
 
         Σ = vo_ * xy_ / q_,
         Γ = vc_ * xy_ / q_,
@@ -178,9 +178,10 @@ Calculates opening rate
 """
 function calc_vo(h, p::Para)
     @unpack ub, hr, lr = p
-    h[h .< hr] = ub * (hr .- h[h .< hr]) ./ lr
-    h[h .>= hr] .= 0.0
-    return h
+    vo = zeros(size(h))
+    vo[h .< hr] = ub * (hr .- h[h .< hr]) ./ lr
+    vo[h .>= hr] .= 0.0
+    return vo
 end
 
 
