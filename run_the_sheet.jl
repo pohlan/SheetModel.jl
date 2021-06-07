@@ -23,7 +23,7 @@ input_params = S.Para(
     nx = Nx,
     ny = Ny,
     dx = dx,
-    ttot = 6*24*3600.0,
+    ttot = 1000.0,
     dt = 100.0,
 
     H = (6 .*( sqrt.(xc.+5e3) .- sqrt(5e3) ) .+ 1 ) .* ones(Ny)', # ice thickness, m
