@@ -1,6 +1,5 @@
 module SheetModel
 
-#using Core: ScalarIndex
 using Base: Float64
 using LinearAlgebra, Parameters, Statistics, PyPlot
 
@@ -53,6 +52,9 @@ export Para
     r_ρ::F = ρw / ρi
 end
 
+"""
+Converts input parameters to non-dimensional quantities
+"""
 function scaling(p::Para, ϕ0, h0)
     @unpack g, ρw, k, A, lr, hr,
             H, zb, m, ub,
@@ -143,7 +145,9 @@ Calculates discharge
 function calc_q(h, dϕ_du, p::Para) # u can be x or y
     @unpack k, α, β = p
     q = - k .* h.^α .* abs.(dϕ_du).^(β-2) .* dϕ_du
-    q[isnan.(q)] .= 0.0  # if dϕ_du is zero, Inf *
+    q[isnan.(q)] .= 0.0    # change NaNs to zero; (if dϕ_du is zero, (dϕ_du).^(β-2) is Inf -> Inf*0 -> NaN)
+    q[:, [1, end]] .= 0.0  # boundary condition
+    q[end, :] .= 0.0       # boundary condition
     return q
 end
 
@@ -189,11 +193,12 @@ end
 function runthemodel(input::Para, ϕ0, h0)
 
     params, ϕ0, h0 = scaling(input, ϕ0, h0)
-    @unpack ev, g, ρw, Σ, Γ, Λ, m, dx, dy, xc, yc, dt, ttot, tol, itMax, damp, dτ = params
+    @unpack ev, g, ρw, Σ, Γ, Λ, m, dx, dy, xc, yc, zb, dt, ttot, tol, itMax, damp, dτ = params
 
     # Array allocation
     qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
 
+    ϕ0[1, :]  = ρw .* g .* zb[1, :] # boundary condition, zero water pressure
     ϕ_old   = copy(ϕ0)
     ϕ       = copy(ϕ0)
     h_old   = copy(h0)
@@ -210,24 +215,24 @@ function runthemodel(input::Para, ϕ0, h0)
             dϕ_dx, dϕ_dy = diff(ϕ, dims=1) ./ dx, diff(ϕ, dims=2) ./ dy   # hydraulic gradient
             qx, qy     = calc_q(h[1:end-1, :], dϕ_dx, params), calc_q(h[:, 1:end-1], dϕ_dy, params) # TODO: which h values to take?!
 
-            vo     = calc_vo(h, params)                   # opening rate
+            vo     = calc_vo(h, params)     # opening rate
             vc     = calc_vc(ϕ, h, params)  # closure rate
 
             # calculate residuals
             Res_ϕ        =      - ev/(ρw*g) * (ϕ[2:end-1, 2:end-1] .- ϕ_old[2:end-1, 2:end-1])/dt .-         # dhe/dt
-                                (diff(qx, dims=1)[:, 2:end-1]/dx .+ diff(qy, dims=2)[2:end-1, :]/dy) .-    # div(q)
+                                (diff(qx, dims=1)[:, 2:end-1]/dx .+ diff(qy, dims=2)[2:end-1, :]/dy) .-      # div(q)
                                 (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])            .+         # dh/dt
-                                Λ * m                                                                      # source term
+                                Λ * m                                                                        # source term
             Res_h          =    - (h[2:end-1, 2:end-1] .- h_old[2:end-1, 2:end-1]) / dt  .+
                                 (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])
 
             # damped rate of change
             dϕ_dτ      = Res_ϕ .+ damp * dϕ_dτ
-            dh_dτ        = Res_h .+ damp * dh_dτ
+            dh_dτ      = Res_h .+ damp * dh_dτ
 
             # update fields
-            ϕ[2:end-1, 2:end-1]  = ϕ[2:end-1, 2:end-1] + dτ * dϕ_dτ   # update rule, sets the BC as ϕ[1]=ϕ[end]=0
-            h[2:end-1, 2:end-1]    = h[2:end-1, 2:end-1] + dτ * dh_dτ
+            ϕ[2:end-1, 2:end-1]  = ϕ[2:end-1, 2:end-1] + dτ * dϕ_dτ   # update ϕ
+            h[2:end-1, 2:end-1]  = h[2:end-1, 2:end-1] + dτ * dh_dτ   # updat h
 
             err_ϕ = norm(Res_ϕ)/length(Res_ϕ)
             err_h   = norm(Res_h)/length(Res_h)
@@ -239,17 +244,22 @@ function runthemodel(input::Para, ϕ0, h0)
         h_old .= h
     end
 
+    # TODO: convert back to dimensional quantities
 
-    return xc, yc, ϕ0, ϕ
+    return xc, yc, ϕ, h
 end
 
-function plot_output(xc, yc, ϕ0, ϕ)
+function plot_output(xc, yc, ϕ, h)
     pygui(true)
     figure()
     subplot(1, 2, 1)
-    pcolor(xc, yc, ϕ0')
+    pcolor(xc, yc, h')
+    colorbar()
+    title("h")
     subplot(1, 2, 2)
     pcolor(xc, yc, ϕ')
+    colorbar()
+    title("ϕ")
 end
 
 

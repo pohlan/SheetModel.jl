@@ -10,20 +10,20 @@ S = SheetModel
 # TODO: shouldn't be necessary in the end
 Lx = 100e3
 Ly = 20e3
-Nx = 16
-Ny = 8
+Nx = 64
+Ny = 32
 dx = Lx/Nx      # grid size
 dy = Ly/Ny
 xc = LinRange(0, Lx, Nx) # vector of x-coordinates
 yc = LinRange(0, Ly, Ny) # vector of y-coordinates
 
 input_params = S.Para(
-    lx = Lx, # domain length in x-direction, m
+    lx = Lx,  # domain length in x-direction, m
     ly = Ly,  # domain length in y-direction, m
     nx = Nx,
     ny = Ny,
     dx = dx,
-    ttot = 10000.0,
+    ttot = 6*24*3600.0,
     dt = 100.0,
 
     H = (6 .*( sqrt.(xc.+5e3) .- sqrt(5e3) ) .+ 1 ) .* ones(Ny)', # ice thickness, m
@@ -39,5 +39,5 @@ input_params = S.Para(
 #ϕ0 = 5e6 * rand(nx, ny)
 h0 = 0.05/Lx * xc * ones(Ny)'
 
-xc, yc, ϕ0, ϕ = S.runthemodel(input_params, ϕ0, h0);
-S.plot_output(xc, yc, ϕ0, ϕ)
+xc, yc, ϕ, h = S.runthemodel(input_params, ϕ0, h0);
+S.plot_output(xc, yc, ϕ, h)
