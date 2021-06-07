@@ -107,7 +107,7 @@ function scaling(p::Para, ϕ0, h0)
 
         ttot = ttot / t_,
         dt = dt / t_,
-        #dτ = dτ / t_, # ?
+        dτ = dτ / t_, # ?
 
         Σ = vo_ * xy_ / q_,
         Γ = vc_ * xy_ / q_,
@@ -214,12 +214,12 @@ function runthemodel(input::Para, ϕ0, h0)
             vc     = calc_vc(ϕ, h, params)  # closure rate
 
             # calculate residuals
-            Res_ϕ        =      ev/(ρw*g) * (ϕ[2:end-1, 2:end-1] .- ϕ_old[2:end-1, 2:end-1])/dt .+    # dhe/dt
-                                (diff(qx, dims=1)[:, 2:end-1]/dx .+ diff(qy, dims=2)[2:end-1, :]/dy) .+    # div(q)
-                                Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1]            .-    # dh/dt
-                                Λ * m                                                                    # source term
-            Res_h          =    (h[2:end-1, 2:end-1] .- h_old[2:end-1, 2:end-1]) / dt  .-
-                                Σ * vo[2:end-1, 2:end-1] .+ Γ * vc[2:end-1, 2:end-1]
+            Res_ϕ        =      - ev/(ρw*g) * (ϕ[2:end-1, 2:end-1] .- ϕ_old[2:end-1, 2:end-1])/dt .-         # dhe/dt
+                                (diff(qx, dims=1)[:, 2:end-1]/dx .+ diff(qy, dims=2)[2:end-1, :]/dy) .-    # div(q)
+                                (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])            .+         # dh/dt
+                                Λ * m                                                                      # source term
+            Res_h          =    - (h[2:end-1, 2:end-1] .- h_old[2:end-1, 2:end-1]) / dt  .+
+                                (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])
 
             # damped rate of change
             dϕ_dτ      = Res_ϕ .+ damp * dϕ_dτ
@@ -232,10 +232,8 @@ function runthemodel(input::Para, ϕ0, h0)
             err_ϕ = norm(Res_ϕ)/length(Res_ϕ)
             err_h   = norm(Res_h)/length(Res_h)
             iter += 1
-
         end
         ittot += iter; it += 1; t += dt
-        print(iter)
 
         ϕ_old .= ϕ
         h_old .= h
