@@ -1,6 +1,6 @@
 module SheetModel
 
-using Base: Float64
+using Base: Float64, Int64
 using LinearAlgebra, Parameters, Statistics, PyPlot
 
 export Para
@@ -21,15 +21,15 @@ export Para
     ub    = 1e-6              # basal sliding speed, m/s
 
     # Field parameters (defined on every grid point)
-    H::Matrix  # ice thickness, m
-    zb::Matrix  # bed elevation, m
-    m::Matrix  # source term, m/s
+    H::Array  # ice thickness, m
+    zb::Array  # bed elevation, m
+    m::Array  # source term, m/s
 
     # Numerical domain
     lx         # domain size
     ly
-    nx         # number of grids
-    ny
+    nx::Int64         # number of grids
+    ny::Int64
     dx = lx/nx      # grid size
     dy = ly/ny
     xc::LinRange = LinRange(0.0, lx, nx) # vector of x-coordinates
@@ -41,7 +41,7 @@ export Para
 
     # Pseudo-time iteration
     tol    = 1e-6       # tolerance
-    itMax::I  = 60       # max number of iterations
+    itMax  = 60       # max number of iterations
     damp   = 1-41/nx    # damping (this is a tuning parameter, dependent on e.g. grid resolution) # TODO: define how?
     dτ     = (1.0/(dx^2/k/2.1) + 1.0/dt)^-1 # pseudo-time step; TODO: define how?
 
@@ -61,7 +61,8 @@ function scaling(p::Para, ϕ0, h0)
             H, zb, m, ub,
             lx, ly, dx, dy, xc, yc,
             ttot, dt, dτ,
-            r_ρ, α, β, n = p
+            r_ρ, α, β, n,
+            Σ, Γ, Λ = p
 
     # Scaling factors
     g_ = g
@@ -82,6 +83,10 @@ function scaling(p::Para, ϕ0, h0)
     t_ = xy_ * h_ / q_
     vo_ = ub_ * h_ / lr_
     vc_ = A_ * h_ * ϕ_ ^n
+
+    if any(.!isnan.([Σ, Γ, Λ]))
+        @warn "Σ, Γ and Λ have already been assigned."
+    end
 
     # Dimensionless parameters
     scaled_params = Para(p,
@@ -110,15 +115,11 @@ function scaling(p::Para, ϕ0, h0)
 
         ttot = ttot / t_,
         dt = dt / t_,
-        dτ = dτ / t_, # ?
+        dτ = dτ / t_,
 
-        if any(!isnan.([Σ, Γ, Λ]))
-            @warn "Warning"
-        else
-            Σ = vo_ * xy_ / q_,
-            Γ = vc_ * xy_ / q_,
-            Λ = m_ * xy_ / q_
-        end
+        Σ = vo_ * xy_ / q_,
+        Γ = vc_ * xy_ / q_,
+        Λ = m_ * xy_ / q_
         )
 
     # variables

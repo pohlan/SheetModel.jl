@@ -22,7 +22,6 @@ input_params = S.Para(
     ly = Ly,  # domain length in y-direction, m
     nx = Nx,
     ny = Ny,
-    dx = dx,
     ttot = 1000.0,
     dt = 100.0,
 
