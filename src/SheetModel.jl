@@ -239,8 +239,6 @@ end
             dϕ_dy   .= diff(ϕ, dims=2) ./ dy
             qx      .= calc_q.(h[1:end-1, :], dϕ_dx, params)  # TODO: which h values to take?!
             qy      .= calc_q.(h[:, 1:end-1], dϕ_dy, params)
-            qx[end, :]      .= 0.0  # boundary condition
-            qy[:, [1, end]] .= 0.0  # boundary condition
 
             vo     .= calc_vo.(h, ub, hr, lr)     # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
@@ -260,6 +258,12 @@ end
             # update fields
             ϕ[2:end-1, 2:end-1]  .= ϕ[2:end-1, 2:end-1] .+ dτ * dϕ_dτ   # update ϕ
             h[2:end-1, 2:end-1]  .= h[2:end-1, 2:end-1] .+ dτ * dh_dτ   # updat h
+
+            # boundary conditions
+            ϕ[end, :] .= ϕ[end-1, :]
+            ϕ[:, 1]   .= ϕ[:, 2]
+            ϕ[:, end] .= ϕ[:, end-1]
+
 
             err_ϕ = norm(Res_ϕ)/length(Res_ϕ)
             err_h   = norm(Res_h)/length(Res_h)
