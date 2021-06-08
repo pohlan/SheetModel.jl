@@ -31,5 +31,5 @@ input_params = S.Para(
     calc_h = (x, y) -> 0.05/lx * x
 )
 
-ϕ, h = S.runthemodel(input_params, ϕ0, h0);
+@time ϕ, h = S.runthemodel(input_params, ϕ0, h0);
 S.plot_output(xc, yc, ϕ, h)

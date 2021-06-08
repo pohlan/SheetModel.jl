@@ -31,16 +31,16 @@ All model parameters; physical and numerical
     ny::Int64
     dx = lx/nx      # grid size
     dy = ly/ny
-    xc::LinRange = LinRange(0.0, lx, nx) # vector of x-coordinates
-    yc::LinRange = LinRange(0.0, ly, ny) # vector of y-coordinates
+    xc::LinRange{Float64} = LinRange(0.0, lx, nx) # vector of x-coordinates
+    yc::LinRange{Float64} = LinRange(0.0, ly, ny) # vector of y-coordinates
 
     # Field parameters (defined on every grid point)
     calc_H::Function
     calc_zb::Function
     calc_m::Function
-    H::Array = calc_H.(xc, yc')  # ice thickness, m
-    zb::Array = calc_zb.(xc, yc')  # bed elevation, m
-    m::Array = calc_m.(xc, yc')  # source term, m/s
+    H::Matrix{Float64} = calc_H.(xc, yc')  # ice thickness, m
+    zb::Matrix{Float64} = calc_zb.(xc, yc')  # bed elevation, m
+    m::Matrix{Float64} = calc_m.(xc, yc')  # source term, m/s
 
     # Physical time stepping
     ttot        # total simulation time
@@ -130,7 +130,7 @@ function scaling(p::Para, ϕ0, h0)
         Σ = vo_ * xy_ / q_,
         Γ = vc_ * xy_ / q_,
         Λ = m_ * xy_ / q_
-        )
+        )::Para
 
     # variables
     ϕ0 = ϕ0 ./ ϕ_
@@ -262,7 +262,7 @@ end
 
             # update fields
             ϕ[2:end-1, 2:end-1]  .= ϕ[2:end-1, 2:end-1] .+ dτ * dϕ_dτ   # update ϕ
-            h[2:end-1, 2:end-1]  .= h[2:end-1, 2:end-1] .+ dτ * dh_dτ   # updat h
+            h[2:end-1, 2:end-1]  .= h[2:end-1, 2:end-1] .+ dτ * dh_dτ   # update h
 
             # boundary conditions
             ϕ[end, :] .= ϕ[end-1, :]
