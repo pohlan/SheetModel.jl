@@ -1,7 +1,7 @@
 using Pkg
 Pkg.activate(@__DIR__)
 using SheetModel, Parameters
-S = SheetModel
+const S = SheetModel
 
 
 # Define numerical domain and input parameters

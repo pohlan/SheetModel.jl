@@ -1,3 +1,4 @@
+__precompile__(false)
 module SheetModel
 
 using Base: Float64, Int64
@@ -5,6 +6,9 @@ using LinearAlgebra, Parameters, Statistics, PyPlot
 
 export Para
 
+"""
+All model parameters; physical and numerical
+"""
 @with_kw struct Para @deftype Float64
     # Scalars (one global value)
     g     = 9.81              # gravitational acceleration, m/s^2
@@ -42,6 +46,9 @@ export Para
     ttot        # total simulation time
     dt          # physical time step
 
+    # misc fudge factors
+    small = eps(Float32) # maybe a Float64 is needed here
+
     # Pseudo-time iteration
     tol    = 1e-6       # tolerance
     itMax  = 60       # max number of iterations
@@ -57,7 +64,7 @@ end
 Broadcast.broadcastable(p::Para) = Ref(p)
 
 """
-Converts input parameters to non-dimensional quantities
+Convert input parameters to non-dimensional quantities
 """
 function scaling(p::Para, ϕ0, h0)
     @unpack g, ρw, k, A, lr, hr,
@@ -133,16 +140,16 @@ function scaling(p::Para, ϕ0, h0)
 end
 
 """
-Returns arrays of initial conditions for ϕ and h
+Return arrays of initial conditions for ϕ and h
 """
-function initial_conditions(xc, yc; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) -> 0.0)
+function initial_conditions(xc, yc; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) -> 0.01)
     ϕ0 = calc_ϕ.(xc, yc')
     h0 = calc_h.(xc, yc')
     return ϕ0, h0
 end
 
 """
-Allocates zeros()
+Pre-allocate arrays
 """
 function array_allocation(nu::Para)
     @unpack nx, ny = nu
@@ -161,19 +168,15 @@ end
 
 
 """
-Calculates discharge
+Calculate discharge
 """
 function calc_q(h, dϕ_du, p::Para) # u can be x or y
-    @unpack k, α, β = p
-    q = - k * h^α * abs(dϕ_du)^(β-2) * dϕ_du
-    if isnan(q)
-        q = 0.0     # change NaNs to zero; (if dϕ_du is zero, (dϕ_du)^(β-2) is Inf -> Inf*0 -> NaN)
-    end
-    return q
+    @unpack k, α, β, small = p
+    return - k * h^α * (abs(dϕ_du) + small)^(β-2) * dϕ_du
 end
 
 """
-Calculates water pressure
+Calculate water pressure
 """
 function calc_pw(ϕ, ρw, g, zb)
     #@unpack ρw, g, zb = p
@@ -181,7 +184,7 @@ function calc_pw(ϕ, ρw, g, zb)
 end
 
 """
-Calculates effective pressure
+Calculate effective pressure
 """
 function calc_N(ϕ, ρi, ρw, g, H, zb)
     #@unpack ρi, g, H = p
@@ -190,7 +193,7 @@ function calc_N(ϕ, ρi, ρw, g, H, zb)
 end
 
 """
-Calculates closure rate
+Calculate closure rate
 """
 function calc_vc(ϕ, h, ρi, ρw, g, H, zb, n, A)
     #@unpack n, A = p
@@ -199,7 +202,7 @@ function calc_vc(ϕ, h, ρi, ρw, g, H, zb, n, A)
 end
 
 """
-Calculates opening rate
+Calculate opening rate
 """
 function calc_vo(h, ub, hr, lr)
     #@unpack ub, hr, lr = p
@@ -216,7 +219,9 @@ end
 @views function runthemodel(input::Para, ϕ0, h0)
 
     params, ϕ0, h0 = scaling(input, ϕ0, h0)
-    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, xc, yc, H, zb, ub, hr, lr, dt, ttot, tol, itMax, damp, dτ = params
+    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, xc, yc,
+            H, zb, ub, hr, lr, dt, ttot, tol, itMax, damp, dτ = params
+
 
     # Array allocation
     vo, vc, dϕ_dx, dϕ_dy, qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
@@ -227,14 +232,14 @@ end
     h_old   = copy(h0)
     h       = copy(h0)
 
-    t = 0.0; it = 0; ittot = 0
+    t, it, ittot = 0.0, 0, 0
 
     # Physical time loop
     while t<ttot
-        iter = 0; err_ϕ = 2*tol; err_h = 2*tol;
+        iter, err_ϕ, err_h = 0, 2*tol, 2*tol
 
         # Pseudo-transient iteration
-        while max(err_ϕ, err_h) >tol && iter<itMax
+        while max(err_ϕ, err_h)>tol && iter<itMax
             dϕ_dx   .= diff(ϕ, dims=1) ./ dx    # hydraulic gradient
             dϕ_dy   .= diff(ϕ, dims=2) ./ dy
             qx      .= calc_q.(h[1:end-1, :], dϕ_dx, params)  # TODO: which h values to take?!
@@ -244,11 +249,11 @@ end
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
 
             # calculate residuals
-            Res_ϕ       .=      .- ev/(ρw*g) * (ϕ[2:end-1, 2:end-1] .- ϕ_old[2:end-1, 2:end-1])/dt .-         # dhe/dt
+            Res_ϕ       .=      - ev/(ρw*g) * (ϕ[2:end-1, 2:end-1] .- ϕ_old[2:end-1, 2:end-1])/dt .-         # dhe/dt
                                 (diff(qx, dims=1)[:, 2:end-1]/dx .+ diff(qy, dims=2)[2:end-1, :]/dy) .-      # div(q)
                                 (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])            .+         # dh/dt
                                 Λ * m[2:end-1, 2:end-1]                                                                        # source term
-            Res_h       .=    - (h[2:end-1, 2:end-1] .- h_old[2:end-1, 2:end-1]) / dt  .+
+            Res_h       .=      - (h[2:end-1, 2:end-1] .- h_old[2:end-1, 2:end-1]) / dt  .+
                                 (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])
 
             # damped rate of change
