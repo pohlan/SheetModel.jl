@@ -2,7 +2,7 @@ __precompile__(false)
 module SheetModel
 
 using Base: Float64, Int64
-using LinearAlgebra, Parameters, Statistics, PyPlot
+using LinearAlgebra, Parameters, Statistics, Printf, PyPlot
 
 export Para
 
@@ -51,9 +51,9 @@ All model parameters; physical and numerical
 
     # Pseudo-time iteration
     tol    = 1e-6       # tolerance
-    itMax  = 60       # max number of iterations
-    damp   = 1-41/nx    # damping (this is a tuning parameter, dependent on e.g. grid resolution) # TODO: define how?
-    dτ     = (1.0/(dx^2/k/2.1) + 1.0/dt)^-1 # pseudo-time step; TODO: define how?
+    itMax  = 10^5       # max number of iterations
+    damp   = 0.9        # damping (this is a tuning parameter, dependent on e.g. grid resolution) # TODO: define how?
+    dτ     = (1.0/(min(dx, dy)^2/k/4.1) + 1.0/dt)^-1 # pseudo-time step; TODO: define how?
 
     # Dimensionless numbers
     Σ   = NaN
@@ -163,7 +163,8 @@ function array_allocation(nu::Para)
     dh_dτ  = zeros(nx-2, ny-2)
     Res_ϕ  = zeros(nx-2, ny-2)
     Res_h  = zeros(nx-2, ny-2)
-    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h
+    Err_ϕ  = zeros(nx, ny)
+    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ
 end
 
 
@@ -219,11 +220,11 @@ end
 function runthemodel(input::Para, ϕ0, h0)
 
     params, ϕ0, h0 = scaling(input, ϕ0, h0)
-    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, xc, yc,
+    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, damp, dτ = params
 
     # Array allocation
-    vo, vc, dϕ_dx, dϕ_dy, qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
+    vo, vc, dϕ_dx, dϕ_dy, qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ = array_allocation(params)
 
     ϕ0[1, :]  = ρw .* g .* zb[1, :] # boundary condition, zero water pressure
     ϕ_old   = copy(ϕ0)
@@ -239,19 +240,23 @@ function runthemodel(input::Para, ϕ0, h0)
 
         # Pseudo-transient iteration
         while max(err_ϕ, err_h)>tol && iter<itMax
-            dϕ_dx   .= diff(ϕ, dims=1) ./ dx    # hydraulic gradient
+            # save current ϕ for error calculation
+            Err_ϕ   .= ϕ
+
+            # quantities occurring in the equations
+            dϕ_dx   .= diff(ϕ, dims=1) ./ dx                  # hydraulic gradient
             dϕ_dy   .= diff(ϕ, dims=2) ./ dy
             qx      .= calc_q.(h[1:end-1, :], dϕ_dx, params)  # TODO: which h values to take?!
             qy      .= calc_q.(h[:, 1:end-1], dϕ_dy, params)
 
-            vo     .= calc_vo.(h, ub, hr, lr)     # opening rate
+            vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
 
             # calculate residuals
             Res_ϕ       .=      - ev/(ρw*g) * (ϕ[2:end-1, 2:end-1] .- ϕ_old[2:end-1, 2:end-1])/dt .-         # dhe/dt
                                 (diff(qx, dims=1)[:, 2:end-1]/dx .+ diff(qy, dims=2)[2:end-1, :]/dy) .-      # div(q)
                                 (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])            .+         # dh/dt
-                                Λ * m[2:end-1, 2:end-1]                                                                        # source term
+                                Λ * m[2:end-1, 2:end-1]                                                      # source term
             Res_h       .=      - (h[2:end-1, 2:end-1] .- h_old[2:end-1, 2:end-1]) / dt  .+
                                 (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])
 
@@ -268,10 +273,15 @@ function runthemodel(input::Para, ϕ0, h0)
             ϕ[:, 1]   .= ϕ[:, 2]
             ϕ[:, end] .= ϕ[:, end-1]
 
-
-            err_ϕ = norm(Res_ϕ)/length(Res_ϕ)
+            Err_ϕ .= abs.(Err_ϕ .- ϕ) # this error is smaller than the error using Res_ϕ
+            #err_ϕ = norm(Err_ϕ)
+             err_ϕ = norm(Res_ϕ)/length(Res_ϕ) # but with this error it also converges
             err_h   = norm(Res_h)/length(Res_h)
             iter += 1
+
+            if mod(iter, 1000) == 0
+                @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ, err_h)
+            end
         end
         ittot += iter; it += 1; t += dt
 

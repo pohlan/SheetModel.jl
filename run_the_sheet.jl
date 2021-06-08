@@ -16,7 +16,7 @@ input_params = S.Para(
     calc_zb = (x, y) -> 0.0,        # bed elevation, m
     calc_m = (x, y) -> 5.79e-09,    # source term, m/s
 
-    ttot = 3600.0,
+    ttot = 100.0,
     dt = 100.0
 )
 
