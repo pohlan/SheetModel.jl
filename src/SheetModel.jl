@@ -136,7 +136,7 @@ function scaling(p::Para, ϕ0, h0)
     ϕ0 = ϕ0 ./ ϕ_
     h0 = h0 ./ h_
 
-    return scaled_params, ϕ0, h0
+    return scaled_params, ϕ0, h0, ϕ_, h_
 end
 
 """
@@ -219,7 +219,7 @@ end
 
 function runthemodel(input::Para, ϕ0, h0)
 
-    params, ϕ0, h0 = scaling(input, ϕ0, h0)
+    params, ϕ0, h0, ϕ_, h_ = scaling(input, ϕ0, h0)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, damp, dτ = params
 
@@ -289,7 +289,8 @@ function runthemodel(input::Para, ϕ0, h0)
         h_old .= h
     end
 
-    # TODO: convert back to dimensional quantities
+    ϕ .= ϕ .* ϕ_
+    h .= h .* h_
 
     return ϕ, h
 end
