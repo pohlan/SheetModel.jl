@@ -135,7 +135,7 @@ end
 """
 Returns arrays of initial conditions for ϕ and h
 """
-function initial_conditions(xc::LinRange, yc::LinRange, calc_ϕ::Function, calc_h::Function)
+function initial_conditions(xc, yc; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) -> 0.0)
     ϕ0 = calc_ϕ.(xc, yc')
     h0 = calc_h.(xc, yc')
     return ϕ0, h0
