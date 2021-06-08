@@ -20,11 +20,6 @@ export Para
     hr    = 0.1               # bedrock bump height, m
     ub    = 1e-6              # basal sliding speed, m/s
 
-    # Field parameters (defined on every grid point)
-    H::Array  # ice thickness, m
-    zb::Array  # bed elevation, m
-    m::Array  # source term, m/s
-
     # Numerical domain
     lx         # domain size
     ly
@@ -34,6 +29,14 @@ export Para
     dy = ly/ny
     xc::LinRange = LinRange(0.0, lx, nx) # vector of x-coordinates
     yc::LinRange = LinRange(0.0, ly, ny) # vector of y-coordinates
+
+    # Field parameters (defined on every grid point)
+    calc_H::Function
+    calc_zb::Function
+    calc_m::Function
+    H::Array = calc_H.(xc, yc')  # ice thickness, m
+    zb::Array = calc_zb.(xc, yc')  # bed elevation, m
+    m::Array = calc_m.(xc, yc')  # source term, m/s
 
     # Physical time stepping
     ttot        # total simulation time
@@ -129,6 +132,14 @@ function scaling(p::Para, ϕ0, h0)
     return scaled_params, ϕ0, h0
 end
 
+"""
+Returns arrays of initial conditions for ϕ and h
+"""
+function initial_conditions(xc::LinRange, yc::LinRange, calc_ϕ::Function, calc_h::Function)
+    ϕ0 = calc_ϕ.(xc, yc')
+    h0 = calc_h.(xc, yc')
+    return ϕ0, h0
+end
 
 """
 Allocates zeros()
@@ -238,7 +249,7 @@ end
             Res_ϕ       .=      .- ev/(ρw*g) * (ϕ[2:end-1, 2:end-1] .- ϕ_old[2:end-1, 2:end-1])/dt .-         # dhe/dt
                                 (diff(qx, dims=1)[:, 2:end-1]/dx .+ diff(qy, dims=2)[2:end-1, :]/dy) .-      # div(q)
                                 (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])            .+         # dh/dt
-                                Λ * m                                                                        # source term
+                                Λ * m[2:end-1, 2:end-1]                                                                        # source term
             Res_h       .=    - (h[2:end-1, 2:end-1] .- h_old[2:end-1, 2:end-1]) / dt  .+
                                 (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])
 
@@ -262,7 +273,7 @@ end
 
     # TODO: convert back to dimensional quantities
 
-    return xc, yc, ϕ, h
+    return ϕ, h
 end
 
 function plot_output(xc, yc, ϕ, h)
