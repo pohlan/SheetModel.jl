@@ -216,12 +216,11 @@ end
 
 
 
-@views function runthemodel(input::Para, ϕ0, h0)
+function runthemodel(input::Para, ϕ0, h0)
 
     params, ϕ0, h0 = scaling(input, ϕ0, h0)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, xc, yc,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, damp, dτ = params
-
 
     # Array allocation
     vo, vc, dϕ_dx, dϕ_dy, qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
@@ -264,7 +263,7 @@ end
             ϕ[2:end-1, 2:end-1]  .= ϕ[2:end-1, 2:end-1] .+ dτ * dϕ_dτ   # update ϕ
             h[2:end-1, 2:end-1]  .= h[2:end-1, 2:end-1] .+ dτ * dh_dτ   # update h
 
-            # boundary conditions
+            # boundary conditions (no flux)
             ϕ[end, :] .= ϕ[end-1, :]
             ϕ[:, 1]   .= ϕ[:, 2]
             ϕ[:, end] .= ϕ[:, end-1]
