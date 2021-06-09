@@ -2,7 +2,7 @@ __precompile__(false)
 module SheetModel
 
 using Base: Float64, Int64
-using LinearAlgebra, Parameters, Statistics, Printf, PyPlot
+using LinearAlgebra, LazyArrays, Parameters, Statistics, Printf, PyPlot
 
 export Para
 
@@ -269,8 +269,8 @@ function runthemodel_scaled(params::Para, ϕ0, h0)
             Err_ϕ   .= ϕ
 
             # quantities occurring in the equations
-            dϕ_dx   .= diff(ϕ, dims=1) ./ dx                  # hydraulic gradient
-            dϕ_dy   .= diff(ϕ, dims=2) ./ dy
+            dϕ_dx   .= LazyArrays.Diff(ϕ, dims=1) ./ dx                  # hydraulic gradient
+            dϕ_dy   .= LazyArrays.Diff(ϕ, dims=2) ./ dy
 
             ix = upstream.(collect(1:nx-1), collect(1:ny)', nx, dϕ_dx; dims=1) # determine indexes of h that are upstream of dϕ/dx
             iy = upstream.(collect(1:nx), collect(1:ny-1)', nx, dϕ_dy; dims=2)
@@ -282,7 +282,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0)
 
             # calculate residuals
             Res_ϕ       .=      - ev/(ρw*g) * (ϕ[2:end-1, 2:end-1] .- ϕ_old[2:end-1, 2:end-1])/dt .-         # dhe/dt
-                                (diff(qx, dims=1)[:, 2:end-1]/dx .+ diff(qy, dims=2)[2:end-1, :]/dy) .-      # div(q)
+                                (LazyArrays.Diff(qx, dims=1)[:, 2:end-1]/dx .+ LazyArrays.Diff(qy, dims=2)[2:end-1, :]/dy) .-      # div(q)
                                 (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])            .+         # dh/dt
                                 Λ * m[2:end-1, 2:end-1]                                                      # source term
             Res_h       .=      - (h[2:end-1, 2:end-1] .- h_old[2:end-1, 2:end-1]) / dt  .+

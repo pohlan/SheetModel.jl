@@ -4,6 +4,7 @@ authors = ["Annegret Pohle <apohle@ethz.ch>"]
 version = "0.1.0"
 
 [deps]
+LazyArrays = "5078a376-72f3-5289-bfd5-ec5146d43c02"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
