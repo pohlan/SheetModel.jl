@@ -167,6 +167,22 @@ function array_allocation(nu::Para)
     return vo, vc, dϕ_dx, dϕ_dy, qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ
 end
 
+"""
+Determine global index for upstream scheme
+"""
+function upstream(ix, iy, nx, dϕ_du; dims=1)
+    if dϕ_du >= 0
+        di = 0
+    else
+        di = 1
+    end
+    if dims == 1
+        ix = ix + di
+    elseif dims == 2
+        iy = iy + di
+    end
+    return ix + (iy-1) * nx # global index
+end
 
 """
 Calculate discharge
@@ -220,7 +236,7 @@ end
 function runthemodel(input::Para, ϕ0, h0)
 
     params, ϕ0, h0, ϕ_, h_ = scaling(input, ϕ0, h0)
-    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy,
+    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, nx, ny,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, damp, dτ = params
 
     # Array allocation
@@ -246,8 +262,11 @@ function runthemodel(input::Para, ϕ0, h0)
             # quantities occurring in the equations
             dϕ_dx   .= diff(ϕ, dims=1) ./ dx                  # hydraulic gradient
             dϕ_dy   .= diff(ϕ, dims=2) ./ dy
-            qx      .= calc_q.(h[1:end-1, :], dϕ_dx, params)  # TODO: which h values to take?!
-            qy      .= calc_q.(h[:, 1:end-1], dϕ_dy, params)
+
+            ix = upstream.(collect(1:nx-1), collect(1:ny)', nx, dϕ_dx; dims=1) # determine indexes of h that are upstream of dϕ/dx
+            iy = upstream.(collect(1:nx), collect(1:ny-1)', nx, dϕ_dy; dims=2)
+            qx      .= calc_q.(h[ix], dϕ_dx, params)
+            qy      .= calc_q.(h[iy], dϕ_dy, params)
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
