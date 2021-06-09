@@ -187,13 +187,19 @@ end
 """
 Calculate discharge
 """
-function calc_q(h, dϕ_du, p::Para) # u can be x or y
-    @unpack k, α, β, small = p
+function calc_q(h, dϕ_du, k, α, β, small) # u can be x or y
+    #@unpack k, α, β, small = p
     return - k * h^α * (abs(dϕ_du) + small)^(β-2) * dϕ_du
 end
 
 """
 Calculate water pressure
+
+# Example
+```jldoctest
+julia> calc_pw(1.0, 1.0, 1.0, 0.5)
+0.5
+```
 """
 function calc_pw(ϕ, ρw, g, zb)
     #@unpack ρw, g, zb = p
@@ -224,7 +230,7 @@ Calculate opening rate
 function calc_vo(h, ub, hr, lr)
     #@unpack ub, hr, lr = p
     if h < hr
-        vo = ub * (hr .- h[h .< hr]) ./ lr
+        vo = ub * (hr - h) / lr
     else
         vo = 0.0
     end
@@ -246,7 +252,7 @@ end
 Run the model with scaled parameters
 """
 function runthemodel_scaled(params::Para, ϕ0, h0)
-    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, nx, ny,
+    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, nx, ny, k, α, β, small,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, damp, dτ = params
     # Array allocation
     vo, vc, dϕ_dx, dϕ_dy, qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ = array_allocation(params)
@@ -274,8 +280,8 @@ function runthemodel_scaled(params::Para, ϕ0, h0)
 
             ix = upstream.(collect(1:nx-1), collect(1:ny)', nx, dϕ_dx; dims=1) # determine indexes of h that are upstream of dϕ/dx
             iy = upstream.(collect(1:nx), collect(1:ny-1)', nx, dϕ_dy; dims=2)
-            qx      .= calc_q.(h[ix], dϕ_dx, params)
-            qy      .= calc_q.(h[iy], dϕ_dy, params)
+            qx      .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
+            qy      .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
@@ -301,9 +307,9 @@ function runthemodel_scaled(params::Para, ϕ0, h0)
             ϕ[:, 1]   .= ϕ[:, 2]
             ϕ[:, end] .= ϕ[:, end-1]
 
-            Err_ϕ .= abs.(Err_ϕ .- ϕ) # this error is smaller than the error using Res_ϕ
-            #err_ϕ = norm(Err_ϕ)
-             err_ϕ = norm(Res_ϕ)/length(Res_ϕ) # but with this error it also converges
+            Err_ϕ .= abs.(Err_ϕ .- ϕ)
+            err_ϕ = norm(Err_ϕ) # this error is smaller than the error using Res_ϕ
+            # err_ϕ = norm(Res_ϕ)/length(Res_ϕ) # but with this error it also converges
             err_h   = norm(Res_h)/length(Res_h)
             iter += 1
 
