@@ -231,14 +231,23 @@ function calc_vo(h, ub, hr, lr)
     return vo
 end
 
-
-
+"""
+Scale the parameters and call the model run function
+"""
 function runthemodel(input::Para, ϕ0, h0)
-
     params, ϕ0, h0, ϕ_, h_ = scaling(input, ϕ0, h0)
+    ϕ, h = runthemodel_scaled(params::Para, ϕ0, h0)
+    ϕ .= ϕ .* ϕ_
+    h .= h .* h_
+    return ϕ, h
+end
+
+"""
+Run the model with scaled parameters
+"""
+function runthemodel_scaled(params::Para, ϕ0, h0)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, nx, ny,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, damp, dτ = params
-
     # Array allocation
     vo, vc, dϕ_dx, dϕ_dy, qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ = array_allocation(params)
 
@@ -307,10 +316,6 @@ function runthemodel(input::Para, ϕ0, h0)
         ϕ_old .= ϕ
         h_old .= h
     end
-
-    ϕ .= ϕ .* ϕ_
-    h .= h .* h_
-
     return ϕ, h
 end
 
