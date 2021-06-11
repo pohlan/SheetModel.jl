@@ -257,7 +257,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0)
     # Array allocation
     vo, vc, dϕ_dx, dϕ_dy, qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ = array_allocation(params)
 
-    ϕ0[1, :]  = ρw .* g .* zb[1, :] # boundary condition, zero water pressure
+    ϕ0[1, :]   = ρw .* g .* zb[1, :] # boundary condition, zero water pressure
+    ϕ0[end, :] = ϕ0[end-1, :] # no flux boundary condition
+    ϕ0[:, 1]   = ϕ0[:, 2]
+    ϕ0[:, end] = ϕ0[:, end-1]
     ϕ_old   = copy(ϕ0)
     ϕ       = copy(ϕ0)
     h_old   = copy(h0)
@@ -282,6 +285,14 @@ function runthemodel_scaled(params::Para, ϕ0, h0)
             iy = upstream.(collect(1:nx), collect(1:ny-1)', nx, dϕ_dy; dims=2)
             qx      .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
             qy      .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
+
+            # test whether boundary conditions are fulfilled
+            if any(qx[end, :] .!= 0.0) || any(ϕ[1, :] .!= ρw .* g .* zb[1, :])
+                @warn "qx b.c. not fulfilled"
+            end
+            if any(qy[:, 1] .!= 0.0) || any(qy[:, end] .!= 0.0)
+                @warn "qy b.c. not fulfilled"
+            end
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate

@@ -31,7 +31,7 @@ onetimestep = Dict("ϕ" => [0.0 0.0;
                            0.031746031746031744 0.03174747527941701;
                            0.047619047619047616 0.0476127369421051])
 
-include(joinpath(@__DIR__, "../run_the_sheet.jl"))
+include(joinpath(@__DIR__, "../examples/run_the_sheet.jl"))
 lx = 100e3
 nx = 64
 @testset "Model runs" begin
