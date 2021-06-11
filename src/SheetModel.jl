@@ -318,6 +318,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0)
             end
         end
         ittot += iter; it += 1; t += dt
+        @printf("time step number %d, total number of iterations = %d \n", it, ittot)
 
         ϕ_old .= ϕ
         h_old .= h
