@@ -1,5 +1,5 @@
 using Pkg
-Pkg.activate(@__DIR__)
+Pkg.activate(joinpath(@__DIR__, "../"))
 using SheetModel, Parameters
 const S = SheetModel
 
@@ -31,5 +31,5 @@ input_params = S.Para(
     calc_h = (x, y) -> 0.05/lx * x
 )
 
-@time ϕ, h = S.runthemodel(input_params, ϕ0, h0);
+@time ϕ, h = S.runthemodel(input_params, ϕ0, h0, printit=100);
 S.plot_output(xc, yc, ϕ, h)

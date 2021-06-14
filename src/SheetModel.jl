@@ -1,6 +1,7 @@
 __precompile__(false)
 module SheetModel
 
+using LinearAlgebra: size
 using Base: Float64, Int64
 using LinearAlgebra, LazyArrays, Parameters, Statistics, Printf, PyPlot
 
@@ -159,12 +160,14 @@ function array_allocation(nu::Para)
     dϕ_dy  = zeros(nx, ny-1)
     qx     = zeros(nx-1, ny)
     qy     = zeros(nx, ny-1)
+    ix     = zeros(nx-1, ny)
+    iy     = zeros(nx, ny-1)
     dϕ_dτ  = zeros(nx-2, ny-2)
     dh_dτ  = zeros(nx-2, ny-2)
     Res_ϕ  = zeros(nx-2, ny-2)
     Res_h  = zeros(nx-2, ny-2)
     Err_ϕ  = zeros(nx, ny)
-    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ
+    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ
 end
 
 """
@@ -240,9 +243,10 @@ end
 """
 Scale the parameters and call the model run function
 """
-function runthemodel(input::Para, ϕ0, h0)
+function runthemodel(input::Para, ϕ0, h0;
+                    printit=10^5)         # error is printed after printit iterations of pseudo-transient time
     params, ϕ0, h0, ϕ_, h_ = scaling(input, ϕ0, h0)
-    ϕ, h = runthemodel_scaled(params::Para, ϕ0, h0)
+    ϕ, h = runthemodel_scaled(params::Para, ϕ0, h0, printit)
     ϕ .= ϕ .* ϕ_
     h .= h .* h_
     return ϕ, h
@@ -251,11 +255,11 @@ end
 """
 Run the model with scaled parameters
 """
-function runthemodel_scaled(params::Para, ϕ0, h0)
-    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, nx, ny, k, α, β, small,
+function runthemodel_scaled(params::Para, ϕ0, h0, printit)
+    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, nx, ny, k, α, β, small, xc, yc,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, damp, dτ = params
     # Array allocation
-    vo, vc, dϕ_dx, dϕ_dy, qx, qy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ = array_allocation(params)
+    vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ = array_allocation(params)
 
     ϕ0[1, :]   = ρw .* g .* zb[1, :] # boundary condition, zero water pressure
     ϕ0[end, :] = ϕ0[end-1, :] # no flux boundary condition
@@ -271,7 +275,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0)
     # Physical time loop
     while t<ttot
         iter, err_ϕ, err_h = 0, 2*tol, 2*tol
-
+        ix, iy
         # Pseudo-transient iteration
         while max(err_ϕ, err_h)>tol && iter<itMax
             # save current ϕ for error calculation
@@ -324,12 +328,12 @@ function runthemodel_scaled(params::Para, ϕ0, h0)
             err_h   = norm(Res_h)/length(Res_h)
             iter += 1
 
-            if mod(iter, 1000) == 0
+            if mod(iter, printit) == 0
                 @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ, err_h)
             end
         end
         ittot += iter; it += 1; t += dt
-        @printf("time step number %d, total number of iterations = %d \n", it, ittot)
+        @printf("time = %d, number of iterations = %d \n", it, iter)
 
         ϕ_old .= ϕ
         h_old .= h
