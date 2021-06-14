@@ -256,7 +256,7 @@ end
 Run the model with scaled parameters
 """
 function runthemodel_scaled(params::Para, ϕ0, h0, printit)
-    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, nx, ny, k, α, β, small, xc, yc,
+    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, nx, ny, k, α, β, small,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, damp, dτ = params
     # Array allocation
     vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ = array_allocation(params)
@@ -275,7 +275,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
     # Physical time loop
     while t<ttot
         iter, err_ϕ, err_h = 0, 2*tol, 2*tol
-        ix, iy
+
         # Pseudo-transient iteration
         while max(err_ϕ, err_h)>tol && iter<itMax
             # save current ϕ for error calculation
@@ -342,14 +342,16 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
 end
 
 function plot_output(xc, yc, ϕ, h)
+    x_plt = [0; xc .+ (xc[2]-xc[1])]
+    y_plt = [0; yc .+ (yc[2]-yc[1])]
     pygui(true)
     figure()
     subplot(1, 2, 1)
-    pcolor(xc, yc, h')
+    pcolor(x_plt, y_plt, h', edgecolors="black")
     colorbar()
     title("h")
     subplot(1, 2, 2)
-    pcolor(xc, yc, ϕ')
+    pcolor(x_plt, y_plt, ϕ', edgecolors="black")
     colorbar()
     title("ϕ")
 end
