@@ -36,10 +36,10 @@ All model parameters; physical and numerical
     yc::LinRange{Float64} = LinRange(0.0, ly, ny) # vector of y-coordinates
 
     # Field parameters (defined on every grid point)
-    calc_H::Function
+    calc_zs::Function
     calc_zb::Function
     calc_m::Function
-    H::Matrix{Float64} = calc_H.(xc, yc')  # ice thickness, m
+    H::Matrix{Float64} = calc_zs.(xc, yc') .- calc_zb.(xc, yc')  # ice thickness, m
     zb::Matrix{Float64} = calc_zb.(xc, yc')  # bed elevation, m
     m::Matrix{Float64} = calc_m.(xc, yc')  # source term, m/s
 
