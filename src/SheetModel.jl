@@ -54,7 +54,7 @@ All model parameters; physical and numerical
     tol    = 1e-6       # tolerance
     itMax  = 10^5       # max number of iterations
     damp   = 0.9        # damping (this is a tuning parameter, dependent on e.g. grid resolution) # TODO: define how?
-    dτ     = (1.0/(min(dx, dy)^2/k/4.1) + 1.0/dt)^-1 # pseudo-time step; TODO: define how?
+    #dτ     = (1.0/(min(dx, dy)^2/k/4.1) + 1.0/dt)^-1 # pseudo-time step; TODO: define how?
 
     # Dimensionless numbers
     Σ   = NaN
@@ -71,7 +71,7 @@ function scaling(p::Para, ϕ0, h0)
     @unpack g, ρw, k, A, lr, hr,
             H, zb, m, ub,
             lx, ly, dx, dy, xc, yc,
-            ttot, dt, dτ,
+            ttot, dt, #dτ,
             r_ρ, α, β, n,
             Σ, Γ, Λ = p
 
@@ -126,7 +126,7 @@ function scaling(p::Para, ϕ0, h0)
 
         ttot = ttot / t_,
         dt = dt / t_,
-        dτ = dτ / t_,
+        #dτ = dτ / t_,
 
         Σ = vo_ * xy_ / q_,
         Γ = vc_ * xy_ / q_,
@@ -167,7 +167,9 @@ function array_allocation(nu::Para)
     Res_ϕ  = zeros(nx-2, ny-2)
     Res_h  = zeros(nx, ny)
     Err_ϕ  = zeros(nx, ny)
-    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ
+    d_eff  = zeros(nx, ny)
+    dτ     = zeros(nx, ny)
+    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, d_eff, dτ
 end
 
 """
@@ -257,9 +259,10 @@ Run the model with scaled parameters
 """
 function runthemodel_scaled(params::Para, ϕ0, h0, printit)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, nx, ny, k, α, β, small,
-            H, zb, ub, hr, lr, dt, ttot, tol, itMax, damp, dτ = params
+            H, zb, ub, hr, lr, dt, ttot, tol, itMax, damp = params
     # Array allocation
-    vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ = array_allocation(params)
+    vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy,
+    dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, d_eff, dτ = array_allocation(params)
 
     ϕ0[1, :]   = ρw .* g .* zb[1, :] # boundary condition, zero water pressure
     ϕ0[end, :] = ϕ0[end-1, :] # no flux boundary condition
@@ -309,13 +312,17 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
             Res_h       .=      - (h .- h_old) / dt  .+
                                 (Σ * vo .- Γ * vc)
 
+            # determine pseudo-time step
+            d_eff .= k * h.^α # effective diffusivity
+            dτ    .= (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step; TODO: define how?
+
             # damped rate of change
             dϕ_dτ      .= Res_ϕ .+ damp .* dϕ_dτ
             dh_dτ      .= Res_h .+ damp .* dh_dτ
 
             # update fields
-            ϕ[2:end-1, 2:end-1]  .= ϕ[2:end-1, 2:end-1] .+ dτ * dϕ_dτ   # update ϕ
-            h  .= h .+ dτ * dh_dτ   # update h
+            ϕ[2:end-1, 2:end-1]  .= ϕ[2:end-1, 2:end-1] .+ dτ[2:end-1, 2:end-1] .* dϕ_dτ   # update ϕ
+            h  .= h .+ dτ .* dh_dτ   # update h
 
             # boundary conditions (no flux)
             ϕ[end, :] .= ϕ[end-1, :]
