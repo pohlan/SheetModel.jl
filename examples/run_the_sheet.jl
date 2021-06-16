@@ -48,7 +48,7 @@ input_params = S.Para(
     calc_ϕ = (x, y) -> 1e6/lx * x,
     #calc_ϕ = (x, y) -> exp(- 1e-2*(x-Lx/2)^2) * exp(-1e-2*(yc-Ly/2)^2),
     #calc_ϕ = (x, y) -> rand(),
-    calc_h = (x, y) -> 0.05/lx * x
+    calc_h = (x, y) -> 0.08
 )
 
 @time ϕ, h = S.runthemodel(input_params, ϕ0, h0);

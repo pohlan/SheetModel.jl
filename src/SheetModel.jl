@@ -163,9 +163,9 @@ function array_allocation(nu::Para)
     ix     = zeros(nx-1, ny)
     iy     = zeros(nx, ny-1)
     dϕ_dτ  = zeros(nx-2, ny-2)
-    dh_dτ  = zeros(nx-2, ny-2)
+    dh_dτ  = zeros(nx, ny)
     Res_ϕ  = zeros(nx-2, ny-2)
-    Res_h  = zeros(nx-2, ny-2)
+    Res_h  = zeros(nx, ny)
     Err_ϕ  = zeros(nx, ny)
     return vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ
 end
@@ -306,8 +306,8 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
                                 (LazyArrays.Diff(qx, dims=1)[:, 2:end-1]/dx .+ LazyArrays.Diff(qy, dims=2)[2:end-1, :]/dy) .-      # div(q)
                                 (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])            .+         # dh/dt
                                 Λ * m[2:end-1, 2:end-1]                                                      # source term
-            Res_h       .=      - (h[2:end-1, 2:end-1] .- h_old[2:end-1, 2:end-1]) / dt  .+
-                                (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])
+            Res_h       .=      - (h .- h_old) / dt  .+
+                                (Σ * vo .- Γ * vc)
 
             # damped rate of change
             dϕ_dτ      .= Res_ϕ .+ damp .* dϕ_dτ
@@ -315,7 +315,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
 
             # update fields
             ϕ[2:end-1, 2:end-1]  .= ϕ[2:end-1, 2:end-1] .+ dτ * dϕ_dτ   # update ϕ
-            h[2:end-1, 2:end-1]  .= h[2:end-1, 2:end-1] .+ dτ * dh_dτ   # update h
+            h  .= h .+ dτ * dh_dτ   # update h
 
             # boundary conditions (no flux)
             ϕ[end, :] .= ϕ[end-1, :]
