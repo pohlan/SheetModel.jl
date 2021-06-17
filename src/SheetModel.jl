@@ -38,10 +38,10 @@ All model parameters; physical and numerical
     # Field parameters (defined on every grid point)
     calc_zs::Function
     calc_zb::Function
-    calc_m::Function
+    calc_m_xyt::Function # fct(x, y, t)
     H::Matrix{Float64} = calc_zs.(xc, yc') .- calc_zb.(xc, yc')  # ice thickness, m
-    zb::Matrix{Float64} = calc_zb.(xc, yc')  # bed elevation, m
-    m::Matrix{Float64} = calc_m.(xc, yc')  # source term, m/s
+    zb::Matrix{Float64} = calc_zb.(xc, yc')                      # bed elevation, m
+    calc_m_t::Function = t -> calc_m_xyt.(xc, yc', t)                # source term, m/s, fct(t)
 
     # Physical time stepping
     ttot        # total simulation time
@@ -71,7 +71,7 @@ Convert input parameters to non-dimensional quantities
 """
 function scaling(p::Para, ϕ0, h0)
     @unpack g, ρw, k, A, lr, hr,
-            H, zb, m, ub,
+            H, zb, calc_m_t, ub,
             lx, ly, dx, dy, xc, yc,
             ttot, dt,
             r_ρ, α, β, n,
@@ -88,7 +88,7 @@ function scaling(p::Para, ϕ0, h0)
 
     H_ = mean(H)
     zb_ = H_
-    m_ = mean(m)
+    m_ = mean(calc_m_t(0.0)) # for time-dependent input: temporal peak
     ub_ = ub
 
     ϕ_ = g_ * H_ * ρ_ / r_ρ
@@ -116,7 +116,7 @@ function scaling(p::Para, ϕ0, h0)
         # Field parameters (defined on every grid point)
         H = H ./ H_,
         zb = zb ./ zb_,
-        m = m ./ m_,
+        calc_m_t = t -> calc_m_t(t) ./ m_,
 
         # Numerical domain
         lx = lx ./ xy_,
@@ -163,6 +163,7 @@ function array_allocation(nu::Para)
     qy     = zeros(nx, ny-1)
     ix     = zeros(nx-1, ny)
     iy     = zeros(nx, ny-1)
+    m      = zeros(nx, ny)
     dϕ_dτ  = zeros(nx-2, ny-2)
     dh_dτ  = zeros(nx, ny)
     Res_ϕ  = zeros(nx-2, ny-2)
@@ -170,7 +171,7 @@ function array_allocation(nu::Para)
     Err_ϕ  = zeros(nx, ny)
     d_eff  = zeros(nx, ny)
     dτ_ϕ   = zeros(nx, ny)
-    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, d_eff, dτ_ϕ
+    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, m, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, d_eff, dτ_ϕ
 end
 
 """
@@ -259,10 +260,10 @@ end
 Run the model with scaled parameters
 """
 function runthemodel_scaled(params::Para, ϕ0, h0, printit)
-    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, m, dx, dy, nx, ny, k, α, β, small,
+    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β, small,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, τ_ϕ_, τ_h_ = params
     # Array allocation
-    vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy,
+    vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, m,
     dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, d_eff, dτ_ϕ = array_allocation(params)
 
     ϕ0[1, :]   = ρw .* g .* zb[1, :] # boundary condition, zero water pressure
@@ -280,6 +281,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
     while t<ttot
         iter, err_ϕ, err_h = 0, 2*tol, 2*tol
 
+        m .= calc_m_t(t)
         # Pseudo-transient iteration
         while max(err_ϕ, err_h)>tol && iter<itMax
             # save current ϕ for error calculation
