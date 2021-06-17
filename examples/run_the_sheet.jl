@@ -36,8 +36,8 @@ input_params = S.Para(
     calc_zb = bed.sqrt,     # bed elevation, m
     calc_m = runoff.A1,     # source term, m/s
 
-    ttot = 25000.0,
-    dt = 2500.0
+    ttot = 100.0, #25000.0,
+    dt = 100.0 #  2500.0
 )
 
 # Initial condition
@@ -51,5 +51,5 @@ input_params = S.Para(
     calc_h = (x, y) -> 0.04
 )
 
-@time ϕ, h = S.runthemodel(input_params, ϕ0, h0, printit=1000);
-S.plot_output(xc, yc, ϕ, h)
+@time N, h = S.runthemodel(input_params, ϕ0, h0, printit=1000);
+S.plot_output(xc, yc, N, h)

@@ -345,10 +345,14 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
         ϕ_old .= ϕ
         h_old .= h
     end
-    return ϕ, h
+
+    # give the effective pressure as output instead of the hydraulic potential
+    N = calc_N.(ϕ, ρi, ρw, g, H, zb)
+
+    return N, h
 end
 
-function plot_output(xc, yc, ϕ, h)
+function plot_output(xc, yc, N, h)
     x_plt = [0; xc .+ (xc[2]-xc[1])]
     y_plt = [0; yc .+ (yc[2]-yc[1])]
     pygui(true)
@@ -358,11 +362,10 @@ function plot_output(xc, yc, ϕ, h)
     colorbar()
     title("h")
     subplot(1, 2, 2)
-    pcolor(x_plt, y_plt, ϕ', edgecolors="black")
+    pcolor(x_plt, y_plt, N', edgecolors="black")
     colorbar()
-    title("ϕ")
+    title("N")
 end
-
 
 
 end # module
