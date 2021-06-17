@@ -36,8 +36,8 @@ input_params = S.Para(
     calc_zb = bed.sqrt,     # bed elevation, m
     calc_m = runoff.A1,     # source term, m/s
 
-    ttot = 100.0, #25000.0,
-    dt = 100.0 #  2500.0
+    ttot = 500000.0, #25000.0,
+    dt = 2500.0 #  2500.0
 )
 
 # Initial condition
