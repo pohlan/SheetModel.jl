@@ -192,6 +192,39 @@ function upstream(ix, iy, nx, dϕ_du; dims=1)
 end
 
 """
+Apply the boundary conditions to ϕ, at the moment pw(x=0) = 0 and no flux at the other boundaries
+"""
+function apply_bc(ϕ, H, ρw, g, zb) # TODO: shouldn't have any function with arrays as arguments
+                                   # TODO: don't hard-wire, give bc as input parameters
+    nx, ny = size(ϕ)
+    for i = 2:nx-1, j = 2:ny-1
+        if H[i, j] > 0.0
+            if H[i-1, j] == 0.0  || i==2 # x1 boundary
+                ϕ[i-1, j] = ρw .* g .* zb[i-1, j] # zero water pressure
+            end
+            if H[i+1, j] == 0.0 || i==nx-1 # xend boundary
+                ϕ[i+1, j] = ϕ[i, j] # no flux
+            end
+            if H[i, j-1] == 0.0 || j==2 # y1 boundary
+                ϕ[i, j-1] = ϕ[i, j] # no flux
+            end
+            if H[i, j+1] == 0.0 || j==ny-1 # yend boundary
+                ϕ[i, j+1] = ϕ[i, j] # no flux
+            end
+        end
+    end
+
+    # corner points
+    ϕ[nx, 1] = H[nx, 2] > 0.0 ? ϕ[nx, 2] : ϕ[nx, 1]
+    ϕ[nx, 1] = H[nx-1, 1] > 0.0 ? ϕ[nx-1, 1] : ϕ[nx, 1]
+    ϕ[nx, ny] = H[nx, ny-1] > 0.0 ? ϕ[nx, ny-1] : ϕ[nx, ny]
+    ϕ[nx, ny] = H[nx-1, ny] > 0.0 ? ϕ[nx-1, ny] : ϕ[nx, ny]
+    ϕ[1, 1]  = H[2, 1] > 0.0 ? ρw .* g .* zb[1, 1] : ϕ[1, 1]
+    ϕ[1, ny] = (H[1, ny-1] > 0.0 || H[2, ny] > 0.0) ?  ρw .* g .* zb[1, ny] : ϕ[1, ny]
+    return copy(ϕ)
+end
+
+"""
 Calculate discharge
 """
 function calc_q(h, dϕ_du, k, α, β, small) # u can be x or y
@@ -266,10 +299,15 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
     vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, m,
     dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, d_eff, dτ_ϕ = array_allocation(params)
 
-    ϕ0[1, :]   = ρw .* g .* zb[1, :] # boundary condition, zero water pressure
-    ϕ0[end, :] = ϕ0[end-1, :] # no flux boundary condition
-    ϕ0[:, 1]   = ϕ0[:, 2]
-    ϕ0[:, end] = ϕ0[:, end-1]
+    # Apply boundary conditions
+    ϕ0 = apply_bc(ϕ0, H, ρw, g, zb)
+
+    # much shorter way of applying the b.c. but not so useful for parallelisation later
+    # [ ϕ0[findlast(H[:, i] .> 0.0), i]  = ϕ0[findlast(H[:, i] .> 0.0) - 1, i] for i in 1:size(H, 2) ]
+    # [ ϕ0[findfirst(H[:, i] .> 0.0), i]  = ρw .* g .* zb[findfirst(H[:, i] .> 0.0) + 1, i] for i in 1:size(H, 2) ]
+    # [ ϕ0[i, findfirst(H[i, :] .> 0.0)] = ϕ0[i, findfirst(H[i, :] .> 0.0) + 1] for i in 1:size(H, 1) ]
+    # [ ϕ0[i, findlast(H[i, :] .> 0.0)]  = ϕ0[i, findlast(H[i, :] .> 0.0) - 1] for i in 1:size(H, 1) ]
+
     ϕ_old   = copy(ϕ0)
     ϕ       = copy(ϕ0)
     h_old   = copy(h0)
@@ -328,11 +366,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
             ϕ[2:end-1, 2:end-1]  .= ϕ[2:end-1, 2:end-1] .+ dτ_ϕ[2:end-1, 2:end-1] .* dϕ_dτ   # update ϕ (only interior points because fluxes only defined there)
             h                    .= h .+ dτ_h .* dh_dτ                                      # update h
 
-            # boundary conditions (no flux)
-            ϕ[end, :] .= ϕ[end-1, :]
-            ϕ[:, 1]   .= ϕ[:, 2]
-            ϕ[:, end] .= ϕ[:, end-1]
+            # apply boundary conditions
+            ϕ = apply_bc(ϕ, H, ρw, g, zb)
 
+            # determine the errors
             Err_ϕ .= abs.(Err_ϕ .- ϕ)
             err_ϕ = norm(Err_ϕ) # this error is smaller than the error using Res_ϕ
             # err_ϕ = norm(Res_ϕ)/length(Res_ϕ) # but with this error it also converges
