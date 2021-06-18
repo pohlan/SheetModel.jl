@@ -33,13 +33,14 @@ All model parameters; physical and numerical
     dx = lx/nx      # grid size
     dy = ly/ny
     xc::LinRange{Float64} = LinRange(0.0, lx, nx) # vector of x-coordinates
-    yc::LinRange{Float64} = LinRange(0.0, ly, ny) # vector of y-coordinates
+    yc::LinRange{Float64} = LinRange(-ly/2, ly/2, ny) # vector of y-coordinates
 
     # Field parameters (defined on every grid point)
     calc_zs::Function
     calc_zb::Function
     calc_m_xyt::Function # fct(x, y, t)
-    H::Matrix{Float64} = calc_zs.(xc, yc') .- calc_zb.(xc, yc')  # ice thickness, m
+    fct_pos::Function = x -> x > 0.0 ? x : 0.0 # turn all negative numbers into 0.0
+    H::Matrix{Float64} = fct_pos.(calc_zs.(xc, yc') .- calc_zb.(xc, yc'))  # ice thickness, m
     zb::Matrix{Float64} = calc_zb.(xc, yc')                      # bed elevation, m
     calc_m_t::Function = t -> calc_m_xyt.(xc, yc', t)                # source term, m/s, fct(t)
 
@@ -53,10 +54,10 @@ All model parameters; physical and numerical
     # Pseudo-time iteration
     tol    = 1e-6       # tolerance
     itMax  = 10^5       # max number of iterations
-    γ_ϕ    = 0.9        # damping parameter for ϕ update
-    γ_h    = 0.9        # damping parameter for h update
-    τ_ϕ_   = 0.19       # scaling factor for dτ_ϕ
-    τ_h_   = 150.0      # scaling factor for dτ_h
+    γ_ϕ    = 1e-3        # damping parameter for ϕ update
+    γ_h    = 0.8        # damping parameter for h update
+    τ_ϕ_   = 1e6       # scaling factor for dτ_ϕ
+    τ_h_   = 50.0      # scaling factor for dτ_h
 
     # Dimensionless numbers
     Σ   = NaN
@@ -200,7 +201,7 @@ function apply_bc(ϕ, H, ρw, g, zb) # TODO: shouldn't have any function with ar
     for i = 2:nx-1, j = 2:ny-1
         if H[i, j] > 0.0
             if H[i-1, j] == 0.0  || i==2 # x1 boundary
-                ϕ[i-1, j] = ρw .* g .* zb[i-1, j] # zero water pressure
+                ϕ[i-1, j] = ϕ[i, j] # no flux
             end
             if H[i+1, j] == 0.0 || i==nx-1 # xend boundary
                 ϕ[i+1, j] = ϕ[i, j] # no flux
@@ -210,6 +211,9 @@ function apply_bc(ϕ, H, ρw, g, zb) # TODO: shouldn't have any function with ar
             end
             if H[i, j+1] == 0.0 || j==ny-1 # yend boundary
                 ϕ[i, j+1] = ϕ[i, j] # no flux
+            end
+            if H[i, j] > 0.0 && i==2 # x1 boundary
+                ϕ[i-1, j] = ρw .* g .* zb[i-1, j] # zero water pressure
             end
         end
     end
@@ -302,12 +306,6 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
     # Apply boundary conditions
     ϕ0 = apply_bc(ϕ0, H, ρw, g, zb)
 
-    # much shorter way of applying the b.c. but not so useful for parallelisation later
-    # [ ϕ0[findlast(H[:, i] .> 0.0), i]  = ϕ0[findlast(H[:, i] .> 0.0) - 1, i] for i in 1:size(H, 2) ]
-    # [ ϕ0[findfirst(H[:, i] .> 0.0), i]  = ρw .* g .* zb[findfirst(H[:, i] .> 0.0) + 1, i] for i in 1:size(H, 2) ]
-    # [ ϕ0[i, findfirst(H[i, :] .> 0.0)] = ϕ0[i, findfirst(H[i, :] .> 0.0) + 1] for i in 1:size(H, 1) ]
-    # [ ϕ0[i, findlast(H[i, :] .> 0.0)]  = ϕ0[i, findlast(H[i, :] .> 0.0) - 1] for i in 1:size(H, 1) ]
-
     ϕ_old   = copy(ϕ0)
     ϕ       = copy(ϕ0)
     h_old   = copy(h0)
@@ -334,13 +332,6 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
             qx      .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
             qy      .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
 
-            # test whether boundary conditions are fulfilled
-            if any(qx[end, :] .!= 0.0) || any(ϕ[1, :] .!= ρw .* g .* zb[1, :])
-                @warn "qx b.c. not fulfilled"
-            end
-            if any(qy[:, 1] .!= 0.0) || any(qy[:, end] .!= 0.0)
-                @warn "qy b.c. not fulfilled"
-            end
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
@@ -381,7 +372,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
             end
         end
         ittot += iter; it += 1; t += dt
-        @printf("time = %d, number of iterations = %d \n", it, iter)
+        @printf("time step = %d, number of iterations = %d \n", it, iter)
 
         ϕ_old .= ϕ
         h_old .= h
