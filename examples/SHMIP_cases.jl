@@ -21,9 +21,9 @@ para_bench = 0.05
 surface_val(x, y) = 100(x+200)^(1/4) + 1/60*x - 2e10^(1/4) + 1
 f(x, para) = (surface_val(6e3,0) - para*6e3)/6e3^2 * x^2 + para*x
 g(y) = 0.5e-6 * abs(y)^3
-r(x, para) = (-4.5*x/6e3 + 5) * (surface_val(x,0)-f(x, para)) /
-               (surface_val(x,0)-f(x, para_bench)+eps())
-bed_val(x,y, para) = f(x,para) + g(y) * r(x,para)
+r(x, para) = (-4.5*x/6e3 + 5) * (surface_val(x, 0) - f(x, para)) /
+               (surface_val(x, 0) - f(x, para_bench) + eps())
+bed_val(x,y, para) = f(x,para) + g(y) * r(x, para)
 
 
 function run_SHMIP(test_case; Nx, Ny, t_tot, make_plot=false, printtime=10^5,
@@ -119,15 +119,17 @@ function run_SHMIP(test_case; Nx, Ny, t_tot, make_plot=false, printtime=10^5,
     )
 
     # Initial condition
-    @unpack xc, yc, lx, ly = input_params
+    @unpack xc, yc, lx, ly, H = input_params
     ϕ0, h0 = S.initial_conditions(
         xc,
         yc,
+        H,
         calc_ϕ = (x, y) -> 1e6/lx * x,
         #calc_ϕ = (x, y) -> exp(- 1e-2*(x-Lx/2)^2) * exp(-1e-2*(yc-Ly/2)^2),
         #calc_ϕ = (x, y) -> rand(),
         calc_h = (x, y) -> 0.04
     )
+
 
     N, h, nit = S.runthemodel(input_params, ϕ0, h0, printtime=printtime);
 
@@ -138,4 +140,7 @@ function run_SHMIP(test_case; Nx, Ny, t_tot, make_plot=false, printtime=10^5,
     return nit
 end
 
-# run_SHMIP("A1", Nx=64, Ny=32, t_tot=250000.0, printtime=50, make_plot=true);
+ # run_SHMIP("E5", Nx=64, Ny=32, t_tot=1000.0, printtime=1, make_plot=true);
+
+  run_SHMIP("F1", Nx=64, Ny=32, t_tot=2000000.0,
+                                       γ_ϕ=0.017, γ_h=0.74, τ_ϕ_=8.6e5, τ_h_=31.0, make_plot=true)

@@ -1,7 +1,7 @@
 include("SHMIP_cases.jl")
 using KissMCMC, Printf
 
-test_case = "A1"
+test_case = "F1"
 nx, ny = 64, 32
 ttot = 1000.0
 

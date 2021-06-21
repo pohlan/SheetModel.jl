@@ -145,9 +145,10 @@ end
 """
 Return arrays of initial conditions for ϕ and h
 """
-function initial_conditions(xc, yc; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) -> 0.01)
+function initial_conditions(xc, yc, H; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) -> 0.01)
     ϕ0 = calc_ϕ.(xc, yc')
     h0 = calc_h.(xc, yc')
+    h0[H .== 0] .= 0.0 # zero sheet thickness where there is no glacier
     return ϕ0, h0
 end
 
@@ -170,9 +171,10 @@ function array_allocation(nu::Para)
     Res_ϕ  = zeros(nx-2, ny-2)
     Res_h  = zeros(nx, ny)
     Err_ϕ  = zeros(nx, ny)
+    Err_h  = zeros(nx, ny)
     d_eff  = zeros(nx, ny)
     dτ_ϕ   = zeros(nx, ny)
-    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, m, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, d_eff, dτ_ϕ
+    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, m, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ
 end
 
 """
@@ -302,7 +304,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, τ_ϕ_, τ_h_ = params
     # Array allocation
     vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, m,
-    dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, d_eff, dτ_ϕ = array_allocation(params)
+    dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ = array_allocation(params)
 
     # Apply boundary conditions
     ϕ0 = apply_bc(ϕ0, H, ρw, g, zb)
@@ -320,9 +322,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
         m .= calc_m_t(t)
         # Pseudo-transient iteration
-        while max(err_ϕ, err_h)>tol && iter<itMax
+        while !(max(err_ϕ, err_h) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
             # save current ϕ for error calculation
             Err_ϕ   .= ϕ
+            Err_h   .= h
 
             # quantities occurring in the equations
             dϕ_dx   .= LazyArrays.Diff(ϕ, dims=1) ./ dx                  # hydraulic gradient
@@ -365,7 +368,9 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             Err_ϕ .= abs.(Err_ϕ .- ϕ)
             err_ϕ = norm(Err_ϕ) # this error is smaller than the error using Res_ϕ
             # err_ϕ = norm(Res_ϕ)/length(Res_ϕ) # but with this error it also converges
-            err_h   = norm(Res_h)/length(Res_h)
+            Err_h .= abs.(Err_h .- h)
+            # err_h   = norm(Res_h)/length(Res_h)
+            err_h = norm(Err_h)
             iter += 1
 
             if mod(iter, printit) == 0
