@@ -4,6 +4,7 @@ authors = ["Annegret Pohle <apohle@ethz.ch>"]
 version = "0.1.0"
 
 [deps]
+KissMCMC = "79d62d8d-4dfd-5781-bc85-ce78e0ac132a"
 LazyArrays = "5078a376-72f3-5289-bfd5-ec5146d43c02"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"

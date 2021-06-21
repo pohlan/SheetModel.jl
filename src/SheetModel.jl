@@ -53,7 +53,7 @@ All model parameters; physical and numerical
 
     # Pseudo-time iteration
     tol    = 1e-6       # tolerance
-    itMax  = 10^5       # max number of iterations
+    itMax  = 10^3       # max number of iterations
     γ_ϕ    = 1e-3        # damping parameter for ϕ update
     γ_h    = 0.8        # damping parameter for h update
     τ_ϕ_   = 1e6       # scaling factor for dτ_ϕ
@@ -285,18 +285,19 @@ end
 Scale the parameters and call the model run function
 """
 function runthemodel(input::Para, ϕ0, h0;
-                    printit=10^5)         # error is printed after printit iterations of pseudo-transient time
+                    printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
+                    printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
     params, ϕ0, h0, ϕ_, h_ = scaling(input, ϕ0, h0)
-    ϕ, h = runthemodel_scaled(params::Para, ϕ0, h0, printit)
+    ϕ, h, nit = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     ϕ .= ϕ .* ϕ_
     h .= h .* h_
-    return ϕ, h
+    return ϕ, h, nit
 end
 
 """
 Run the model with scaled parameters
 """
-function runthemodel_scaled(params::Para, ϕ0, h0, printit)
+function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β, small,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, τ_ϕ_, τ_h_ = params
     # Array allocation
@@ -372,7 +373,9 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
             end
         end
         ittot += iter; it += 1; t += dt
-        @printf("time step = %d, number of iterations = %d \n", it, iter)
+        if mod(it, printtime) == 0
+            @printf("time step = %d, number of iterations = %d \n", it, iter)
+        end
 
         ϕ_old .= ϕ
         h_old .= h
@@ -381,22 +384,30 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit)
     # give the effective pressure as output instead of the hydraulic potential
     N = calc_N.(ϕ, ρi, ρw, g, H, zb)
 
-    return N, h
+    return N, h, ittot
 end
 
 function plot_output(xc, yc, N, h)
     x_plt = [0; xc .+ (xc[2]-xc[1])]
     y_plt = [0; yc .+ (yc[2]-yc[1])]
     pygui(true)
+    # pcolor of ϕ and h fields
     figure()
-    subplot(1, 2, 1)
+    subplot(2, 2, 1)
     pcolor(x_plt, y_plt, h', edgecolors="black")
     colorbar()
     title("h")
-    subplot(1, 2, 2)
+    subplot(2, 2, 2)
     pcolor(x_plt, y_plt, N', edgecolors="black")
     colorbar()
     title("N")
+    # cross-sections of ϕ and h
+    subplot(2, 2, 3)
+    plot(xc, h[:, 10])
+    title(join(["h at y = ", string(round(yc[10], digits=1))]))
+    subplot(2, 2, 4)
+    plot(xc, N[:, 10])
+    title(join(["h at y = ", string(round(yc[10], digits=1))]))
 end
 
 

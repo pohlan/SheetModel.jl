@@ -21,12 +21,13 @@ para_bench = 0.05
 surface_val(x, y) = 100(x+200)^(1/4) + 1/60*x - 2e10^(1/4) + 1
 f(x, para) = (surface_val(6e3,0) - para*6e3)/6e3^2 * x^2 + para*x
 g(y) = 0.5e-6 * abs(y)^3
-h(x, para) = (-4.5*x/6e3 + 5) * (surface_val(x,0)-f(x, para)) /
+r(x, para) = (-4.5*x/6e3 + 5) * (surface_val(x,0)-f(x, para)) /
                (surface_val(x,0)-f(x, para_bench)+eps())
-bed_val(x,y, para) = f(x,para) + g(y) * h(x,para)
+bed_val(x,y, para) = f(x,para) + g(y) * r(x,para)
 
 
-function run_SHMIP(test_case; Nx, Ny, t_tot, make_plot=false)
+function run_SHMIP(test_case; Nx, Ny, t_tot, make_plot=false, printtime=10^5,
+                   γ_ϕ=0.29, γ_h=0.32, τ_ϕ_=2e6, τ_h_=2.1)      # parameters for pseudo-transient time stepping
 
     # suite A: use different steady and spatially uniform water inputs
     runoff = Dict("A1" => (x, y, t) -> 7.93e-11,
@@ -109,7 +110,12 @@ function run_SHMIP(test_case; Nx, Ny, t_tot, make_plot=false)
         calc_m_xyt  = water_input,     # source term, m/s
 
         ttot = t_tot,
-        dt = 2500.0 #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
+        dt = 1000.0, #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
+
+        γ_ϕ  = γ_ϕ,  # damping parameter for ϕ
+        γ_h  = γ_h,  # damping parameter for h
+        τ_ϕ_ = τ_ϕ_, # scaling factor for dτ_ϕ
+        τ_h_ = τ_h_  # scaling factor for dτ_h
     )
 
     # Initial condition
@@ -123,13 +129,13 @@ function run_SHMIP(test_case; Nx, Ny, t_tot, make_plot=false)
         calc_h = (x, y) -> 0.04
     )
 
-    @time N, h = S.runthemodel(input_params, ϕ0, h0, printit=1000);
+    N, h, nit = S.runthemodel(input_params, ϕ0, h0, printtime=printtime);
 
     if make_plot
         S.plot_output(xc, yc, N, h)
     end
 
-    return nothing
+    return nit
 end
 
-# run_SHMIP("D1", Nx=64, Ny=32, t_tot=2500.0, make_plot=true);
+# run_SHMIP("A1", Nx=64, Ny=32, t_tot=250000.0, printtime=50, make_plot=true);
