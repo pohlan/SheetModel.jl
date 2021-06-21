@@ -148,7 +148,6 @@ Return arrays of initial conditions for ϕ and h
 function initial_conditions(xc, yc, H; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) -> 0.01)
     ϕ0 = calc_ϕ.(xc, yc')
     h0 = calc_h.(xc, yc')
-    h0[H .== 0] .= 0.0 # zero sheet thickness where there is no glacier
     return ϕ0, h0
 end
 
@@ -197,9 +196,11 @@ end
 """
 Apply the boundary conditions to ϕ, at the moment pw(x=0) = 0 and no flux at the other boundaries
 """
-function apply_bc(ϕ, H, ρw, g, zb) # TODO: shouldn't have any function with arrays as arguments
+function apply_bc(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with arrays as arguments
                                    # TODO: don't hard-wire, give bc as input parameters
     nx, ny = size(ϕ)
+    ϕ[H .== 0.0] .= ρw .* g .* zb[H .== 0.0]  # zero water pressure outside of glacier domain
+    h[H .== 0.0] .= 0.0                       # zero sheet thickness outside of glacier domain
     for i = 2:nx-1, j = 2:ny-1
         if H[i, j] > 0.0
             if H[i-1, j] == 0.0  || i==2 # x1 boundary
@@ -227,7 +228,8 @@ function apply_bc(ϕ, H, ρw, g, zb) # TODO: shouldn't have any function with ar
     ϕ[nx, ny] = H[nx-1, ny] > 0.0 ? ϕ[nx-1, ny] : ϕ[nx, ny]
     ϕ[1, 1]  = H[2, 1] > 0.0 ? ρw .* g .* zb[1, 1] : ϕ[1, 1]
     ϕ[1, ny] = (H[1, ny-1] > 0.0 || H[2, ny] > 0.0) ?  ρw .* g .* zb[1, ny] : ϕ[1, ny]
-    return copy(ϕ)
+
+    return ϕ, h
 end
 
 """
@@ -307,13 +309,17 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ = array_allocation(params)
 
     # Apply boundary conditions
-    ϕ0 = apply_bc(ϕ0, H, ρw, g, zb)
+    ϕ0, h0 = apply_bc(ϕ0, h0, H, ρw, g, zb)
 
     ϕ_old   = copy(ϕ0)
     ϕ       = copy(ϕ0)
     h_old   = copy(h0)
     h       = copy(h0)
 
+    # determine indices of glacier domain
+    idx_ice = H .> 0.0
+
+    # initiate time loop parameters
     t, it, ittot = 0.0, 0, 0
 
     # Physical time loop
@@ -335,7 +341,6 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             iy = upstream.(collect(1:nx), collect(1:ny-1)', nx, dϕ_dy; dims=2)
             qx      .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
             qy      .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
-
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
@@ -362,15 +367,15 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             h                    .= h .+ dτ_h .* dh_dτ                                      # update h
 
             # apply boundary conditions
-            ϕ = apply_bc(ϕ, H, ρw, g, zb)
+            ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
 
-            # determine the errors
+            # determine the errors (only consider points where the ice thickness is > 0)
             Err_ϕ .= abs.(Err_ϕ .- ϕ)
-            err_ϕ = norm(Err_ϕ) # this error is smaller than the error using Res_ϕ
-            # err_ϕ = norm(Res_ϕ)/length(Res_ϕ) # but with this error it also converges
+            err_ϕ = norm(Err_ϕ[idx_ice]) # this error is smaller than the error using Res_ϕ
+            # err_ϕ = norm(Res_ϕ[idx_ice])/length(Res_ϕ[idx_ice]) # but with this error it also converges
             Err_h .= abs.(Err_h .- h)
-            # err_h   = norm(Res_h)/length(Res_h)
-            err_h = norm(Err_h)
+            # err_h   = norm(Res_h[idx_ice])/length(Res_h[idx_ice])
+            err_h = norm(Err_h[idx_ice])
             iter += 1
 
             if mod(iter, printit) == 0
@@ -408,10 +413,10 @@ function plot_output(xc, yc, N, h)
     title("N")
     # cross-sections of ϕ and h
     subplot(2, 2, 3)
-    plot(xc, h[:, 10])
+    plot(xc, h[:, Int(length(yc)/2)])
     title(join(["h at y = ", string(round(yc[10], digits=1))]))
     subplot(2, 2, 4)
-    plot(xc, N[:, 10])
+    plot(xc, N[:, Int(length(yc)/2)])
     title(join(["h at y = ", string(round(yc[10], digits=1))]))
 end
 

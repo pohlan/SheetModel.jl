@@ -124,7 +124,7 @@ function run_SHMIP(test_case; Nx, Ny, t_tot, make_plot=false, printtime=10^5,
         xc,
         yc,
         H,
-        calc_ϕ = (x, y) -> 1e6/lx * x,
+        calc_ϕ = (x, y) -> 0.0,
         #calc_ϕ = (x, y) -> exp(- 1e-2*(x-Lx/2)^2) * exp(-1e-2*(yc-Ly/2)^2),
         #calc_ϕ = (x, y) -> rand(),
         calc_h = (x, y) -> 0.04
@@ -142,5 +142,5 @@ end
 
  # run_SHMIP("E5", Nx=64, Ny=32, t_tot=1000.0, printtime=1, make_plot=true);
 
-  run_SHMIP("F1", Nx=64, Ny=32, t_tot=2000000.0,
-                                       γ_ϕ=0.017, γ_h=0.74, τ_ϕ_=8.6e5, τ_h_=31.0, make_plot=true)
+#  run_SHMIP("F1", Nx=64, Ny=32, t_tot=2000000.0,
+#                                       γ_ϕ=0.017, γ_h=0.74, τ_ϕ_=8.6e5, τ_h_=31.0, printtime=50, make_plot=true)

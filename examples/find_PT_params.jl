@@ -1,5 +1,5 @@
 include("SHMIP_cases.jl")
-using KissMCMC, Printf
+using KissMCMC, Printf, PyPlot
 
 test_case = "F1"
 nx, ny = 64, 32
@@ -48,7 +48,7 @@ tau_h  = [thetas[i][4] for i in 1:length(thetas)]
 iterations = -1 * logdensities
 
 # compare a certain tau against number of iterations
-scatter(damp_ϕ, iterations)
+plot(damp_ϕ, iterations, "o")
 
 @printf("Minimal number of iterations = %d for parameters \n
          γ_ϕ  = %f, \n
