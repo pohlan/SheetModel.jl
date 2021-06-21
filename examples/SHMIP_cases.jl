@@ -132,4 +132,4 @@ function run_SHMIP(test_case; Nx, Ny, t_tot, make_plot=false)
     return nothing
 end
 
-run_SHMIP("D1", Nx=64, Ny=32, t_tot=2500.0, make_plot=true);
+# run_SHMIP("D1", Nx=64, Ny=32, t_tot=2500.0, make_plot=true);
