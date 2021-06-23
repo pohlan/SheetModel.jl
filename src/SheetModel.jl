@@ -215,7 +215,7 @@ function apply_bc(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with
             if H[i, j+1] == 0.0 || j==ny-1 # yend boundary
                 ϕ[i, j+1] = ϕ[i, j] # no flux
             end
-            if H[i, j] > 0.0 && i==2 # x1 boundary
+            if H[i-1, j] > 0.0 && i==2 # x1 boundary
                 ϕ[i-1, j] = ρw .* g .* zb[i-1, j] # zero water pressure
             end
         end
@@ -293,6 +293,7 @@ function runthemodel(input::Para, ϕ0, h0;
                     printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
     params, ϕ0, h0, ϕ_, h_ = scaling(input, ϕ0, h0)
     N, ϕ, h, nit = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
+    N .= N .* ϕ_ # scaling for N same as for ϕ
     ϕ .= ϕ .* ϕ_
     h .= h .* h_
     return N, ϕ, h, nit

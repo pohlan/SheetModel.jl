@@ -5,6 +5,9 @@ Pkg.activate(joinpath(@__DIR__, "../"))
 using SheetModel, Parameters
 const S = SheetModel
 
+s_per_day  = 24 * 60 * 60
+s_per_year = 365 * s_per_day
+
 # water input function for suite D
 function make_runoff_fct(zs, DT)
     year  = 31536000.0   # number of seconds per year
@@ -109,7 +112,7 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
         calc_zb = topo.bed,     # bed elevation, m
         calc_m_xyt  = water_input,     # source term, m/s
 
-        ttot = 3000.0,
+        ttot = 10 * s_per_day,
         dt   = 3000.0, #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
 
         γ_ϕ  = γ_ϕ,  # damping parameter for ϕ

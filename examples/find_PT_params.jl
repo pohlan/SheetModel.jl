@@ -1,7 +1,7 @@
 include("SHMIP_cases.jl")
 using KissMCMC, Printf, StatsPlots
 
-test_case = "A1"
+test_case = "A2"
 nx, ny = 64, 32
 
 function make_logpdf(test_case, nx, ny)
@@ -44,7 +44,8 @@ damp_ϕ = [thetas[i][1] for i in 1:length(thetas)]
 damp_h = [thetas[i][2] for i in 1:length(thetas)]
 dtau_ϕ  = [thetas[i][3] for i in 1:length(thetas)]
 dtau_h  = [thetas[i][4] for i in 1:length(thetas)]
-iterations = -1 * logdensities
+iterations = - logdensities
+iterations[iterations .== typemin(Int)] .= typemax(Int) # typemin() are not affected by the minus sign one line above
 
 @printf("Minimal number of iterations = %d for parameters \n
          γ_ϕ  = %f, \n
