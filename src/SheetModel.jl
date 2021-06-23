@@ -418,7 +418,7 @@ function plot_output(xc, yc, N, h, qx, qy)
     title(join(["h at y = ", string(round(yc[10], digits=1))]))
     subplot(2, 2, 4)
     plot(xc, N[:, Int(length(yc)/2)])
-    title(join(["h at y = ", string(round(yc[10], digits=1))]))
+    title(join(["N at y = ", string(round(yc[10], digits=1))]))
 
     figure()
     subplot(1, 2, 1)
