@@ -112,8 +112,9 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
         calc_zb = topo.bed,     # bed elevation, m
         calc_m_xyt  = water_input,     # source term, m/s
 
-        ttot = 10 * s_per_day,
-        dt   = 3000.0, #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
+        ttot = 1000.0,
+        #ttot = 5*s_per_day,
+        dt   = 1000.0, #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
 
         γ_ϕ  = γ_ϕ,  # damping parameter for ϕ
         γ_h  = γ_h,  # damping parameter for h
@@ -127,17 +128,18 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
         xc,
         yc,
         H,
-        calc_ϕ = (x, y) -> 0.0,
+        calc_ϕ = (x, y) -> 1e3,
+        #calc_ϕ = (x, y) -> 1e6/lx * x,
         #calc_ϕ = (x, y) -> exp(- 1e-2*(x-Lx/2)^2) * exp(-1e-2*(yc-Ly/2)^2),
         #calc_ϕ = (x, y) -> rand(),
         calc_h = (x, y) -> 0.04
     )
 
 
-    N, ϕ, h, nit = S.runthemodel(input_params, ϕ0, h0, printtime=printtime);
+    N, ϕ, h, qx, qy, nit = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=100);
 
     if make_plot
-        S.plot_output(xc, yc, N, h)
+        S.plot_output(xc, yc, N, h, qx, qy)
     end
 
     return nit, ϕ

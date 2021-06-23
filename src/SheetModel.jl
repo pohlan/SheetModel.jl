@@ -292,11 +292,11 @@ function runthemodel(input::Para, ϕ0, h0;
                     printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
                     printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
     params, ϕ0, h0, ϕ_, h_ = scaling(input, ϕ0, h0)
-    N, ϕ, h, nit = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
+    N, ϕ, h, qx, qy, nit = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     N .= N .* ϕ_ # scaling for N same as for ϕ
     ϕ .= ϕ .* ϕ_
     h .= h .* h_
-    return N, ϕ, h, nit
+    return N, ϕ, h, qx, qy, nit
 end
 
 """
@@ -395,10 +395,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     # give the effective pressure as output instead of the hydraulic potential
     N = calc_N.(ϕ, ρi, ρw, g, H, zb)
 
-    return N, ϕ, h, ittot
+    return N, ϕ, h, qx, qy, ittot
 end
 
-function plot_output(xc, yc, N, h)
+function plot_output(xc, yc, N, h, qx, qy)
     x_plt = [0; xc .+ (xc[2]-xc[1])]
     y_plt = [0; yc .+ (yc[2]-yc[1])]
     pygui(true)
@@ -419,6 +419,16 @@ function plot_output(xc, yc, N, h)
     subplot(2, 2, 4)
     plot(xc, N[:, Int(length(yc)/2)])
     title(join(["h at y = ", string(round(yc[10], digits=1))]))
+
+    figure()
+    subplot(1, 2, 1)
+    pcolor(x_plt[2:end], y_plt, qx')
+    colorbar()
+    title("qx")
+    subplot(1, 2, 2)
+    pcolor(x_plt, y_plt[2:end], qy')
+    colorbar()
+    title("qy")
 end
 
 
