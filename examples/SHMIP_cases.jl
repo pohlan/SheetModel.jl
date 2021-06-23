@@ -26,8 +26,8 @@ r(x, para) = (-4.5*x/6e3 + 5) * (surface_val(x, 0) - f(x, para)) /
 bed_val(x,y, para) = f(x,para) + g(y) * r(x, para)
 
 
-function run_SHMIP(test_case; Nx, Ny, t_tot, make_plot=false, printtime=10^5,
-                   γ_ϕ=0.29, γ_h=0.32, τ_ϕ_=2e6, τ_h_=2.1)      # parameters for pseudo-transient time stepping
+function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
+                   γ_ϕ=0.29, γ_h=0.32, dτ_ϕ_=2e6, dτ_h_=2.1)      # parameters for pseudo-transient time stepping
 
     # suite A: use different steady and spatially uniform water inputs
     runoff = Dict("A1" => (x, y, t) -> 7.93e-11,
@@ -109,13 +109,13 @@ function run_SHMIP(test_case; Nx, Ny, t_tot, make_plot=false, printtime=10^5,
         calc_zb = topo.bed,     # bed elevation, m
         calc_m_xyt  = water_input,     # source term, m/s
 
-        ttot = t_tot,
-        dt = 1000.0, #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
+        ttot = 3000.0,
+        dt   = 3000.0, #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
 
         γ_ϕ  = γ_ϕ,  # damping parameter for ϕ
         γ_h  = γ_h,  # damping parameter for h
-        τ_ϕ_ = τ_ϕ_, # scaling factor for dτ_ϕ
-        τ_h_ = τ_h_  # scaling factor for dτ_h
+        dτ_ϕ_ = dτ_ϕ_, # scaling factor for dτ_ϕ
+        dτ_h_ = dτ_h_  # scaling factor for dτ_h
     )
 
     # Initial condition
@@ -131,16 +131,17 @@ function run_SHMIP(test_case; Nx, Ny, t_tot, make_plot=false, printtime=10^5,
     )
 
 
-    N, h, nit = S.runthemodel(input_params, ϕ0, h0, printtime=printtime);
+    N, ϕ, h, nit = S.runthemodel(input_params, ϕ0, h0, printtime=printtime);
 
     if make_plot
         S.plot_output(xc, yc, N, h)
     end
 
-    return nit
+    return nit, ϕ
 end
 
- # run_SHMIP("E5", Nx=64, Ny=32, t_tot=1000.0, printtime=1, make_plot=true);
+# nit, ϕ = run_SHMIP("A1", Nx=64, Ny=32,
+#                    γ_ϕ= 0.108907, γ_h=0.636720, dτ_ϕ_=799042.498250, dτ_h_= 25.472691, printtime=50, make_plot=true)
 
-#  run_SHMIP("F1", Nx=64, Ny=32, t_tot=2000000.0,
-#                                       γ_ϕ=0.017, γ_h=0.74, τ_ϕ_=8.6e5, τ_h_=31.0, printtime=50, make_plot=true)
+# run_SHMIP("F1", Nx=64, Ny=32,
+#           γ_ϕ=0.017, γ_h=0.74, τ_ϕ_=8.6e5, τ_h_=31.0, printtime=50, make_plot=true)

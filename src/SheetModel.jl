@@ -56,8 +56,8 @@ All model parameters; physical and numerical
     itMax  = 10^3       # max number of iterations
     γ_ϕ    = 1e-3        # damping parameter for ϕ update
     γ_h    = 0.8        # damping parameter for h update
-    τ_ϕ_   = 1e6       # scaling factor for dτ_ϕ
-    τ_h_   = 50.0      # scaling factor for dτ_h
+    dτ_ϕ_   = 1e6       # scaling factor for dτ_ϕ
+    dτ_h_   = 50.0      # scaling factor for dτ_h
 
     # Dimensionless numbers
     Σ   = NaN
@@ -292,10 +292,10 @@ function runthemodel(input::Para, ϕ0, h0;
                     printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
                     printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
     params, ϕ0, h0, ϕ_, h_ = scaling(input, ϕ0, h0)
-    ϕ, h, nit = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
+    N, ϕ, h, nit = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     ϕ .= ϕ .* ϕ_
     h .= h .* h_
-    return ϕ, h, nit
+    return N, ϕ, h, nit
 end
 
 """
@@ -303,7 +303,7 @@ Run the model with scaled parameters
 """
 function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β, small,
-            H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, τ_ϕ_, τ_h_ = params
+            H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
     # Array allocation
     vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, m,
     dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ = array_allocation(params)
@@ -355,8 +355,8 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # determine pseudo-time step
             d_eff .= k * h.^α                                                                 # effective diffusivity, defined on each grid point
-            dτ_ϕ  .= (1.0/τ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step for ϕ, defined on each grid point
-            dτ_h   = dt / τ_h_                                                                # pseudo-time step for h, scalar
+            dτ_ϕ  .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step for ϕ, defined on each grid point
+            dτ_h   = dt / dτ_h_                                                                # pseudo-time step for h, scalar
 
             # damped rate of change
             dϕ_dτ      .= Res_ϕ .+ γ_ϕ .* dϕ_dτ
@@ -372,10 +372,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             # determine the errors (only consider points where the ice thickness is > 0)
             Err_ϕ .= abs.(Err_ϕ .- ϕ)
             err_ϕ = norm(Err_ϕ[idx_ice]) # this error is smaller than the error using Res_ϕ
-            # err_ϕ = norm(Res_ϕ[idx_ice])/length(Res_ϕ[idx_ice]) # but with this error it also converges
+            # err_ϕ = norm(Res_ϕ)/length(Res_ϕ) # with this error it does not converge
             Err_h .= abs.(Err_h .- h)
-            # err_h   = norm(Res_h[idx_ice])/length(Res_h[idx_ice])
             err_h = norm(Err_h[idx_ice])
+            # err_h   = norm(Res_h)/length(Res_h)
             iter += 1
 
             if mod(iter, printit) == 0
@@ -394,7 +394,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     # give the effective pressure as output instead of the hydraulic potential
     N = calc_N.(ϕ, ρi, ρw, g, H, zb)
 
-    return N, h, ittot
+    return N, ϕ, h, ittot
 end
 
 function plot_output(xc, yc, N, h)
