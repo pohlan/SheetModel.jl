@@ -3,9 +3,8 @@ using KissMCMC, Printf, StatsPlots
 
 test_case = "A1"
 nx, ny = 64, 32
-ttot = 3000.0
 
-function make_logpdf(test_case, nx, ny, ttot)
+function make_logpdf(test_case, nx, ny)
     return function(thetas)
         it = (nothing for i=1:100)
         damp_ϕ,  # damping parameter for ϕ update
@@ -15,18 +14,18 @@ function make_logpdf(test_case, nx, ny, ttot)
         thetas
 
         if any(thetas .< 0.0) || dtau_ϕ > 1e8
-            return -Inf
+            return typemin(Int)
         else
             try
                 it, ϕ = run_SHMIP(test_case, Nx=nx, Ny=ny,
                                 γ_ϕ=damp_ϕ, γ_h=damp_h, dτ_ϕ_=dtau_ϕ, dτ_h_=dtau_h);
             catch y
                 if isa(y, DomainError)
-                    return -Inf
+                    return typemin(Int)
                 end
             end
             if it >= 10^3
-                return - Inf
+                return typemin(Int)
             else
                 return - it
             end
@@ -34,7 +33,7 @@ function make_logpdf(test_case, nx, ny, ttot)
     end
 end
 
-logpdf = make_logpdf(test_case, nx, ny, ttot)
+logpdf = make_logpdf(test_case, nx, ny)
 theta0 = [0.1, 0.78, 1e6, 41.0]
 std0   = [0.05, 0.1, 1e5, 4.0]
 
