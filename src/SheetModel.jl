@@ -53,7 +53,7 @@ All model parameters; physical and numerical
 
     # Pseudo-time iteration
     tol    = 1e-6       # tolerance
-    itMax  = 10^3       # max number of iterations
+    itMax  = 2*10^4       # max number of iterations
     γ_ϕ    = 1e-3        # damping parameter for ϕ update
     γ_h    = 0.8        # damping parameter for h update
     dτ_ϕ_   = 1e6       # scaling factor for dτ_ϕ
@@ -373,7 +373,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             # determine the errors (only consider points where the ice thickness is > 0)
             Err_ϕ .= abs.(Err_ϕ .- ϕ)
             err_ϕ = norm(Err_ϕ[idx_ice]) # this error is smaller than the error using Res_ϕ
-            # err_ϕ = norm(Res_ϕ)/length(Res_ϕ) # with this error it does not converge
+            # err_ϕ = norm(Res_ϕ)/length(Res_ϕ) # with this error it also converges but more slowly
             Err_h .= abs.(Err_h .- h)
             err_h = norm(Err_h[idx_ice])
             # err_h   = norm(Res_h)/length(Res_h)

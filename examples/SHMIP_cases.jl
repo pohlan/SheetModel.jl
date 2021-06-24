@@ -128,7 +128,7 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
         xc,
         yc,
         H,
-        calc_ϕ = (x, y) -> 1e3,
+        calc_ϕ = (x, y) -> 0.0,
         #calc_ϕ = (x, y) -> 1e6/lx * x,
         #calc_ϕ = (x, y) -> exp(- 1e-2*(x-Lx/2)^2) * exp(-1e-2*(yc-Ly/2)^2),
         #calc_ϕ = (x, y) -> rand(),
@@ -136,7 +136,7 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
     )
 
 
-    N, ϕ, h, qx, qy, nit = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=100);
+    N, ϕ, h, qx, qy, nit = S.runthemodel(input_params, ϕ0, h0, printtime=printtime);
 
     if make_plot
         S.plot_output(xc, yc, N, h, qx, qy)
