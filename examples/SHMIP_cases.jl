@@ -137,14 +137,15 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
     )
 
 
-    N, ϕ, h, qx, qy, nit, err_ϕ, err_h = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
+    N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_interior, qy_interior = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
 
-    qx[qx .== 0.0] .= NaN
+    #qx[qx .== 0.0] .= NaN
+    #qy[qy .== 0.0] .= NaN
     #qx[H[2:end, :] .== 0.0] .= NaN
     #qy[H[:, 1:end-1] .== 0.0] .= NaN
     #qy[H[:, 2:end] .== 0.0] .= NaN
     if make_plot
-        S.plot_output(xc, yc, N, h, qx, qy)
+        S.plot_output(xc, yc, N, h, qx, qy, qx_interior, qy_interior)
     end
 
     err_ϕ'[H' .== 0.0] .= NaN
@@ -159,5 +160,5 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
     colorbar()
     title("err_h")
 
-    return nit, ϕ, H
+    return nit, ϕ, H, qx, qy
 end
