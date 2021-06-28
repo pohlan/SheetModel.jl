@@ -53,7 +53,7 @@ All model parameters; physical and numerical
 
     # Pseudo-time iteration
     tol    = 1e-6       # tolerance
-    itMax  = 2*10^4       # max number of iterations
+    itMax  = 5*10^3       # max number of iterations
     γ_ϕ    = 1e-3        # damping parameter for ϕ update
     γ_h    = 0.8        # damping parameter for h update
     dτ_ϕ_   = 1e6       # scaling factor for dτ_ϕ
@@ -162,18 +162,19 @@ function array_allocation(nu::Para)
     dϕ_dy  = zeros(nx, ny-1)
     qx     = zeros(nx-1, ny)
     qy     = zeros(nx, ny-1)
+    q_ice  = zeros(nx+2, ny+2)
     ix     = zeros(nx-1, ny)
     iy     = zeros(nx, ny-1)
     m      = zeros(nx, ny)
-    dϕ_dτ  = zeros(nx-2, ny-2)
+    dϕ_dτ  = zeros(nx, ny)
     dh_dτ  = zeros(nx, ny)
-    Res_ϕ  = zeros(nx-2, ny-2)
+    Res_ϕ  = zeros(nx, ny)
     Res_h  = zeros(nx, ny)
     Err_ϕ  = zeros(nx, ny)
     Err_h  = zeros(nx, ny)
     d_eff  = zeros(nx, ny)
     dτ_ϕ   = zeros(nx, ny)
-    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, m, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ
+    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, q_ice, ix, iy, m, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ
 end
 
 """
@@ -201,23 +202,31 @@ function apply_bc(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with
     nx, ny = size(ϕ)
     ϕ[H .== 0.0] .= ρw .* g .* zb[H .== 0.0]  # zero water pressure outside of glacier domain
     h[H .== 0.0] .= 0.0                       # zero sheet thickness outside of glacier domain
-    for i = 2:nx-1, j = 2:ny-1
+    for j = 2:ny-1, i = 2:nx-1
         if H[i, j] > 0.0
-            if H[i-1, j] == 0.0  || i==2 # x1 boundary
-                ϕ[i-1, j] = ϕ[i, j] # no flux
-            end
-            if H[i+1, j] == 0.0 || i==nx-1 # xend boundary
-                ϕ[i+1, j] = ϕ[i, j] # no flux
-            end
-            if H[i, j-1] == 0.0 || j==2 # y1 boundary
-                ϕ[i, j-1] = ϕ[i, j] # no flux
-            end
-            if H[i, j+1] == 0.0 || j==ny-1 # yend boundary
-                ϕ[i, j+1] = ϕ[i, j] # no flux
-            end
+            #if H[i-1, j] == 0.0 # x1 boundary
+            #    ϕ[i, j] = ϕ[i+1, j] # no flux
+            #elseif i == 2
+            #    ϕ[i-1, j] == ϕ[i, j]
+            #end
+            #if H[i+1, j] == 0.0 # xend boundary
+            #    ϕ[i, j] = ϕ[i-1, j] # no flux
+            #elseif i == nx-1
+            #    ϕ[i+1, j] = ϕ[i, j]
+            #end
             if H[i-1, j] > 0.0 && i==2 # x1 boundary
                 ϕ[i-1, j] = ρw .* g .* zb[i-1, j] # zero water pressure
             end
+            #if H[i, j-1] == 0.0 # y1 boundary
+            #    ϕ[i, j] = ϕ[i, j+1] # no flux
+            #elseif j == 2
+            #    ϕ[i, j-1] = ϕ[i, j]
+            #end
+            #if H[i, j+1] == 0.0 # yend boundary
+            #    ϕ[i, j] = ϕ[i, j-1] # no flux
+            #elseif j == ny-1
+            #    ϕ[i, j+1] = ϕ[i, j]
+            #end
         end
     end
 
@@ -292,11 +301,11 @@ function runthemodel(input::Para, ϕ0, h0;
                     printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
                     printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
     params, ϕ0, h0, ϕ_, h_ = scaling(input, ϕ0, h0)
-    N, ϕ, h, qx, qy, nit = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
+    N, ϕ, h, qx, qy, nit, err_ϕ, err_h = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     N .= N .* ϕ_ # scaling for N same as for ϕ
     ϕ .= ϕ .* ϕ_
     h .= h .* h_
-    return N, ϕ, h, qx, qy, nit
+    return N, ϕ, h, qx, qy, nit, err_ϕ, err_h
 end
 
 """
@@ -306,7 +315,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β, small,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
     # Array allocation
-    vo, vc, dϕ_dx, dϕ_dy, qx, qy, ix, iy, m,
+    vo, vc, dϕ_dx, dϕ_dy, qx, qy, q_ice, ix, iy, m,
     dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ = array_allocation(params)
 
     # Apply boundary conditions
@@ -319,6 +328,24 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
     # determine indices of glacier domain
     idx_ice = H .> 0.0
+    idx_ice2 = zeros(Int, nx+2, ny+2)
+    idx_ice2[2:end-1, 2:end-1] = idx_ice
+    #q_ice[2:end-1, 2:end-1] .= idx_ice
+    xbound  = Array(LazyArrays.Diff(q_ice, dims=1) .!= 0)[:, 2:end-1]
+    ybound  = Array(LazyArrays.Diff(q_ice, dims=2) .!= 0)[2:end-1, :]
+    xlboundq = Array(LazyArrays.Diff(idx_ice2, dims=1) .== 1)
+    xuboundq = Array(LazyArrays.Diff(idx_ice2, dims=1) .== -1)
+    ylboundq = Array(LazyArrays.Diff(idx_ice2, dims=2) .== 1)
+    yuboundq = Array(LazyArrays.Diff(idx_ice2, dims=2) .== -1)
+    xlbound = xlboundq[1:end-1, 2:end-1]
+    xlbound[1, :] .= 0
+    xubound = xuboundq[2:end, 2:end-1]
+    ylbound = ylboundq[2:end-1, 1:end-1]
+    yubound = yuboundq[2:end-1, 2:end]
+    boundary = xlbound .| xubound .| ylbound .| yubound
+    interior = idx_ice .+ boundary .== 1 # ice but not a boundary point
+
+    #id = idx_ice[2:end-1, 2:end-1]
 
     # initiate time loop parameters
     t, it, ittot = 0.0, 0, 0
@@ -340,23 +367,35 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             ix = upstream.(collect(1:nx-1), collect(1:ny)', nx, dϕ_dx; dims=1) # determine indexes of h that are upstream of dϕ/dx
             iy = upstream.(collect(1:nx), collect(1:ny-1)', nx, dϕ_dy; dims=2)
-            qx      .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
-            qy      .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
+            qx .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
+            qy .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
+            # qx[2:end-1, :]         .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
+            # qy[:, 2:end-1]         .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
+            # qx[xbound] .= 0.0 # no flux boundary condition
+            # qy[ybound] .= 0.0
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
 
             # calculate residuals
-            Res_ϕ       .=      - ev/(ρw*g) * (ϕ[2:end-1, 2:end-1] .- ϕ_old[2:end-1, 2:end-1])/dt .-         # dhe/dt
+            Res_ϕ[2:end-1, 2:end-1]   .=      interior[2:end-1, 2:end-1] .* (
+                                - ev/(ρw*g) * (ϕ[2:end-1, 2:end-1] .- ϕ_old[2:end-1, 2:end-1])/dt .-         # dhe/dt
                                 (LazyArrays.Diff(qx, dims=1)[:, 2:end-1]/dx .+ LazyArrays.Diff(qy, dims=2)[2:end-1, :]/dy) .-      # div(q)
                                 (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])            .+         # dh/dt
                                 Λ * m[2:end-1, 2:end-1]                                                      # source term
+                                )
+            Res_ϕ   .+= -xlbound .* [qx; zeros(1, ny)] .+
+                        xubound .* [zeros(1, ny); qx] .-
+                        ylbound .* [qy zeros(nx, 1)] .+
+                        yubound .* [zeros(nx, 1) qy]
             Res_h       .=      - (h .- h_old) / dt  .+
                                 (Σ * vo .- Γ * vc)
 
             # determine pseudo-time step
             d_eff .= k * h.^α                                                                 # effective diffusivity, defined on each grid point
-            dτ_ϕ  .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step for ϕ, defined on each grid point
+            dτ_ϕ[interior]  .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff[interior] / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step for ϕ, defined on each grid point
+            dτ_ϕ[ylbound]  .= 1e-7
+            dτ_ϕ[yubound]  .= 1e-7
             dτ_h   = dt / dτ_h_                                                                # pseudo-time step for h, scalar
 
             # damped rate of change
@@ -364,7 +403,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             dh_dτ      .= Res_h .+ γ_h .* dh_dτ
 
             # update fields
-            ϕ[2:end-1, 2:end-1]  .= ϕ[2:end-1, 2:end-1] .+ dτ_ϕ[2:end-1, 2:end-1] .* dϕ_dτ   # update ϕ (only interior points because fluxes only defined there)
+            ϕ                    .= ϕ .+ dτ_ϕ .* dϕ_dτ   # update ϕ (only interior points because fluxes only defined there)
             h                    .= h .+ dτ_h .* dh_dτ                                      # update h
 
             # apply boundary conditions
@@ -395,7 +434,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     # give the effective pressure as output instead of the hydraulic potential
     N = calc_N.(ϕ, ρi, ρw, g, H, zb)
 
-    return N, ϕ, h, qx, qy, ittot
+    return N, ϕ, h, qx, qy, ittot, Err_ϕ, Err_h
 end
 
 function plot_output(xc, yc, N, h, qx, qy)
@@ -422,11 +461,11 @@ function plot_output(xc, yc, N, h, qx, qy)
 
     figure()
     subplot(1, 2, 1)
-    pcolor(x_plt[2:end], y_plt, qx')
+    pcolor(qx')
     colorbar()
     title("qx")
     subplot(1, 2, 2)
-    pcolor(x_plt, y_plt[2:end], qy')
+    pcolor(qy')
     colorbar()
     title("qy")
 end

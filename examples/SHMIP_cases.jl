@@ -3,6 +3,7 @@
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../"))
 using SheetModel, Parameters
+using PyPlot
 const S = SheetModel
 
 s_per_day  = 24 * 60 * 60
@@ -128,19 +129,35 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
         xc,
         yc,
         H,
-        calc_ϕ = (x, y) -> 0.0,
-        #calc_ϕ = (x, y) -> 1e6/lx * x,
+        #calc_ϕ = (x, y) -> 5e5,
+        calc_ϕ = (x, y) -> 1e6/lx * x,
         #calc_ϕ = (x, y) -> exp(- 1e-2*(x-Lx/2)^2) * exp(-1e-2*(yc-Ly/2)^2),
         #calc_ϕ = (x, y) -> rand(),
         calc_h = (x, y) -> 0.04
     )
 
 
-    N, ϕ, h, qx, qy, nit = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
+    N, ϕ, h, qx, qy, nit, err_ϕ, err_h = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
 
+    qx[H[1:end-1, :] .== 0.0] .= NaN
+    qx[H[2:end, :] .== 0.0] .= NaN
+    qy[H[:, 1:end-1] .== 0.0] .= NaN
+    qy[H[:, 2:end] .== 0.0] .= NaN
     if make_plot
         S.plot_output(xc, yc, N, h, qx, qy)
     end
 
-    return nit, ϕ
+    err_ϕ'[H' .== 0.0] .= NaN
+    err_h'[H' .== 0.0] .= NaN
+    figure()
+    subplot(1, 2, 1)
+    pcolormesh(err_ϕ')
+    colorbar()
+    title("err_ϕ")
+    subplot(1, 2, 2)
+    pcolormesh(err_h')
+    colorbar()
+    title("err_h")
+
+    return nit, ϕ, H
 end
