@@ -160,8 +160,8 @@ function array_allocation(nu::Para)
     vc     = zeros(nx, ny)
     dϕ_dx  = zeros(nx-1, ny)
     dϕ_dy  = zeros(nx, ny-1)
-    qx     = zeros(nx-1, ny)
-    qy     = zeros(nx, ny-1)
+    qx     = zeros(nx+1, ny)
+    qy     = zeros(nx, ny+1)
     q_ice  = zeros(nx+2, ny+2)
     ix     = zeros(nx-1, ny)
     iy     = zeros(nx, ny-1)
@@ -328,24 +328,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
     # determine indices of glacier domain
     idx_ice = H .> 0.0
-    idx_ice2 = zeros(Int, nx+2, ny+2)
-    idx_ice2[2:end-1, 2:end-1] = idx_ice
-    #q_ice[2:end-1, 2:end-1] .= idx_ice
+    q_ice[2:end-1, 2:end-1] .= idx_ice
     xbound  = Array(LazyArrays.Diff(q_ice, dims=1) .!= 0)[:, 2:end-1]
+    xbound[1, :] .= 0
     ybound  = Array(LazyArrays.Diff(q_ice, dims=2) .!= 0)[2:end-1, :]
-    xlboundq = Array(LazyArrays.Diff(idx_ice2, dims=1) .== 1)
-    xuboundq = Array(LazyArrays.Diff(idx_ice2, dims=1) .== -1)
-    ylboundq = Array(LazyArrays.Diff(idx_ice2, dims=2) .== 1)
-    yuboundq = Array(LazyArrays.Diff(idx_ice2, dims=2) .== -1)
-    xlbound = xlboundq[1:end-1, 2:end-1]
-    xlbound[1, :] .= 0
-    xubound = xuboundq[2:end, 2:end-1]
-    ylbound = ylboundq[2:end-1, 1:end-1]
-    yubound = yuboundq[2:end-1, 2:end]
-    boundary = xlbound .| xubound .| ylbound .| yubound
-    interior = idx_ice .+ boundary .== 1 # ice but not a boundary point
-
-    #id = idx_ice[2:end-1, 2:end-1]
 
     # initiate time loop parameters
     t, it, ittot = 0.0, 0, 0
@@ -367,35 +353,28 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             ix = upstream.(collect(1:nx-1), collect(1:ny)', nx, dϕ_dx; dims=1) # determine indexes of h that are upstream of dϕ/dx
             iy = upstream.(collect(1:nx), collect(1:ny-1)', nx, dϕ_dy; dims=2)
-            qx .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
-            qy .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
-            # qx[2:end-1, :]         .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
-            # qy[:, 2:end-1]         .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
-            # qx[xbound] .= 0.0 # no flux boundary condition
-            # qy[ybound] .= 0.0
+
+            qx[2:end-1, :]         .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
+            qy[:, 2:end-1]         .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
+            qx[xbound] .= 0.0 # no flux boundary condition
+            qy[ybound] .= 0.0
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
 
             # calculate residuals
-            Res_ϕ[2:end-1, 2:end-1]   .=      interior[2:end-1, 2:end-1] .* (
-                                - ev/(ρw*g) * (ϕ[2:end-1, 2:end-1] .- ϕ_old[2:end-1, 2:end-1])/dt .-         # dhe/dt
-                                (LazyArrays.Diff(qx, dims=1)[:, 2:end-1]/dx .+ LazyArrays.Diff(qy, dims=2)[2:end-1, :]/dy) .-      # div(q)
-                                (Σ * vo[2:end-1, 2:end-1] .- Γ * vc[2:end-1, 2:end-1])            .+         # dh/dt
-                                Λ * m[2:end-1, 2:end-1]                                                      # source term
-                                )
-            Res_ϕ   .+= -xlbound .* [qx; zeros(1, ny)] .+
-                        xubound .* [zeros(1, ny); qx] .-
-                        ylbound .* [qy zeros(nx, 1)] .+
-                        yubound .* [zeros(nx, 1) qy]
+            Res_ϕ   .=      #interior .* (
+                                - ev/(ρw*g) * (ϕ .- ϕ_old)/dt .-         # dhe/dt
+                                (LazyArrays.Diff(qx, dims=1)/dx .+ LazyArrays.Diff(qy, dims=2)/dy) .-      # div(q)
+                                (Σ * vo .- Γ * vc)            .+         # dh/dt
+                                Λ * m                                                     # source term
+                                #)
             Res_h       .=      - (h .- h_old) / dt  .+
                                 (Σ * vo .- Γ * vc)
 
             # determine pseudo-time step
             d_eff .= k * h.^α                                                                 # effective diffusivity, defined on each grid point
-            dτ_ϕ[interior]  .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff[interior] / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step for ϕ, defined on each grid point
-            dτ_ϕ[ylbound]  .= 1e-7
-            dτ_ϕ[yubound]  .= 1e-7
+            dτ_ϕ  .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step for ϕ, defined on each grid point
             dτ_h   = dt / dτ_h_                                                                # pseudo-time step for h, scalar
 
             # damped rate of change
@@ -412,7 +391,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             # determine the errors (only consider points where the ice thickness is > 0)
             Err_ϕ .= abs.(Err_ϕ .- ϕ)
             err_ϕ = norm(Err_ϕ[idx_ice]) # this error is smaller than the error using Res_ϕ
-            # err_ϕ = norm(Res_ϕ[idx_ice[2:end-1, 2:end-1]])/length(Res_ϕ) # with this error it also converges but more slowly
+            # err_ϕ = norm(Res_ϕ[idx_ice])/length(Res_ϕ) # with this error it also converges but more slowly
             Err_h .= abs.(Err_h .- h)
             err_h = norm(Err_h[idx_ice])
             # err_h   = norm(Res_h[idx_ice])/length(Res_h)
@@ -440,6 +419,7 @@ end
 function plot_output(xc, yc, N, h, qx, qy)
     x_plt = [0; xc .+ (xc[2]-xc[1])]
     y_plt = [0; yc .+ (yc[2]-yc[1])]
+    h[h .== 0.0] .= NaN
     pygui(true)
     # pcolor of ϕ and h fields
     figure()
