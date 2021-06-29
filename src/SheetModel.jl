@@ -88,7 +88,7 @@ function scaling(p::Para, ϕ0, h0)
     xy_ = max(lx, ly)
 
     H_ = mean(H)
-    zb_ = H_
+    zb_ = H_ / r_ρ
     m_ = mean(calc_m_t(0.0)) # for time-dependent input: temporal peak
     ub_ = ub
 
