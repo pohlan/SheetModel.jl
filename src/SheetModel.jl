@@ -1,5 +1,6 @@
 __precompile__(false)
 module SheetModel
+using Infiltrator
 
 using LinearAlgebra: size
 using Base: Float64, Int64
@@ -181,11 +182,7 @@ end
 Determine global index for upstream scheme
 """
 function upstream(ix, iy, nx, dϕ_du; dims=1)
-    if dϕ_du >= 0
-        di = 0
-    else
-        di = 1
-    end
+    di = dϕ_du >= 0 ? 0 : 1
     if dims == 1
         ix = ix + di
     elseif dims == 2
@@ -200,10 +197,15 @@ Apply the boundary conditions to ϕ, at the moment pw(x=0) = 0 and no flux at th
 function apply_bc(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with arrays as arguments
                                    # TODO: don't hard-wire, give bc as input parameters
     nx, ny = size(ϕ)
-    ϕ[H .== 0.0] .= ρw .* g .* zb[H .== 0.0]  # zero water pressure outside of glacier domain
+    ϕ[H .== 0.0] .= ρw .* g .* zb[H .== 0.0] # zero water pressure outside of glacier domain
     h[H .== 0.0] .= 0.0                       # zero sheet thickness outside of glacier domain
-    ϕ[1, Int(ny/2)] = ρw .* g .* zb[1, Int(ny/2)]
-    ϕ[1, Int(ny/2)+1] = ρw .* g .* zb[1, Int(ny/2)+1]
+    ϕ[1, :] = ρw .* g .* zb[1, :]
+    ϕ[end-1,:] = ρw .* g .* zb[end-1,:]
+    # ϕ[1, ny÷2+1] = ρw .* g .* zb[1, ny÷2+1]
+    # if iseven(size(ϕ,2))
+    #     ϕ[1, ny÷2] = ρw .* g .* zb[1, ny÷2]
+    # end
+
     #for j = 2:ny-1, i = 2:nx-1
     #    if H[i, j] > 0.0
             #if H[i-1, j] == 0.0 # x1 boundary
@@ -307,6 +309,7 @@ function runthemodel(input::Para, ϕ0, h0;
     N .= N .* ϕ_ # scaling for N same as for ϕ
     ϕ .= ϕ .* ϕ_
     h .= h .* h_
+    # TODO de-scale qx, qy, err_ϕ, err_h
     return N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_interior, qy_interior
 end
 
@@ -339,11 +342,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     qy_interior = zeros(Int, nx, ny+1)
     qy_interior[:, 1:end-1] .= idx_ice
     qy_interior[:, 2:end] .+= idx_ice
-    xlbound  = Array(LazyArrays.Diff(gp_ice, dims=1) .== 1)[:, 2:end-1]
-    xubound = Array(LazyArrays.Diff(gp_ice, dims=1) .== -1)[:, 2:end-1]
-    xlbound[1, :] .= 0
-    ybound  = Array(LazyArrays.Diff(gp_ice, dims=2) .!= 0)[2:end-1, :]
-
+    xlbound  = (diff(gp_ice, dims=1) .== 1)[:, 2:end-1]
+    xubound = (diff(gp_ice, dims=1) .== -1)[:, 2:end-1]
+    #xlbound[1, :] .= 0
+    ybound  = (diff(gp_ice, dims=2) .!= 0)[2:end-1, :]
     # initiate time loop parameters
     t, it, ittot = 0.0, 0, 0
 
@@ -354,6 +356,14 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
         m .= calc_m_t(t)
         # Pseudo-transient iteration
         while !(max(err_ϕ, err_h) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
+            # used indices:
+            # - normal grid (i,j)
+            #   e.g. ϕ[i,j]
+            # - staggered grid (m,n)
+            #   e.g. dϕ_dx[m,j]
+            # - staggered grid with ghost points (p,q)
+            #   e.g. qx[p,j], qy[i,q]
+
             # save current ϕ for error calculation
             Err_ϕ   .= ϕ
             Err_h   .= h
@@ -362,16 +372,62 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             dϕ_dx   .= LazyArrays.Diff(ϕ, dims=1) ./ dx                  # hydraulic gradient
             dϕ_dy   .= LazyArrays.Diff(ϕ, dims=2) ./ dy
 
-            ix = upstream.(collect(1:nx-1), collect(1:ny)', nx, dϕ_dx; dims=1) # determine indexes of h that are upstream of dϕ/dx
-            iy = upstream.(collect(1:nx), collect(1:ny-1)', nx, dϕ_dy; dims=2)
+            # # determine indexes of h that are upstream of dϕ/dx
+            # # TODO: make this into a loop.  Would (probably) be clearer and avoids allocations.
+            # ix = upstream.(1:nx-1, (1:ny)', nx, dϕ_dx; dims=1)
+            # iy = upstream.(1:nx, (1:ny-1)', nx, dϕ_dy; dims=2)
 
-            qx[2:end-1, :]         .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
-            qy[:, 2:end-1]         .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
-            qx[qx_interior .== 0]   .= 0.0
-            qy[qy_interior .== 0]   .= 0.0
-            qx[xubound] .= 0.0 # no flux boundary condition
-            qx[xlbound] .= 0.0
-            qy[ybound] .= 0.0
+            # qx[2:end-1, :]         .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
+            # qy[:, 2:end-1]         .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
+            # qx[qx_interior .== 0]   .= 0.0
+            # qy[qy_interior .== 0]   .= 0.0
+            # qx[xubound] .= 0.0 # no flux boundary condition
+            # qx[xlbound] .= 0.0
+            # qy[ybound] .= 0.0
+
+            for j=1:size(qx,2)
+                for p = (1,size(qx,1))
+                    # outer boundary
+                    @assert qx[p,j] == 0
+                end
+                for p=2:size(qx,1)-1
+                    if idx_ice[p,j]==0 || idx_ice[p-1,j]==0
+                        # BC: zero flux across boundary
+                        @assert qx[p,j]==0 # (already set at initialization)
+                    else
+                        dϕ_dx_ = (ϕ[p,j] - ϕ[p-1,j])/dx # i.e. between [i,j] and [i-1,j]
+                        @assert (dϕ_dx_==dϕ_dx[p-1,j]) (p,j)
+                        i = dϕ_dx_>=0 ?
+                            p : # flux from cell [p,j] to [p-1,j]
+                            p-1 # flux from cell [p-1,j] to [p,j]\
+                        qx[p,j] = calc_q(h[i,j], dϕ_dx_, k, α, β, small)
+                        qx[p,j] = calc_q((h[p ,j] + h[p-1 ,j])/2, dϕ_dx_, k, α, β, small)
+                    end
+                end
+            end
+            for q=1:size(qy,2)
+                if q == 1 || q==size(qy,2)
+                    # outer boundary
+                    @assert all(qy[:,q] .== 0)
+                    continue
+                end
+                for i=1:size(qy,1)
+                    if idx_ice[i,q]==0 || idx_ice[i,q-1]==0
+                        # BC: zero flux across boundary
+                        @assert qy[i,q]==0 # (already set at initialization)
+                    else
+                        dϕ_dy_ = (ϕ[i,q] - ϕ[i,q-1])/dy # i.e. between [i,j] and [i,j-1]
+                        @assert (dϕ_dy_==dϕ_dy[i,q-1]) (i,q)
+                        j = dϕ_dy_>=0 ?
+                            q : # flux from cell [i,q] to [i,q-1]
+                            q-1 # flux from cell [i,q-1] to [i,q]
+                        # @assert qy[i,q] == calc_q(h[i,j], dϕ_dy_, k, α, β, small) i,q
+                        qy[i,q] = calc_q(h[i,j], dϕ_dy_, k, α, β, small)
+                        qy[i,q] = calc_q((h[i,q] + h[i,q-1])/2, dϕ_dy_, k, α, β, small)
+                    end
+                end
+            end
+       #     @infiltrate iter==4000
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
@@ -448,11 +504,12 @@ function plot_output(xc, yc, N, h, qx, qy, qx_interior, qy_interior)
     title("N")
     # cross-sections of ϕ and h
     subplot(2, 2, 3)
-    plot(xc, h[:, Int(length(yc)/2)])
-    title(join(["h at y = ", string(round(yc[10], digits=1))]))
+    ind = size(N,2)÷2
+    plot(xc, h[:, ind])
+    title(join(["h at y = ", string(round(yc[ind], digits=1))]))
     subplot(2, 2, 4)
-    plot(xc, N[:, Int(length(yc)/2)])
-    title(join(["N at y = ", string(round(yc[10], digits=1))]))
+    plot(xc, N[:, ind])
+    title(join(["N at y = ", string(round(yc[ind], digits=1))]))
 
     qx_plot = copy(qx)
     qy_plot = copy(qy)
