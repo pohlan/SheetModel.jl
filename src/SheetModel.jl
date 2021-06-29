@@ -26,14 +26,18 @@ All model parameters; physical and numerical
     ub    = 1e-6              # basal sliding speed, m/s
 
     # Numerical domain
-    lx         # domain size
-    ly
-    nx::Int64         # number of grids
+    xrange::Tuple{Float64, Float64}   # domain size
+    yrange::Tuple{Float64, Float64}
+    x1   = xrange[1]
+    xend = xrange[2]
+    y1   = yrange[1]
+    yend = yrange[2]
+    nx::Int64                        # number of grids
     ny::Int64
-    dx = lx/nx      # grid size
-    dy = ly/ny
-    xc::LinRange{Float64} = LinRange(0.0, lx, nx) # vector of x-coordinates
-    yc::LinRange{Float64} = LinRange(-ly/2, ly/2, ny) # vector of y-coordinates
+    dx = (xend-x1) / (nx-1)          # grid size
+    dy = (yend-y1) / (ny-1)
+    xc::LinRange{Float64} = LinRange(x1, xend, nx) # vector of x-coordinates
+    yc::LinRange{Float64} = LinRange(y1, yend, ny) # vector of y-coordinates
 
     # Field parameters (defined on every grid point)
     calc_zs::Function
@@ -73,7 +77,7 @@ Convert input parameters to non-dimensional quantities
 function scaling(p::Para, ϕ0, h0)
     @unpack g, ρw, k, A, lr, hr,
             H, zb, calc_m_t, ub,
-            lx, ly, dx, dy, xc, yc,
+            dx, dy, xc, yc,
             ttot, dt,
             r_ρ, α, β, n,
             Σ, Γ, Λ = p
@@ -85,7 +89,7 @@ function scaling(p::Para, ϕ0, h0)
     A_ = A
     lr_ = lr
     h_ = hr
-    xy_ = max(lx, ly)
+    xy_ = max(xc[end]-xc[1], yc[end]-yc[1])
 
     H_ = mean(H)
     zb_ = H_ / r_ρ
@@ -93,10 +97,11 @@ function scaling(p::Para, ϕ0, h0)
     ub_ = ub
 
     ϕ_ = g_ * H_ * ρ_ / r_ρ
+    N_ = ϕ_
     q_ = k_ * h_^α * ( ϕ_  / xy_ )^(β-1)
     t_ = xy_ * h_ / q_
     vo_ = ub_ * h_ / lr_
-    vc_ = A_ * h_ * ϕ_ ^n
+    vc_ = A_ * h_ * N_ ^n
 
     if any(.!isnan.([Σ, Γ, Λ]))
         @warn "Σ, Γ and Λ have already been assigned."
@@ -120,8 +125,6 @@ function scaling(p::Para, ϕ0, h0)
         calc_m_t = t -> calc_m_t(t) ./ m_,
 
         # Numerical domain
-        lx = lx ./ xy_,
-        ly = ly ./ xy_,
         dx = dx ./ xy_,
         dy = dy ./ xy_,
         xc = xc ./ xy_,
@@ -139,7 +142,7 @@ function scaling(p::Para, ϕ0, h0)
     ϕ0 = ϕ0 ./ ϕ_
     h0 = h0 ./ h_
 
-    return scaled_params, ϕ0, h0, ϕ_, h_
+    return scaled_params, ϕ0, h0, ϕ_, N_, h_
 end
 
 """
@@ -202,8 +205,9 @@ function apply_bc(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with
     nx, ny = size(ϕ)
     ϕ[H .== 0.0] .= ρw .* g .* zb[H .== 0.0]  # zero water pressure outside of glacier domain
     h[H .== 0.0] .= 0.0                       # zero sheet thickness outside of glacier domain
-    ϕ[1, Int(ny/2)] = ρw .* g .* zb[1, Int(ny/2)]
-    ϕ[1, Int(ny/2)+1] = ρw .* g .* zb[1, Int(ny/2)+1]
+    #ϕ[1, Int(ny/2)] = ρw .* g .* zb[1, Int(ny/2)]
+    #ϕ[1, Int(ny/2)+1] = ρw .* g .* zb[1, Int(ny/2)+1]
+    ϕ[1, :] = ρw .* g .* zb[1, :]
     #for j = 2:ny-1, i = 2:nx-1
     #    if H[i, j] > 0.0
             #if H[i-1, j] == 0.0 # x1 boundary
@@ -302,9 +306,9 @@ Scale the parameters and call the model run function
 function runthemodel(input::Para, ϕ0, h0;
                     printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
                     printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
-    params, ϕ0, h0, ϕ_, h_ = scaling(input, ϕ0, h0)
+    params, ϕ0, h0, ϕ_, N_, h_ = scaling(input, ϕ0, h0)
     N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_interior, qy_interior = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
-    N .= N .* ϕ_ # scaling for N same as for ϕ
+    N .= N .* N_ # scaling for N same as for ϕ
     ϕ .= ϕ .* ϕ_
     h .= h .* h_
     return N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_interior, qy_interior
@@ -331,17 +335,13 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     # determine indices of glacier domain
     idx_ice = H .> 0.0
     gp_ice[2:end-1, 2:end-1] .= idx_ice
-    gp_H = zeros(nx+2, ny+2)
-    gp_H[2:end-1, 2:end-1] .= H
     qx_interior = zeros(Int, nx+1, ny)
     qx_interior[1:end-1, :] .= idx_ice
     qx_interior[2:end, :] .+= idx_ice
     qy_interior = zeros(Int, nx, ny+1)
     qy_interior[:, 1:end-1] .= idx_ice
     qy_interior[:, 2:end] .+= idx_ice
-    xlbound  = Array(LazyArrays.Diff(gp_ice, dims=1) .== 1)[:, 2:end-1]
-    xubound = Array(LazyArrays.Diff(gp_ice, dims=1) .== -1)[:, 2:end-1]
-    xlbound[1, :] .= 0
+    xbound  = Array(LazyArrays.Diff(gp_ice, dims=1) .!= 0)[:, 2:end-1]
     ybound  = Array(LazyArrays.Diff(gp_ice, dims=2) .!= 0)[2:end-1, :]
 
     # initiate time loop parameters
@@ -351,7 +351,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     while t<ttot
         iter, err_ϕ, err_h = 0, 2*tol, 2*tol
 
-        m .= calc_m_t(t)
+        m .= calc_m_t(t+dt)
         # Pseudo-transient iteration
         while !(max(err_ϕ, err_h) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
             # save current ϕ for error calculation
@@ -369,25 +369,26 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             qy[:, 2:end-1]         .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
             qx[qx_interior .== 0]   .= 0.0
             qy[qy_interior .== 0]   .= 0.0
-            qx[xubound] .= 0.0 # no flux boundary condition
-            qx[xlbound] .= 0.0
+            qx[xbound] .= 0.0 # no flux boundary condition
             qy[ybound] .= 0.0
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
 
             # calculate residuals
-            Res_ϕ   .=      idx_ice .* (
-                                - ev/(ρw*g) * (ϕ .- ϕ_old)/dt .-         # dhe/dt
-                                (LazyArrays.Diff(qx, dims=1)/dx .+ LazyArrays.Diff(qy, dims=2)/dy) .-      # div(q)
-                                (Σ * vo .- Γ * vc)            .+         # dh/dt
-                                Λ * m                                                     # source term
-                                )
-            Res_h       .=      - (h .- h_old) / dt  .+
-                                (Σ * vo .- Γ * vc)
+            Res_ϕ   .=  idx_ice .* (
+                            - ev/(ρw*g) * (ϕ .- ϕ_old)/dt .-         # dhe/dt
+                            (LazyArrays.Diff(qx, dims=1)/dx .+ LazyArrays.Diff(qy, dims=2)/dy) .-      # div(q)
+                            (Σ * vo .- Γ * vc)            .+         # dh/dt
+                            Λ * m                                    # source term
+                            )
+            Res_h   .=  idx_ice .* (
+                            - (h .- h_old) / dt  .+
+                            (Σ * vo .- Γ * vc)
+                            )
 
             # determine pseudo-time step
-            d_eff .= k * h.^α                                                                 # effective diffusivity, defined on each grid point
+            d_eff .= k * h.^α                                                                  # effective diffusivity, defined on each grid point
             dτ_ϕ  .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step for ϕ, defined on each grid point
             dτ_h   = dt / dτ_h_                                                                # pseudo-time step for h, scalar
 
@@ -404,11 +405,11 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # determine the errors (only consider points where the ice thickness is > 0)
             Err_ϕ .= abs.(Err_ϕ .- ϕ)
-            err_ϕ = norm(Err_ϕ[idx_ice]) # this error is smaller than the error using Res_ϕ
-            # err_ϕ = norm(Res_ϕ[idx_ice])/length(Res_ϕ) # with this error it also converges but more slowly
+            err_ϕ = norm(Err_ϕ) # this error is smaller than the error using Res_ϕ
+            # err_ϕ = norm(Res_ϕ[idx_ice])/sum(idx_ice) # with this error it also converges but more slowly
             Err_h .= abs.(Err_h .- h)
-            err_h = norm(Err_h[idx_ice])
-            # err_h   = norm(Res_h[idx_ice])/length(Res_h)
+            err_h = norm(Err_h)
+            # err_h   = norm(Res_h[idx_ice])/sum(idx_ice)
             iter += 1
 
             if mod(iter, printit) == 0
@@ -433,8 +434,8 @@ end
 function plot_output(xc, yc, N, h, qx, qy, qx_interior, qy_interior)
     x_plt = [0; xc .+ (xc[2]-xc[1])]
     y_plt = [0; yc .+ (yc[2]-yc[1])]
-    h[h .== 0.0] .= NaN
     N[h .== 0.0] .= NaN
+    h[h .== 0.0] .= NaN
     pygui(true)
     # pcolor of ϕ and h fields
     figure()

@@ -78,16 +78,16 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
                 )
 
     # geometry: "sqrt" -> ice-sheet margin; "valley" -> valley glacier
-    geom  = Dict("sqrt" => (Lx   = 100e3,
-                            Ly   = 20e3,
+    geom  = Dict("sqrt" => (xrange   = (0.0, 100e3),
+                            yrange   = (0.0, 20e3),
                             surf = (x, y) -> (6 *( sqrt(x+5e3) - sqrt(5e3) ) + 1 ),
                             bed  = (x, y) -> 0.0
                             ),
-                 "valley" => (Lx = 6e3,
-                             Ly = 1e3,
-                             surf = (x, y) -> surface_val(x, y),
-                             bed = (x, y) -> bed_val(x, y, para[test_case])
-                             )
+                 "valley" => (xrange = (0.0, 6e3),
+                              yrange = (-500.0, 500.0),
+                              surf = (x, y) -> surface_val(x, y),
+                              bed = (x, y) -> bed_val(x, y, para[test_case])
+                              )
     )
 
     if any(startswith.(test_case, ["A", "D"]))
@@ -104,8 +104,8 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
 
     # Define numerical domain and input parameters
     input_params = S.Para(
-        lx = topo.Lx,  # domain length in x-direction, m
-        ly = topo.Ly,  # domain length in y-direction, m
+        xrange = topo.xrange,  # domain length in x-direction, m
+        yrange = topo.yrange,  # domain length in y-direction, m
         nx = Nx,
         ny = Ny,
 
@@ -124,13 +124,13 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
     )
 
     # Initial condition
-    @unpack xc, yc, lx, ly, H = input_params
+    #@unpack xc, yc, H = input_params
     ϕ0, h0 = S.initial_conditions(
         xc,
         yc,
         H,
-        #calc_ϕ = (x, y) -> 5e5,
-        calc_ϕ = (x, y) -> 1e6/lx * x,
+        calc_ϕ = (x, y) -> 100.0,
+        #calc_ϕ = (x, y) -> 1e6/lx * x,
         #calc_ϕ = (x, y) -> exp(- 1e-2*(x-Lx/2)^2) * exp(-1e-2*(yc-Ly/2)^2),
         #calc_ϕ = (x, y) -> rand(),
         calc_h = (x, y) -> 0.04
@@ -139,11 +139,6 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
 
     N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_interior, qy_interior = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
 
-    #qx[qx .== 0.0] .= NaN
-    #qy[qy .== 0.0] .= NaN
-    #qx[H[2:end, :] .== 0.0] .= NaN
-    #qy[H[:, 1:end-1] .== 0.0] .= NaN
-    #qy[H[:, 2:end] .== 0.0] .= NaN
     if make_plot
         S.plot_output(xc, yc, N, h, qx, qy, qx_interior, qy_interior)
     end
