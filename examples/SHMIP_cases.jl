@@ -141,7 +141,7 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
     N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_interior, qy_interior = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
 
     if make_plot
-        S.plot_output(xc, yc, N, h, qx, qy, qx_interior, qy_interior)
+        S.plot_output(xc, yc, ϕ, h, qx, qy, qx_interior, qy_interior)
     end
 
     err_ϕ'[H' .== 0.0] .= NaN

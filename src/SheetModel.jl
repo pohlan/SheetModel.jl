@@ -202,23 +202,24 @@ function apply_bc(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with
     nx, ny = size(ϕ)
     ϕ[H .== 0.0] .= ρw .* g .* zb[H .== 0.0] # zero water pressure outside of glacier domain
     h[H .== 0.0] .= 0.0                       # zero sheet thickness outside of glacier domain
-    # ϕ[1, :] = ρw .* g .* zb[1, :]
+    ϕ[1, :] = ρw .* g .* zb[1, :]
     # ϕ[end-1,:] = ρw .* g .* zb[end-1,:]
     # ϕ[1, ny÷2+1] = ρw .* g .* zb[1, ny÷2+1]
     # if iseven(size(ϕ,2))
     #     ϕ[1, ny÷2] = ρw .* g .* zb[1, ny÷2]
     # end
 
-    for j = 2:ny-1, i = 2:nx-1
-        if H[i, j] > 0.0
-            if H[i-1, j] == 0.0 # x1 boundary
-                ϕ[i, j] = ρw .* g .* zb[i-1, j] # zero water pressure
-            end
-            if H[i-1, j] > 0.0 && i == 2  # ice boundary = domain boundary
-                ϕ[i-1, j] = ρw .* g .* zb[i-1, j] # zero water pressure
-            end
-        end
-    end
+    # for j = 2:ny-1, i = 2:nx-1
+    #     if H[i, j] > 0.0
+    #         if H[i-1, j] == 0.0 # x1 boundary
+    #             ϕ[i, j] = ρw .* g .* zb[i-1, j] # zero water pressure
+    #         end
+    #         if H[i-1, j] > 0.0 && i == 2  # ice boundary = domain boundary
+    #             ϕ[i-1, j] = ρw .* g .* zb[i-1, j] # zero water pressure
+    #             #ϕ[i, j] = ρw .* g .* zb[i, j]
+    #         end
+    #     end
+    # end
 
     # corner points
     # ϕ[1, 1]  = H[1, 1] > 0.0 ? ρw .* g .* zb[1, 1] : ϕ[1, 1]
@@ -380,7 +381,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
                             p : # flux from cell [p,j] to [p-1,j]
                             p-1 # flux from cell [p-1,j] to [p,j]\
                         qx[p,j] = calc_q(h[i,j], dϕ_dx_, k, α, β, small)                  # upstream scheme
-                        qx[p,j] = calc_q((h[p ,j] + h[p-1 ,j])/2, dϕ_dx_, k, α, β, small) # central differences
+                        # qx[p,j] = calc_q((h[p ,j] + h[p-1 ,j])/2, dϕ_dx_, k, α, β, small) # central differences
                     end
                 end
             end
@@ -402,7 +403,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
                             q-1 # flux from cell [i,q-1] to [i,q]
                         # @assert qy[i,q] == calc_q(h[i,j], dϕ_dy_, k, α, β, small) i,q
                         qy[i,q] = calc_q(h[i,j], dϕ_dy_, k, α, β, small)                  # upstream scheme
-                        qy[i,q] = calc_q((h[i,q] + h[i,q-1])/2, dϕ_dy_, k, α, β, small) # central differences
+                        # qy[i,q] = calc_q((h[i,q] + h[i,q-1])/2, dϕ_dy_, k, α, β, small) # central differences
                     end
                 end
             end
@@ -426,6 +427,9 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             # determine pseudo-time step
             d_eff .= k * h.^α                                                                  # effective diffusivity, defined on each grid point
             dτ_ϕ  .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step for ϕ, defined on each grid point
+
+            dτ_ϕ[2, :] .= 0.01 * dτ_ϕ[2, :] # very large ϕ jump -> decrease pseudo-time step
+
             dτ_h   = dt / dτ_h_                                                                # pseudo-time step for h, scalar
 
             # damped rate of change
@@ -482,7 +486,7 @@ function plot_output(xc, yc, N, h, qx, qy, qx_interior, qy_interior)
     subplot(2, 2, 2)
     pcolor(x_plt, y_plt, N', edgecolors="black")
     colorbar()
-    title("N")
+    title("ϕ")
     # cross-sections of ϕ and h
     subplot(2, 2, 3)
     ind = size(N,2)÷2
@@ -490,7 +494,7 @@ function plot_output(xc, yc, N, h, qx, qy, qx_interior, qy_interior)
     title(join(["h at y = ", string(round(yc[ind], digits=1))]))
     subplot(2, 2, 4)
     plot(xc, N[:, ind])
-    title(join(["N at y = ", string(round(yc[ind], digits=1))]))
+    title(join(["ϕ at y = ", string(round(yc[ind], digits=1))]))
 
     qx_plot = copy(qx)
     qy_plot = copy(qy)
