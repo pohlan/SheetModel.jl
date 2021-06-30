@@ -21,7 +21,7 @@ function make_runoff_fct(zs, DT)
 end
 
 # for "valley" geometry
-para_bench = 0.05
+const para_bench = 0.05
 surface_val(x, y) = 100(x+200)^(1/4) + 1/60*x - 2e10^(1/4) + 1
 f(x, para) = (surface_val(6e3,0) - para*6e3)/6e3^2 * x^2 + para*x
 g(y) = 0.5e-6 * abs(y)^3
@@ -113,10 +113,11 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
         calc_zb = topo.bed,     # bed elevation, m
         calc_m_xyt  = water_input,     # source term, m/s
 
-        ttot = 1000.0,
+        ttot = 10000.0,
         #ttot = 5*s_per_day,
         dt   = 1000.0, #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
 
+        itMax = 10000,
         γ_ϕ  = γ_ϕ,  # damping parameter for ϕ
         γ_h  = γ_h,  # damping parameter for h
         dτ_ϕ_ = dτ_ϕ_, # scaling factor for dτ_ϕ
@@ -124,7 +125,7 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
     )
 
     # Initial condition
-    #@unpack xc, yc, H = input_params
+    @unpack xc, yc, H = input_params
     ϕ0, h0 = S.initial_conditions(
         xc,
         yc,
@@ -140,7 +141,7 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
     N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_interior, qy_interior = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
 
     if make_plot
-        S.plot_output(xc, yc, N, h, qx, qy, qx_interior, qy_interior)
+        S.plot_output(xc, yc, ϕ, h, qx, qy, qx_interior, qy_interior)
     end
 
     err_ϕ'[H' .== 0.0] .= NaN
@@ -155,5 +156,5 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
     colorbar()
     title("err_h")
 
-    return nit, ϕ, H, qx, qy
+    return nit, ϕ, H, qx, qy, (;input_params, ϕ0, h0)
 end
