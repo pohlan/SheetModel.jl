@@ -202,48 +202,27 @@ function apply_bc(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with
     nx, ny = size(ϕ)
     ϕ[H .== 0.0] .= ρw .* g .* zb[H .== 0.0] # zero water pressure outside of glacier domain
     h[H .== 0.0] .= 0.0                       # zero sheet thickness outside of glacier domain
-    ϕ[1, :] = ρw .* g .* zb[1, :]
+    # ϕ[1, :] = ρw .* g .* zb[1, :]
     # ϕ[end-1,:] = ρw .* g .* zb[end-1,:]
     # ϕ[1, ny÷2+1] = ρw .* g .* zb[1, ny÷2+1]
     # if iseven(size(ϕ,2))
     #     ϕ[1, ny÷2] = ρw .* g .* zb[1, ny÷2]
     # end
 
-    #for j = 2:ny-1, i = 2:nx-1
-    #    if H[i, j] > 0.0
-            #if H[i-1, j] == 0.0 # x1 boundary
-            #    ϕ[i, j] = ϕ[i+1, j] # no flux
-            #elseif i == 2
-            #    ϕ[i-1, j] == ϕ[i, j]
-            #end
-            #if H[i+1, j] == 0.0 # xend boundary
-            #    ϕ[i, j] = ϕ[i-1, j] # no flux
-            #elseif i == nx-1
-            #    ϕ[i+1, j] = ϕ[i, j]
-            #end
-            #if H[i-1, j] > 0.0 && i==2 # x1 boundary
-            #    ϕ[i-1, j] = ρw .* g .* zb[i-1, j] # zero water pressure
-            #end
-            #if H[i, j-1] == 0.0 # y1 boundary
-            #    ϕ[i, j] = ϕ[i, j+1] # no flux
-            #elseif j == 2
-            #    ϕ[i, j-1] = ϕ[i, j]
-            #end
-            #if H[i, j+1] == 0.0 # yend boundary
-            #    ϕ[i, j] = ϕ[i, j-1] # no flux
-            #elseif j == ny-1
-            #    ϕ[i, j+1] = ϕ[i, j]
-            #end
-    #    end
-    #end
+    for j = 2:ny-1, i = 2:nx-1
+        if H[i, j] > 0.0
+            if H[i-1, j] == 0.0 # x1 boundary
+                ϕ[i, j] = ρw .* g .* zb[i-1, j] # zero water pressure
+            end
+            if H[i-1, j] > 0.0 && i == 2  # ice boundary = domain boundary
+                ϕ[i-1, j] = ρw .* g .* zb[i-1, j] # zero water pressure
+            end
+        end
+    end
 
     # corner points
-    # ϕ[nx, 1] = H[nx, 2] > 0.0 ? ϕ[nx, 2] : ϕ[nx, 1]
-    # ϕ[nx, 1] = H[nx-1, 1] > 0.0 ? ϕ[nx-1, 1] : ϕ[nx, 1]
-    # ϕ[nx, ny] = H[nx, ny-1] > 0.0 ? ϕ[nx, ny-1] : ϕ[nx, ny]
-    # ϕ[nx, ny] = H[nx-1, ny] > 0.0 ? ϕ[nx-1, ny] : ϕ[nx, ny]
-    # ϕ[1, 1]  = H[2, 1] > 0.0 ? ρw .* g .* zb[1, 1] : ϕ[1, 1]
-    # ϕ[1, ny] = (H[1, ny-1] > 0.0 || H[2, ny] > 0.0) ?  ρw .* g .* zb[1, ny] : ϕ[1, ny]
+    # ϕ[1, 1]  = H[1, 1] > 0.0 ? ρw .* g .* zb[1, 1] : ϕ[1, 1]
+    # ϕ[1, ny] = H[1, ny] > 0.0 ?  ρw .* g .* zb[1, ny] : ϕ[1, ny]
 
     return ϕ, h
 end
@@ -344,6 +323,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     qy_interior[:, 1:end-1] .= idx_ice
     qy_interior[:, 2:end] .+= idx_ice
     xbound  = Array(LazyArrays.Diff(gp_ice, dims=1) .!= 0)[:, 2:end-1]
+    xlbound  = Array(LazyArrays.Diff(gp_ice, dims=1) .== 1)[:, 2:end-1]
     ybound  = Array(LazyArrays.Diff(gp_ice, dims=2) .!= 0)[2:end-1, :]
 
     # initiate time loop parameters
