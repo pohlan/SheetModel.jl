@@ -202,7 +202,7 @@ function apply_bc(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with
     nx, ny = size(ϕ)
     ϕ[H .== 0.0] .= ρw .* g .* zb[H .== 0.0] # zero water pressure outside of glacier domain
     h[H .== 0.0] .= 0.0                       # zero sheet thickness outside of glacier domain
-    ϕ[1, :] = ρw .* g .* zb[1, :]
+    ϕ[1, :] .= ρw .* g .* zb[1, :]
     # ϕ[end-1,:] = ρw .* g .* zb[end-1,:]
     # ϕ[1, ny÷2+1] = ρw .* g .* zb[1, ny÷2+1]
     # if iseven(size(ϕ,2))
@@ -428,7 +428,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             d_eff .= k * h.^α                                                                  # effective diffusivity, defined on each grid point
             dτ_ϕ  .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step for ϕ, defined on each grid point
 
-            dτ_ϕ[2, :] .= 0.01 * dτ_ϕ[2, :] # very large ϕ jump -> decrease pseudo-time step
+            # dτ_ϕ[2, :] .= 0.01 * dτ_ϕ[2, :] # very large ϕ jump ("valley" geometry) -> decrease pseudo-time step
 
             dτ_h   = dt / dτ_h_                                                                # pseudo-time step for h, scalar
 
