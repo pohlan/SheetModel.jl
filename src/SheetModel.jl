@@ -143,7 +143,7 @@ function scaling(p::Para, ϕ0, h0)
     ϕ0 = ϕ0 ./ ϕ_
     h0 = h0 ./ h_
 
-    return scaled_params, ϕ0, h0, ϕ_, N_, h_
+    return scaled_params, ϕ0, h0, ϕ_, N_, h_, q_
 end
 
 """
@@ -231,9 +231,9 @@ end
 """
 Calculate discharge
 """
-function calc_q(h, dϕ_du, k, α, β, small) # u can be x or y
+function calc_q(h, dϕ_du1, dϕ_du2, k, α, β, small) # qx -> u1 = x, u2 = y; other way round for qy
     #@unpack k, α, β, small = p
-    return - k * h^α * (abs(dϕ_du) + small)^(β-2) * dϕ_du
+    return - k * h^α * (sqrt(dϕ_du1^2 + dϕ_du2^2) + small)^(β-2) * dϕ_du1
 end
 
 """
@@ -287,12 +287,15 @@ Scale the parameters and call the model run function
 function runthemodel(input::Para, ϕ0, h0;
                     printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
                     printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
-    params, ϕ0, h0, ϕ_, N_, h_ = scaling(input, ϕ0, h0)
+    params, ϕ0, h0, ϕ_, N_, h_, q_ = scaling(input, ϕ0, h0)
     N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_interior, qy_interior = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     N .= N .* N_ # scaling for N same as for ϕ
     ϕ .= ϕ .* ϕ_
     h .= h .* h_
-    # TODO de-scale qx, qy, err_ϕ, err_h
+    qx .= qx .* q_
+    qy .= qy .* q_
+    err_ϕ .= err_ϕ .* ϕ_
+    err_h .= err_h .* h_
     return N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_interior, qy_interior
 end
 
@@ -380,7 +383,14 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
                         i = dϕ_dx_ >= 0 ?
                             p : # flux from cell [p,j] to [p-1,j]
                             p-1 # flux from cell [p-1,j] to [p,j]\
-                        qx[p,j] = calc_q(h[i,j], dϕ_dx_, k, α, β, small)                  # upstream scheme
+                        if j-1 >= size(dϕ_dy, 2) && j <= size(dϕ_dy, 2)
+                            dϕ_dy_ = 0.5 * (dϕ_dy[i, j-1] + dϕ_dy[i, j]) # take average of upstream dϕ_dy
+                        elseif j-1 < size(dϕ_dy, 2)
+                            dϕ_dy_ = dϕ_dy[i, j] # lower y-boundary, only one upstream value available
+                        elseif j > size(dϕ_dy, 2)
+                            dϕ_dy_ = dϕ_dy[i, j-1] # upper y-boundary, ...
+                        end
+                        qx[p,j] = calc_q(h[i,j], dϕ_dx_, dϕ_dy_, k, α, β, small)                  # upstream scheme
                         # qx[p,j] = calc_q((h[p ,j] + h[p-1 ,j])/2, dϕ_dx_, k, α, β, small) # central differences
                     end
                 end
@@ -402,7 +412,14 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
                             q : # flux from cell [i,q] to [i,q-1]
                             q-1 # flux from cell [i,q-1] to [i,q]
                         # @assert qy[i,q] == calc_q(h[i,j], dϕ_dy_, k, α, β, small) i,q
-                        qy[i,q] = calc_q(h[i,j], dϕ_dy_, k, α, β, small)                  # upstream scheme
+                        if i-1 >= size(dϕ_dx, 1) && i <= size(dϕ_dx, 1)
+                            dϕ_dx_ = 0.5 * (dϕ_dx[i-1, j] + dϕ_dx[i, j])
+                        elseif i-1 < size(dϕ_dx, 1)
+                            dϕ_dx_ = dϕ_dx[i, j]
+                        elseif i > size(dϕ_dx, 1)
+                            dϕ_dx_ = dϕ_dx[i-1, j]
+                        end
+                        qy[i,q] = calc_q(h[i,j], dϕ_dy_, dϕ_dx_, k, α, β, small)                  # upstream scheme
                         # qy[i,q] = calc_q((h[i,q] + h[i,q-1])/2, dϕ_dy_, k, α, β, small) # central differences
                     end
                 end
@@ -504,11 +521,11 @@ function plot_output(xc, yc, N, h, qx, qy, qx_interior, qy_interior)
     subplot(1, 2, 1)
     pcolor(qx_plot')
     colorbar()
-    title("qx")
+    title("qx (m/s)")
     subplot(1, 2, 2)
     pcolor(qy_plot')
     colorbar()
-    title("qy")
+    title("qy (m/s)")
 end
 
 
