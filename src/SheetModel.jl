@@ -170,6 +170,8 @@ function array_allocation(nu::Para)
     ix     = zeros(Int, nx-1, ny)
     iy     = zeros(Int, nx, ny-1)
     m      = zeros(nx, ny)
+    div_q  = zeros(nx, ny)
+    div_ϕ  = zeros(nx, ny)
     dϕ_dτ  = zeros(nx, ny)
     dh_dτ  = zeros(nx, ny)
     Res_ϕ  = zeros(nx, ny)
@@ -178,7 +180,7 @@ function array_allocation(nu::Para)
     Err_h  = zeros(nx, ny)
     d_eff  = zeros(nx, ny)
     dτ_ϕ   = zeros(nx, ny)
-    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, gp_ice, ix, iy, m, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ
+    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, gp_ice, ix, iy, m, div_q, div_ϕ, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ
 end
 
 """
@@ -306,7 +308,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β, small,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
     # Array allocation
-    vo, vc, dϕ_dx, dϕ_dy, qx, qy, gp_ice, ix, iy, m,
+    vo, vc, dϕ_dx, dϕ_dy, qx, qy, gp_ice, ix, iy, m, div_q, div_ϕ,
     dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ = array_allocation(params)
 
     # Apply boundary conditions
@@ -339,8 +341,8 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
         m .= calc_m_t(t+dt)
         # Pseudo-transient iteration
-        #while !(max(err_ϕ, err_h) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
-        while !(err_ϕ < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
+        while !(max(err_ϕ, err_h) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
+        #while !(err_ϕ < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
             # used indices:
             # - normal grid (i,j)
             #   e.g. ϕ[i,j]
@@ -369,6 +371,8 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             # qx[xbound] .= 0.0 # no flux boundary condition
             # qy[ybound] .= 0.0
 
+            dϕ_dy_ = 0.0
+            dϕ_dx_ = 0.0
             for j = 1:size(qx,2)
                 for p = (1, size(qx,1))
                     # outer boundary
@@ -384,9 +388,9 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
                         i = dϕ_dx_ >= 0 ?
                             p : # flux from cell [p,j] to [p-1,j]
                             p-1 # flux from cell [p-1,j] to [p,j]\
-                        if j-1 >= size(dϕ_dy, 2) && j <= size(dϕ_dy, 2)
+                        if j-1 >= 1 && j <= size(dϕ_dy, 2)
                             dϕ_dy_ = 0.5 * (dϕ_dy[i, j-1] + dϕ_dy[i, j]) # take average of upstream dϕ_dy
-                        elseif j-1 < size(dϕ_dy, 2)
+                        elseif j-1 < 1
                             dϕ_dy_ = dϕ_dy[i, j] # lower y-boundary, only one upstream value available
                         elseif j > size(dϕ_dy, 2)
                             dϕ_dy_ = dϕ_dy[i, j-1] # upper y-boundary, ...
@@ -413,9 +417,9 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
                             q : # flux from cell [i,q] to [i,q-1]
                             q-1 # flux from cell [i,q-1] to [i,q]
                         # @assert qy[i,q] == calc_q(h[i,j], dϕ_dy_, k, α, β, small) i,q
-                        if i-1 >= size(dϕ_dx, 1) && i <= size(dϕ_dx, 1)
+                        if i-1 >= 1 && i <= size(dϕ_dx, 1)
                             dϕ_dx_ = 0.5 * (dϕ_dx[i-1, j] + dϕ_dx[i, j])
-                        elseif i-1 < size(dϕ_dx, 1)
+                        elseif i-1 < 1
                             dϕ_dx_ = dϕ_dx[i, j]
                         elseif i > size(dϕ_dx, 1)
                             dϕ_dx_ = dϕ_dx[i-1, j]
@@ -429,11 +433,12 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
+            div_q  .= LazyArrays.Diff(qx, dims=1)/dx .+ LazyArrays.Diff(qy, dims=2)/dy .+ small
 
             # calculate residuals
             Res_ϕ   .=  idx_ice .* (
                             - ev/(ρw*g) * (ϕ .- ϕ_old)/dt .-         # dhe/dt
-                            (LazyArrays.Diff(qx, dims=1)/dx .+ LazyArrays.Diff(qy, dims=2)/dy) .-      # div(q)
+                            div_q .-                                 # div(q)
                             (Σ * vo .- Γ * vc)            .+         # dh/dt
                             Λ * m                                    # source term
                             )
@@ -442,12 +447,20 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
                             (Σ * vo .- Γ * vc)
                             )
 
-            # determine pseudo-time step
-            d_eff .= k * h.^α                                                                  # effective diffusivity, defined on each grid point
+            # determine effecive diffusivity for pseudo-time step of ϕ: d_eff = divergence(q) / divergence(ϕ)
+            div_ϕ[2:end-1, 2:end-1] .= LazyArrays.Diff(dϕ_dx, dims=1)[:, 2:end-1] / dx .+ LazyArrays.Diff(dϕ_dy, dims=2)[2:end-1, :] / dy .+ small
+            # dϕ_dy, dϕ_dx not defined at y-, x-boundary and corner points
+            # could be calculated from mean between qy, qx fluxes but maybe ok like this
+            # since mostly no flux boundaries (and for dirichlet boundaries it's not relevant)
+            div_ϕ[2:end-1, [1, end]] .= LazyArrays.Diff(dϕ_dx, dims=1)[:, [1, end]] / dx .+ small
+            div_ϕ[[1, end], 2:end-1] .= LazyArrays.Diff(dϕ_dy, dims=2)[[1, end], :] / dy .+ small
+            # div_ϕ[[1, 1, end, end], [1, end, 1, end]] .= small # corner points
+
+            d_eff .=  abs.(div_q ./ div_ϕ)                          # effective diffusivity, spatially variable
+            d_eff[end, 1] = 0.5 * (d_eff[end-1, 1] + d_eff[end, 2]) # for corner points take average of neighbours, otherwise they are far too large
+            d_eff[end, end] = 0.5 * (d_eff[end-1, end] + d_eff[end, end-1])
+
             dτ_ϕ  .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step for ϕ, defined on each grid point
-
-            # dτ_ϕ[2, :] .= 0.01 * dτ_ϕ[2, :] # very large ϕ jump ("valley" geometry) -> decrease pseudo-time step
-
             dτ_h   = dt / dτ_h_                                                                # pseudo-time step for h, scalar
 
             # damped rate of change
@@ -456,7 +469,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # update fields
             ϕ                    .= ϕ .+ dτ_ϕ .* dϕ_dτ   # update ϕ (only interior points because fluxes only defined there)
-            #h                    .= h .+ dτ_h .* dh_dτ                                      # update h
+            h                    .= h .+ dτ_h .* dh_dτ                                      # update h
 
             # apply boundary conditions
             ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)

@@ -118,7 +118,7 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
         #ttot = 5*s_per_day,
         dt   = 1000.0, #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
 
-        itMax = 10000,
+        itMax = 10^6,
         γ_ϕ  = γ_ϕ,  # damping parameter for ϕ
         γ_h  = γ_h,  # damping parameter for h
         dτ_ϕ_ = dτ_ϕ_, # scaling factor for dτ_ϕ
