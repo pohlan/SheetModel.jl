@@ -339,7 +339,8 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
         m .= calc_m_t(t+dt)
         # Pseudo-transient iteration
-        while !(max(err_ϕ, err_h) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
+        #while !(max(err_ϕ, err_h) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
+        while !(err_ϕ < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
             # used indices:
             # - normal grid (i,j)
             #   e.g. ϕ[i,j]
@@ -455,7 +456,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # update fields
             ϕ                    .= ϕ .+ dτ_ϕ .* dϕ_dτ   # update ϕ (only interior points because fluxes only defined there)
-            h                    .= h .+ dτ_h .* dh_dτ                                      # update h
+            #h                    .= h .+ dτ_h .* dh_dτ                                      # update h
 
             # apply boundary conditions
             ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
