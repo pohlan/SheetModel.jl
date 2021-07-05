@@ -437,13 +437,15 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # calculate residuals
             Res_ϕ   .=  idx_ice .* (
-                            - ev/(ρw*g) * (ϕ .- ϕ_old)/dt .-         # dhe/dt
+                            #- ev/(ρw*g) * (ϕ .- ϕ_old)/dt .-         # dhe/dt
+                            ev/(ρw*g) *  ϕ_old /dt .-
                             div_q .-                                 # div(q)
                             (Σ * vo .- Γ * vc)            .+         # dh/dt
                             Λ * m                                    # source term
                             )
             Res_h   .=  idx_ice .* (
-                            - (h .- h_old) / dt  .+
+                            #- (h .- h_old) / dt  .+
+                            h_old / dt  .+
                             (Σ * vo .- Γ * vc)
                             )
 
@@ -460,7 +462,8 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             d_eff[end, 1] = 0.5 * (d_eff[end-1, 1] + d_eff[end, 2]) # for corner points take average of neighbours, otherwise they are far too large
             d_eff[end, end] = 0.5 * (d_eff[end-1, end] + d_eff[end, end-1])
 
-            dτ_ϕ  .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step for ϕ, defined on each grid point
+            #dτ_ϕ  .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step for ϕ, defined on each grid point
+            dτ_ϕ  .= (1.0/dτ_ϕ_) .* (min(dx, dy)^2 ./ d_eff / 4.1)
             dτ_h   = dt / dτ_h_                                                                # pseudo-time step for h, scalar
 
             # damped rate of change
@@ -468,8 +471,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             dh_dτ      .= Res_h .+ γ_h .* dh_dτ
 
             # update fields
-            ϕ                    .= ϕ .+ dτ_ϕ .* dϕ_dτ   # update ϕ (only interior points because fluxes only defined there)
-            h                    .= h .+ dτ_h .* dh_dτ                                      # update h
+            #ϕ .= ϕ .+ dτ_ϕ .* dϕ_dτ   # update ϕ
+            #h .= h .+ dτ_h .* dh_dτ   # update h
+            ϕ  .= (ϕ .+ dτ_ϕ .* dϕ_dτ ) ./ (1 .+ dτ_ϕ ./dt)
+            h  .= (h .+ dτ_h .* dh_dτ) ./ (1 .+ dτ_h ./dt)
 
             # apply boundary conditions
             ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
