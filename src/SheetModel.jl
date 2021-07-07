@@ -321,14 +321,6 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     vo, vc, dϕ_dx, dϕ_dy, qx, qy, gp_ice, ix, iy, m, div_q, div_ϕ,
     dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ = array_allocation(params)
 
-    # Apply boundary conditions
-    ϕ0, h0 = apply_bc(ϕ0, h0, H, ρw, g, zb)
-
-    ϕ_old   = copy(ϕ0)
-    ϕ       = copy(ϕ0)
-    h_old   = copy(h0)
-    h       = copy(h0)
-
     # determine indices of glacier domain
     idx_ice = H .> 0.0
     qx_ice = zeros(Int, nx-1, ny)
@@ -340,6 +332,20 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     qx_xlbound  = Array(LazyArrays.Diff(idx_ice, dims=1) .== 1) # on qx grid
     qx_xubound  = Array(LazyArrays.Diff(idx_ice, dims=1) .== -1)
     qy_ybound  = qy_ice .== 1 # on qy grid
+
+    ϕ_outbound =    [LazyArrays.Diff(idx_ice, dims=1) .== 1; zeros(1, ny)] .+ # cells on ϕ grid that are just outside of H > 0 (idx_ice) area
+                    [LazyArrays.Diff(idx_ice, dims=2) .== 1 zeros(nx, 1)] .+
+                    [zeros(1, ny); LazyArrays.Diff(idx_ice, dims=1) .== -1] .+
+                    [zeros(nx, 1) LazyArrays.Diff(idx_ice, dims=2) .== -1]
+
+    # Apply boundary conditions
+    ϕ0, h0 = apply_bc(ϕ0, h0, H, ρw, g, zb)
+    ϕ0[(H .== 0.0) .& (ϕ_outbound .== 0)] .= 1e10
+
+    ϕ_old   = copy(ϕ0)
+    ϕ       = copy(ϕ0)
+    h_old   = copy(h0)
+    h       = copy(h0)
 
     # initiate time loop parameters
     t, it, ittot = 0.0, 0, 0
@@ -449,11 +455,11 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
        #     @infiltrate iter==4000
 
             # set flux boundary conditions
-            qx[qx_ice .== 0]   .= 0.0
-            qy[qy_ice .== 0]   .= 0.0
-            qx[qx_xubound] .= 0.0 # no flux boundary condition
-            qx[qx_xlbound] .= 0.0
-            qy[qy_ybound] .= 0.0
+            #qx[qx_ice .== 0]   .= 0.0
+            #qy[qy_ice .== 0]   .= 0.0
+            #qx[qx_xubound] .= 0.0 # no flux boundary condition
+            #qx[qx_xlbound] .= 0.0
+            #qy[qy_ybound] .= 0.0
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
@@ -497,6 +503,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # apply boundary conditions
             ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
+            ϕ[(H .== 0.0) .& (ϕ_outbound .== 0)] .= 1e10
 
             # determine the errors (only consider points where the ice thickness is > 0)
             Err_ϕ .= abs.(Err_ϕ .- ϕ)
