@@ -166,8 +166,8 @@ function array_allocation(nu::Para)
     vc     = zeros(nx, ny)
     dϕ_dx  = zeros(nx-1, ny)
     dϕ_dy  = zeros(nx, ny-1)
-    qx     = zeros(nx-1, ny)
-    qy     = zeros(nx, ny-1)
+    qx     = zeros(nx-1, ny-2)
+    qy     = zeros(nx-2, ny-1)
     gp_ice  = zeros(Int, nx+2, ny+2)
     ix     = zeros(Int, nx-1, ny)
     iy     = zeros(Int, nx, ny-1)
@@ -323,14 +323,22 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
     # determine indices of glacier domain
     idx_ice = H .> 0.0
-    qx_ice = zeros(Int, nx-1, ny)
-    qx_ice  .= idx_ice[1:end-1, :]
-    qx_ice .+= idx_ice[2:end, :]   # qx_ice = 1 for boundary, 2 for interior
-    qy_ice = zeros(Int, nx, ny-1)
-    qy_ice  .= idx_ice[:, 1:end-1]
-    qy_ice .+= idx_ice[:, 2:end]
-    qx_xlbound  = Array(LazyArrays.Diff(idx_ice, dims=1) .== 1) # on qx grid
-    qx_xubound  = Array(LazyArrays.Diff(idx_ice, dims=1) .== -1)
+    #qx_ice = zeros(Int, nx-1, ny)
+    #qx_ice  .= idx_ice[1:end-1, :]
+    #qx_ice .+= idx_ice[2:end, :]   # qx_ice = 1 for boundary, 2 for interior
+    #qy_ice = zeros(Int, nx, ny-1)
+    #qy_ice  .= idx_ice[:, 1:end-1]
+    #qy_ice .+= idx_ice[:, 2:end]
+    #qx_xlbound  = Array(LazyArrays.Diff(idx_ice, dims=1) .== 1) # on qx grid
+    #qx_xubound  = Array(LazyArrays.Diff(idx_ice, dims=1) .== -1)
+    qx_ice = zeros(Int, nx-1, ny-2)
+    qx_ice  .= idx_ice[1:end-1, 2:end-1]
+    qx_ice .+= idx_ice[2:end, 2:end-1]   # qx_ice = 1 for boundary, 2 for interior
+    qy_ice = zeros(Int, nx-2, ny-1)
+    qy_ice  .= idx_ice[2:end-1, 1:end-1]
+    qy_ice .+= idx_ice[2:end-1, 2:end]
+    qx_xlbound  = Array(LazyArrays.Diff(idx_ice[:, 2:end-1], dims=1) .== 1) # on qx grid
+    qx_xubound  = Array(LazyArrays.Diff(idx_ice[:, 2:end-1], dims=1) .== -1)
     qy_ybound  = qy_ice .== 1 # on qy grid
 
     ϕ_outbound =    [LazyArrays.Diff(idx_ice, dims=1) .== 1; zeros(1, ny)] .+ # cells on ϕ grid that are just outside of H > 0 (idx_ice) area
@@ -340,7 +348,6 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
     # Apply boundary conditions
     ϕ0, h0 = apply_bc(ϕ0, h0, H, ρw, g, zb)
-    ϕ0[(H .== 0.0) .& (ϕ_outbound .== 0)] .= 1e10
 
     ϕ_old   = copy(ϕ0)
     ϕ       = copy(ϕ0)
@@ -374,19 +381,26 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             dϕ_dx   .= LazyArrays.Diff(ϕ, dims=1) ./ dx                  # hydraulic gradient
             dϕ_dy   .= LazyArrays.Diff(ϕ, dims=2) ./ dy
 
-            gradϕ = sqrt.(av_xa(dϕ_dx[:, 2:end-1]).^2 .+ av_ya(dϕ_dy[2:end-1, :]).^2) # on ϕ/h grid, size (ny-2, nx-2)
-            d_eff .= k*h[2:end-1, 2:end-1].^α .* (gradϕ .+ small).^(β-2) # on ϕ/h grid, size (ny-2, nx-2)
+            #gradϕ = sqrt.(av_xa(dϕ_dx[:, 2:end-1]).^2 .+ av_ya(dϕ_dy[2:end-1, :]).^2) # on ϕ/h grid, size (nx-2, ny-2)
+            #d_eff .= k*h[2:end-1, 2:end-1].^α .* (gradϕ .+ small).^(β-2) # on ϕ/h grid, size (nx-2, ny-2)
 
             # upstream
-            qx[2:end-1, 2:end-1] .= (dϕ_dx[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
-                                    (dϕ_dx[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
-            qy[2:end-1, 2:end-1] .= (dϕ_dy[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
-                                    (dϕ_dy[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
+            #qx[2:end-1, 2:end-1] .= (dϕ_dx[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
+            #                        (dϕ_dx[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
+            #qy[2:end-1, 2:end-1] .= (dϕ_dy[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
+            #                        (dϕ_dy[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
             # central differences
             #qx[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
             #                        0.5 .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
             #qy[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
             #                        0.5 .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
+
+            # same as in Ludovic's ice flow code (gradϕ and d_eff defined on cells centered between ϕ/h points)
+            # https://github.com/luraess/julia-parallel-course-EGU21/blob/b700a9ad0d1d14f26e0590ce41a8e63380a1df15/scripts/iceflow.jl#L66-L72
+            gradϕ = sqrt.(av_ya(dϕ_dx).^2 .+ av_xa(dϕ_dy).^2) # grid centered between ϕ/h points, size (nx-1, ny-1)
+            d_eff = k*av(h).^α .* (gradϕ .+ small).^(β-2) # same grid as gradϕ
+            qx   .= .-av_ya(d_eff).*diff(ϕ[:,2:end-1], dims=1)/dx # qx grid, size (nx-1, ny-2)
+            qy   .= .-av_xa(d_eff).*diff(ϕ[2:end-1,:], dims=2)/dy # qy grid, size (nx-2, nx-1)
 
             # # determine indexes of h that are upstream of dϕ/dx
             # ix = upstream.(1:nx-1, (1:ny)', nx, dϕ_dx; dims=1)
@@ -455,15 +469,16 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
        #     @infiltrate iter==4000
 
             # set flux boundary conditions
-            #qx[qx_ice .== 0]   .= 0.0
-            #qy[qy_ice .== 0]   .= 0.0
-            #qx[qx_xubound] .= 0.0 # no flux boundary condition
-            #qx[qx_xlbound] .= 0.0
-            #qy[qy_ybound] .= 0.0
+            qx[qx_ice .== 0]   .= 0.0
+            qy[qy_ice .== 0]   .= 0.0
+            qx[qx_xubound] .= 0.0 # no flux boundary condition
+            qx[qx_xlbound] .= 0.0
+            qy[qy_ybound] .= 0.0
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
-            div_q[2:end-1, 2:end-1]  .= LazyArrays.Diff(qx, dims=1)[:, 2:end-1]/dx .+ LazyArrays.Diff(qy, dims=2)[2:end-1, :]/dy .+ small
+            #div_q[2:end-1, 2:end-1]  .= LazyArrays.Diff(qx, dims=1)[:, 2:end-1]/dx .+ LazyArrays.Diff(qy, dims=2)[2:end-1, :]/dy .+ small
+            div_q[2:end-1, 2:end-1]  .= LazyArrays.Diff(qx, dims=1)/dx .+ LazyArrays.Diff(qy, dims=2)/dy .+ small
 
             # calculate residuals
             Res_ϕ   .=  idx_ice .* (
@@ -490,7 +505,8 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             #d_eff[end, 1] = 0.5 * (d_eff[end-1, 1] + d_eff[end, 2]) # for corner points take average of neighbours, otherwise they are far too large
             #d_eff[end, end] = 0.5 * (d_eff[end-1, end] + d_eff[end, end-1])
 
-            dτ_ϕ[2:end-1, 2:end-1] .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1)
+            #dτ_ϕ[2:end-1, 2:end-1] .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1)
+            dτ_ϕ[2:end-1, 2:end-1] .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ av(d_eff) / 4.1) .+ 1.0 / dt) .^(-1)
             dτ_h   = dt / dτ_h_   # pseudo-time step for h, scalar
 
             # damped rate of change
@@ -503,7 +519,6 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # apply boundary conditions
             ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
-            ϕ[(H .== 0.0) .& (ϕ_outbound .== 0)] .= 1e10
 
             # determine the errors (only consider points where the ice thickness is > 0)
             Err_ϕ .= abs.(Err_ϕ .- ϕ)
