@@ -33,19 +33,21 @@ All model parameters; physical and numerical
     xend = xrange[2]
     y1   = yrange[1]
     yend = yrange[2]
-    nx::Int64                        # number of grids
+    nx::Int64                        # number of grid points, including ghost points where ice thickness = 0
     ny::Int64
-    dx = (xend-x1) / (nx-1)          # grid size
-    dy = (yend-y1) / (ny-1)
-    xc::LinRange{Float64} = LinRange(x1, xend, nx) # vector of x-coordinates
-    yc::LinRange{Float64} = LinRange(y1, yend, ny) # vector of y-coordinates
+    dx = (xend-x1) / (nx-3)          # grid size
+    dy = (yend-y1) / (ny-3)
+    xc::LinRange{Float64} = LinRange(x1-dx, xend+dx, nx) # vector of x-coordinates
+    yc::LinRange{Float64} = LinRange(y1-dy, yend+dy, ny) # vector of y-coordinates
 
     # Field parameters (defined on every grid point)
     calc_zs::Function
     calc_zb::Function
     calc_m_xyt::Function # fct(x, y, t)
     fct_pos::Function = x -> x > 0.0 ? x : 0.0 # turn all negative numbers into 0.0
-    H::Matrix{Float64} = fct_pos.(calc_zs.(xc, yc') .- calc_zb.(xc, yc'))  # ice thickness, m
+    gp_x::Array{Float64, 1} = [0.0; ones(length(xc)-2); 0.0] # to achieve H = 0 at ghost points
+    gp_y::Array{Float64, 1} = [0.0; ones(length(yc)-2); 0.0]
+    H::Matrix{Float64} = (gp_x * gp_y') .* ( fct_pos.(calc_zs.(xc, yc') .- calc_zb.(xc, yc')) )  # ice thickness, m
     zb::Matrix{Float64} = calc_zb.(xc, yc')                      # bed elevation, m
     calc_m_t::Function = t -> calc_m_xyt.(xc, yc', t)                # source term, m/s, fct(t)
 
@@ -164,8 +166,8 @@ function array_allocation(nu::Para)
     vc     = zeros(nx, ny)
     dϕ_dx  = zeros(nx-1, ny)
     dϕ_dy  = zeros(nx, ny-1)
-    qx     = zeros(nx+1, ny)
-    qy     = zeros(nx, ny+1)
+    qx     = zeros(nx-1, ny)
+    qy     = zeros(nx, ny-1)
     gp_ice  = zeros(Int, nx+2, ny+2)
     ix     = zeros(Int, nx-1, ny)
     iy     = zeros(Int, nx, ny-1)
@@ -178,7 +180,7 @@ function array_allocation(nu::Para)
     Res_h  = zeros(nx, ny)
     Err_ϕ  = zeros(nx, ny)
     Err_h  = zeros(nx, ny)
-    d_eff  = zeros(nx, ny)
+    d_eff  = zeros(nx-2, ny-2)
     dτ_ϕ   = zeros(nx, ny)
     return vo, vc, dϕ_dx, dϕ_dy, qx, qy, gp_ice, ix, iy, m, div_q, div_ϕ, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ
 end
@@ -202,9 +204,13 @@ Apply the boundary conditions to ϕ, at the moment pw(x=0) = 0 and no flux at th
 function apply_bc(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with arrays as arguments
                                    # TODO: don't hard-wire, give bc as input parameters
     nx, ny = size(ϕ)
-    ϕ[H .== 0.0] .= ρw .* g .* zb[H .== 0.0] # zero water pressure outside of glacier domain
+    #ϕ[H .== 0.0] .= ρw .* g .* zb[H .== 0.0] # zero water pressure outside of glacier domain
     h[H .== 0.0] .= 0.0                       # zero sheet thickness outside of glacier domain
-    ϕ[1, :] .= ρw .* g .* zb[1, :]
+    ϕ[2, :] .= ρw .* g .* zb[2, :]
+    #ϕ[end, :] .= ϕ[end-1, :]
+    #ϕ[:, 1] .= ϕ[:, 2]
+    #ϕ[:, end] .= ϕ[:, end-1]
+
     # ϕ[end-1,:] = ρw .* g .* zb[end-1,:]
     # ϕ[1, ny÷2+1] = ρw .* g .* zb[1, ny÷2+1]
     # if iseven(size(ϕ,2))
@@ -283,6 +289,10 @@ function calc_vo(h, ub, hr, lr)
     return vo
 end
 
+@views av(A)    = 0.25*(A[1:end-1,1:end-1].+A[2:end,1:end-1].+A[1:end-1,2:end].+A[2:end,2:end]) # average
+@views av_xa(A) = 0.5.*(A[1:end-1,:].+A[2:end,:]) # average x-dir
+@views av_ya(A) = 0.5.*(A[:,1:end-1].+A[:,2:end]) # average y-dir
+
 """
 Scale the parameters and call the model run function
 """
@@ -290,7 +300,7 @@ function runthemodel(input::Para, ϕ0, h0;
                     printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
                     printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
     params, ϕ0, h0, ϕ_, N_, h_, q_ = scaling(input, ϕ0, h0)
-    N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_interior, qy_interior = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
+    N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_ice, qy_ice = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     N .= N .* N_ # scaling for N same as for ϕ
     ϕ .= ϕ .* ϕ_
     h .= h .* h_
@@ -298,7 +308,7 @@ function runthemodel(input::Para, ϕ0, h0;
     qy .= qy .* q_
     err_ϕ .= err_ϕ .* ϕ_
     err_h .= err_h .* h_
-    return N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_interior, qy_interior
+    return N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_ice, qy_ice
 end
 
 """
@@ -321,16 +331,15 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
     # determine indices of glacier domain
     idx_ice = H .> 0.0
-    gp_ice[2:end-1, 2:end-1] .= idx_ice
-    qx_interior = zeros(Int, nx+1, ny)
-    qx_interior[1:end-1, :] .= idx_ice
-    qx_interior[2:end, :] .+= idx_ice
-    qy_interior = zeros(Int, nx, ny+1)
-    qy_interior[:, 1:end-1] .= idx_ice
-    qy_interior[:, 2:end] .+= idx_ice
-    xbound  = Array(LazyArrays.Diff(gp_ice, dims=1) .!= 0)[:, 2:end-1]
-    xlbound  = Array(LazyArrays.Diff(gp_ice, dims=1) .== 1)[:, 2:end-1]
-    ybound  = Array(LazyArrays.Diff(gp_ice, dims=2) .!= 0)[2:end-1, :]
+    qx_ice = zeros(Int, nx-1, ny)
+    qx_ice  .= idx_ice[1:end-1, :]
+    qx_ice .+= idx_ice[2:end, :]   # qx_ice = 1 for boundary, 2 for interior
+    qy_ice = zeros(Int, nx, ny-1)
+    qy_ice  .= idx_ice[:, 1:end-1]
+    qy_ice .+= idx_ice[:, 2:end]
+    qx_xlbound  = Array(LazyArrays.Diff(idx_ice, dims=1) .== 1) # on qx grid
+    qx_xubound  = Array(LazyArrays.Diff(idx_ice, dims=1) .== -1)
+    qy_ybound  = qy_ice .== 1 # on qy grid
 
     # initiate time loop parameters
     t, it, ittot = 0.0, 0, 0
@@ -359,81 +368,96 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             dϕ_dx   .= LazyArrays.Diff(ϕ, dims=1) ./ dx                  # hydraulic gradient
             dϕ_dy   .= LazyArrays.Diff(ϕ, dims=2) ./ dy
 
+            gradϕ = sqrt.(av_xa(dϕ_dx[:, 2:end-1]).^2 .+ av_ya(dϕ_dy[2:end-1, :]).^2) # on ϕ/h grid, size (ny-2, nx-2)
+            d_eff .= k*h[2:end-1, 2:end-1].^α .* (gradϕ .+ small).^(β-2) # on ϕ/h grid, size (ny-2, nx-2)
+
+            # upstream
+            qx[2:end-1, 2:end-1] .= (dϕ_dx[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
+                                    (dϕ_dx[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
+            qy[2:end-1, 2:end-1] .= (dϕ_dy[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
+                                    (dϕ_dy[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
+            # central differences
+            #qx[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
+            #                        0.5 .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
+            #qy[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
+            #                        0.5 .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
+
             # # determine indexes of h that are upstream of dϕ/dx
-            # # TODO: make this into a loop.  Would (probably) be clearer and avoids allocations.
             # ix = upstream.(1:nx-1, (1:ny)', nx, dϕ_dx; dims=1)
             # iy = upstream.(1:nx, (1:ny-1)', nx, dϕ_dy; dims=2)
-
             # qx[2:end-1, :]         .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
             # qy[:, 2:end-1]         .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
-            # qx[qx_interior .== 0]   .= 0.0
-            # qy[qy_interior .== 0]   .= 0.0
-            # qx[xbound] .= 0.0 # no flux boundary condition
-            # qy[ybound] .= 0.0
 
-            dϕ_dy_ = 0.0
-            dϕ_dx_ = 0.0
-            for j = 1:size(qx,2)
-                for p = (1, size(qx,1))
-                    # outer boundary
-                    @assert qx[p,j] == 0
-                end
-                for p = 2:size(qx,1)-1
-                    if idx_ice[p,j] == 0 || idx_ice[p-1,j] == 0
-                        # BC: zero flux across boundary
-                        @assert qx[p,j] == 0 # (already set at initialization)
-                    else
-                        dϕ_dx_ = (ϕ[p,j] - ϕ[p-1,j])/dx # i.e. between [i,j] and [i-1,j]
-                        @assert (dϕ_dx_ == dϕ_dx[p-1,j]) (p,j)
-                        i = dϕ_dx_ >= 0 ?
-                            p : # flux from cell [p,j] to [p-1,j]
-                            p-1 # flux from cell [p-1,j] to [p,j]\
-                        if j-1 >= 1 && j <= size(dϕ_dy, 2)
-                            dϕ_dy_ = 0.5 * (dϕ_dy[i, j-1] + dϕ_dy[i, j]) # take average of upstream dϕ_dy
-                        elseif j-1 < 1
-                            dϕ_dy_ = dϕ_dy[i, j] # lower y-boundary, only one upstream value available
-                        elseif j > size(dϕ_dy, 2)
-                            dϕ_dy_ = dϕ_dy[i, j-1] # upper y-boundary, ...
-                        end
-                        qx[p,j] = calc_q(h[i,j], dϕ_dx_, dϕ_dy_, k, α, β, small)                  # upstream scheme
-                        # qx[p,j] = calc_q((h[p ,j] + h[p-1 ,j])/2, dϕ_dx_, k, α, β, small) # central differences
-                    end
-                end
-            end
-            for q=1:size(qy,2)
-                if q == 1 || q == size(qy,2)
-                    # outer boundary
-                    @assert all(qy[:,q] .== 0)
-                    continue
-                end
-                for i=1:size(qy,1)
-                    if idx_ice[i,q] == 0 || idx_ice[i,q-1] == 0
-                        # BC: zero flux across boundary
-                        @assert qy[i,q] == 0 # (already set at initialization)
-                    else
-                        dϕ_dy_ = (ϕ[i,q] - ϕ[i,q-1])/dy # i.e. between [i,j] and [i,j-1]
-                        @assert (dϕ_dy_ == dϕ_dy[i,q-1]) (i,q)
-                        j = dϕ_dy_ >= 0 ?
-                            q : # flux from cell [i,q] to [i,q-1]
-                            q-1 # flux from cell [i,q-1] to [i,q]
-                        # @assert qy[i,q] == calc_q(h[i,j], dϕ_dy_, k, α, β, small) i,q
-                        if i-1 >= 1 && i <= size(dϕ_dx, 1)
-                            dϕ_dx_ = 0.5 * (dϕ_dx[i-1, j] + dϕ_dx[i, j])
-                        elseif i-1 < 1
-                            dϕ_dx_ = dϕ_dx[i, j]
-                        elseif i > size(dϕ_dx, 1)
-                            dϕ_dx_ = dϕ_dx[i-1, j]
-                        end
-                        qy[i,q] = calc_q(h[i,j], dϕ_dy_, dϕ_dx_, k, α, β, small)                  # upstream scheme
-                        # qy[i,q] = calc_q((h[i,q] + h[i,q-1])/2, dϕ_dy_, k, α, β, small) # central differences
-                    end
-                end
-            end
+            # dϕ_dy_ = 0.0
+            # dϕ_dx_ = 0.0
+            # for j = 1:size(qx,2)
+            #     for p = (1, size(qx,1))
+            #         # outer boundary
+            #         @assert qx[p,j] == 0
+            #     end
+            #     for p = 2:size(qx,1)-1
+            #         if idx_ice[p,j] == 0 || idx_ice[p-1,j] == 0
+            #             # BC: zero flux across boundary
+            #             @assert qx[p,j] == 0 # (already set at initialization)
+            #         else
+            #             dϕ_dx_ = (ϕ[p,j] - ϕ[p-1,j])/dx # i.e. between [i,j] and [i-1,j]
+            #             @assert (dϕ_dx_ == dϕ_dx[p-1,j]) (p,j)
+            #             i = dϕ_dx_ >= 0 ?
+            #                 p : # flux from cell [p,j] to [p-1,j]
+            #                 p-1 # flux from cell [p-1,j] to [p,j]\
+            #             if j-1 >= 1 && j <= size(dϕ_dy, 2)
+            #                 dϕ_dy_ = 0.5 * (dϕ_dy[i, j-1] + dϕ_dy[i, j]) # take average of upstream dϕ_dy
+            #             elseif j-1 < 1
+            #                 dϕ_dy_ = dϕ_dy[i, j] # lower y-boundary, only one upstream value available
+            #             elseif j > size(dϕ_dy, 2)
+            #                 dϕ_dy_ = dϕ_dy[i, j-1] # upper y-boundary, ...
+            #             end
+            #             qx[p,j] = calc_q(h[i,j], dϕ_dx_, dϕ_dy_, k, α, β, small)                  # upstream scheme
+            #             # qx[p,j] = calc_q((h[p ,j] + h[p-1 ,j])/2, dϕ_dx_, k, α, β, small) # central differences
+            #         end
+            #     end
+            # end
+            # for q=1:size(qy,2)
+            #     if q == 1 || q == size(qy,2)
+            #         # outer boundary
+            #         @assert all(qy[:,q] .== 0)
+            #         continue
+            #     end
+            #     for i=1:size(qy,1)
+            #         if idx_ice[i,q] == 0 || idx_ice[i,q-1] == 0
+            #             # BC: zero flux across boundary
+            #             @assert qy[i,q] == 0 # (already set at initialization)
+            #         else
+            #             dϕ_dy_ = (ϕ[i,q] - ϕ[i,q-1])/dy # i.e. between [i,j] and [i,j-1]
+            #             @assert (dϕ_dy_ == dϕ_dy[i,q-1]) (i,q)
+            #             j = dϕ_dy_ >= 0 ?
+            #                 q : # flux from cell [i,q] to [i,q-1]
+            #                 q-1 # flux from cell [i,q-1] to [i,q]
+            #             # @assert qy[i,q] == calc_q(h[i,j], dϕ_dy_, k, α, β, small) i,q
+            #             if i-1 >= 1 && i <= size(dϕ_dx, 1)
+            #                 dϕ_dx_ = 0.5 * (dϕ_dx[i-1, j] + dϕ_dx[i, j])
+            #             elseif i-1 < 1
+            #                 dϕ_dx_ = dϕ_dx[i, j]
+            #             elseif i > size(dϕ_dx, 1)
+            #                 dϕ_dx_ = dϕ_dx[i-1, j]
+            #             end
+            #             qy[i,q] = calc_q(h[i,j], dϕ_dy_, dϕ_dx_, k, α, β, small)                  # upstream scheme
+            #             # qy[i,q] = calc_q((h[i,q] + h[i,q-1])/2, dϕ_dy_, k, α, β, small) # central differences
+            #         end
+            #     end
+            # end
        #     @infiltrate iter==4000
+
+            # set flux boundary conditions
+            qx[qx_ice .== 0]   .= 0.0
+            qy[qy_ice .== 0]   .= 0.0
+            qx[qx_xubound] .= 0.0 # no flux boundary condition
+            qx[qx_xlbound] .= 0.0
+            qy[qy_ybound] .= 0.0
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
-            div_q  .= LazyArrays.Diff(qx, dims=1)/dx .+ LazyArrays.Diff(qy, dims=2)/dy .+ small
+            div_q[2:end-1, 2:end-1]  .= LazyArrays.Diff(qx, dims=1)[:, 2:end-1]/dx .+ LazyArrays.Diff(qy, dims=2)[2:end-1, :]/dy .+ small
 
             # calculate residuals
             Res_ϕ   .=  idx_ice .* (
@@ -448,28 +472,28 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
                             )
 
             # determine effecive diffusivity for pseudo-time step of ϕ: d_eff = divergence(q) / divergence(ϕ)
-            div_ϕ[2:end-1, 2:end-1] .= LazyArrays.Diff(dϕ_dx, dims=1)[:, 2:end-1] / dx .+ LazyArrays.Diff(dϕ_dy, dims=2)[2:end-1, :] / dy .+ small
+            #div_ϕ[2:end-1, 2:end-1] .= LazyArrays.Diff(dϕ_dx, dims=1)[:, 2:end-1] / dx .+ LazyArrays.Diff(dϕ_dy, dims=2)[2:end-1, :] / dy .+ small
             # dϕ_dy, dϕ_dx not defined at y-, x-boundary and corner points
             # could be calculated from mean between qy, qx fluxes but maybe ok like this
             # since mostly no flux boundaries (and for dirichlet boundaries it's not relevant)
-            div_ϕ[2:end-1, [1, end]] .= LazyArrays.Diff(dϕ_dx, dims=1)[:, [1, end]] / dx .+ small
-            div_ϕ[[1, end], 2:end-1] .= LazyArrays.Diff(dϕ_dy, dims=2)[[1, end], :] / dy .+ small
+            #div_ϕ[2:end-1, [1, end]] .= LazyArrays.Diff(dϕ_dx, dims=1)[:, [1, end]] / dx .+ small
+            #div_ϕ[[1, end], 2:end-1] .= LazyArrays.Diff(dϕ_dy, dims=2)[[1, end], :] / dy .+ small
             # div_ϕ[[1, 1, end, end], [1, end, 1, end]] .= small # corner points
 
-            d_eff .=  abs.(div_q ./ div_ϕ)                          # effective diffusivity, spatially variable
-            d_eff[end, 1] = 0.5 * (d_eff[end-1, 1] + d_eff[end, 2]) # for corner points take average of neighbours, otherwise they are far too large
-            d_eff[end, end] = 0.5 * (d_eff[end-1, end] + d_eff[end, end-1])
+            #d_eff .=  abs.(div_q ./ div_ϕ)                          # effective diffusivity, spatially variable
+            #d_eff[end, 1] = 0.5 * (d_eff[end-1, 1] + d_eff[end, 2]) # for corner points take average of neighbours, otherwise they are far too large
+            #d_eff[end, end] = 0.5 * (d_eff[end-1, end] + d_eff[end, end-1])
 
-            dτ_ϕ  .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1) # pseudo-time step for ϕ, defined on each grid point
-            dτ_h   = dt / dτ_h_                                                                # pseudo-time step for h, scalar
+            dτ_ϕ[2:end-1, 2:end-1] .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1)
+            dτ_h   = dt / dτ_h_   # pseudo-time step for h, scalar
 
             # damped rate of change
-            dϕ_dτ      .= Res_ϕ .+ γ_ϕ .* dϕ_dτ
-            dh_dτ      .= Res_h .+ γ_h .* dh_dτ
+            dϕ_dτ .= Res_ϕ .+ γ_ϕ .* dϕ_dτ
+            dh_dτ .= Res_h .+ γ_h .* dh_dτ
 
             # update fields
-            ϕ                    .= ϕ .+ dτ_ϕ .* dϕ_dτ   # update ϕ (only interior points because fluxes only defined there)
-            h                    .= h .+ dτ_h .* dh_dτ                                      # update h
+            ϕ .= ϕ .+ dτ_ϕ .* dϕ_dτ   # update ϕ
+            h .= h .+ dτ_h .* dh_dτ   # update h
 
             # apply boundary conditions
             ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
@@ -499,14 +523,14 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     # give the effective pressure as output instead of the hydraulic potential
     N = calc_N.(ϕ, ρi, ρw, g, H, zb)
 
-    return N, ϕ, h, qx, qy, ittot, Err_ϕ, Err_h, qx_interior, qy_interior
+    return N, ϕ, h, qx, qy, ittot, Err_ϕ, Err_h, qx_ice, qy_ice
 end
 
-function plot_output(xc, yc, N, h, qx, qy, qx_interior, qy_interior)
-    x_plt = [0; xc .+ (xc[2]-xc[1])]
-    y_plt = [0; yc .+ (yc[2]-yc[1])]
-    N[h .== 0.0] .= NaN
-    h[h .== 0.0] .= NaN
+function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice)
+    x_plt = [xc[1]; xc .+ (xc[2]-xc[1])]
+    y_plt = [yc[1]; yc .+ (yc[2]-yc[1])]
+    N[H .== 0.0] .= NaN
+    h[H .== 0.0] .= NaN
     pygui(true)
     # pcolor of ϕ and h fields
     figure()
@@ -529,8 +553,8 @@ function plot_output(xc, yc, N, h, qx, qy, qx_interior, qy_interior)
 
     qx_plot = copy(qx)
     qy_plot = copy(qy)
-    qx_plot[qx_interior .== 0] .= NaN
-    qy_plot[qy_interior .== 0] .= NaN
+    qx_plot[qx_ice .== 0] .= NaN
+    qy_plot[qy_ice .== 0] .= NaN
     figure()
     subplot(1, 2, 1)
     pcolor(qx_plot')

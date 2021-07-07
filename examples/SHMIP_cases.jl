@@ -81,8 +81,8 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
     geom  = Dict("sqrt" => (xrange   = (0.0, 100e3),
                             yrange   = (0.0, 20e3),
                             surf = (x, y) -> (6 *( sqrt(x+5e3) - sqrt(5e3) ) + 1 ),
-                            # bed  = (x, y) -> 0.0
-                            bed = (x, y) -> x * 1e-3 * ((y-10e3)*2e-4)^2 # alternative bed topography varying in y-direction; no convergence
+                             bed  = (x, y) -> 0.0
+                            # bed = (x, y) -> x * 1e-3 * ((y-10e3)*2e-4)^2 # alternative bed topography varying in y-direction; no convergence
                             ),
                  "valley" => (xrange = (0.0, 6e3),
                               yrange = (-500.0, 500.0),
@@ -139,10 +139,10 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
     )
 
 
-    N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_interior, qy_interior = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
+    N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_ice, qy_ice = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
 
     if make_plot
-        S.plot_output(xc, yc, ϕ, h, qx, qy, qx_interior, qy_interior)
+        S.plot_output(xc, yc, H, ϕ, h, qx, qy, qx_ice, qy_ice)
     end
 
     err_ϕ'[H' .== 0.0] .= NaN
