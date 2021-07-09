@@ -382,8 +382,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
                             )
 
             # determine pseudo-time steps
-            dτ_ϕ[2:end-1, 2:end-1] .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1)
-            dτ_h   = dt / dτ_h_   # pseudo-time step for h, scalar
+            #dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1)
+            #dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1)) .^(-1) # with this, if eq. are time-independent, #iterations is indep. of dt
+            dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* min.(min(dx, dy)^2 ./ d_eff / 4.1, dt)
+            dτ_h   = dτ_h_   # pseudo-time step for h, scalar
 
             # damped rate of change
             dϕ_dτ .= Res_ϕ .+ γ_ϕ .* dϕ_dτ

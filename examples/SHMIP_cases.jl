@@ -114,9 +114,9 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
         calc_zb = topo.bed,     # bed elevation, m
         calc_m_xyt  = water_input,     # source term, m/s
 
-        ttot = 1000.0,
-        #ttot = 5*s_per_day,
-        dt   = 1000.0, #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
+        #ttot = 1000.0,
+        ttot = 50*s_per_day,
+        dt   = 50*s_per_day, #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
 
         itMax = 10^6,
         γ_ϕ  = γ_ϕ,  # damping parameter for ϕ
