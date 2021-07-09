@@ -4,7 +4,8 @@ using Infiltrator
 
 using LinearAlgebra: size
 using Base: Float64, Int64
-using LinearAlgebra, LazyArrays, Parameters, Statistics, Printf, PyPlot
+using LazyArrays: Diff
+using LinearAlgebra, Parameters, Statistics, Printf, PyPlot
 
 export Para
 
@@ -186,20 +187,7 @@ function array_allocation(nu::Para)
 end
 
 """
-Determine global index for upstream scheme
-"""
-function upstream(ix, iy, nx, dϕ_du; dims=1)
-    di = dϕ_du >= 0 ? 0 : 1
-    if dims == 1
-        ix = ix + di
-    elseif dims == 2
-        iy = iy + di
-    end
-    return ix + (iy-1) * nx # global index
-end
-
-"""
-Apply the boundary conditions to ϕ, at the moment pw(x=0) = 0 and no flux at the other boundaries
+Apply Dirichlet boundary conditions to ϕ, at the moment pw(x=0) = 0
 """
 function apply_bc(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with arrays as arguments
                                    # TODO: don't hard-wire, give bc as input parameters
@@ -207,31 +195,12 @@ function apply_bc(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with
     #ϕ[H .== 0.0] .= ρw .* g .* zb[H .== 0.0] # zero water pressure outside of glacier domain
     h[H .== 0.0] .= 0.0                       # zero sheet thickness outside of glacier domain
     ϕ[2, :] .= ρw .* g .* zb[2, :]
-    #ϕ[end, :] .= ϕ[end-1, :]
-    #ϕ[:, 1] .= ϕ[:, 2]
-    #ϕ[:, end] .= ϕ[:, end-1]
 
     # ϕ[end-1,:] = ρw .* g .* zb[end-1,:]
     # ϕ[2, ny÷2+1] = ρw .* g .* zb[2, ny÷2+1]
     # if iseven(size(ϕ,2))
     #     ϕ[2, ny÷2] = ρw .* g .* zb[2, ny÷2]
     # end
-
-    # for j = 2:ny-1, i = 2:nx-1
-    #     if H[i, j] > 0.0
-    #         if H[i-1, j] == 0.0 # x1 boundary
-    #             ϕ[i, j] = ρw .* g .* zb[i-1, j] # zero water pressure
-    #         end
-    #         if H[i-1, j] > 0.0 && i == 2  # ice boundary = domain boundary
-    #             ϕ[i-1, j] = ρw .* g .* zb[i-1, j] # zero water pressure
-    #             #ϕ[i, j] = ρw .* g .* zb[i, j]
-    #         end
-    #     end
-    # end
-
-    # corner points
-    # ϕ[1, 1]  = H[1, 1] > 0.0 ? ρw .* g .* zb[1, 1] : ϕ[1, 1]
-    # ϕ[1, ny] = H[1, ny] > 0.0 ?  ρw .* g .* zb[1, ny] : ϕ[1, ny]
 
     return ϕ, h
 end
@@ -240,7 +209,6 @@ end
 Calculate discharge
 """
 function calc_q(h, dϕ_du1, dϕ_du2, k, α, β, small) # qx -> u1 = x, u2 = y; other way round for qy
-    #@unpack k, α, β, small = p
     return - k * h^α * (sqrt(dϕ_du1^2 + dϕ_du2^2) + small)^(β-2) * dϕ_du1
 end
 
@@ -254,7 +222,6 @@ julia> calc_pw(1.0, 1.0, 1.0, 0.5)
 ```
 """
 function calc_pw(ϕ, ρw, g, zb)
-    #@unpack ρw, g, zb = p
     return ϕ - ρw * g * zb
 end
 
@@ -262,7 +229,6 @@ end
 Calculate effective pressure
 """
 function calc_N(ϕ, ρi, ρw, g, H, zb)
-    #@unpack ρi, g, H = p
     pw = calc_pw(ϕ, ρw, g, zb)
     return ρi * g * H - pw
 end
@@ -271,7 +237,6 @@ end
 Calculate closure rate
 """
 function calc_vc(ϕ, h, ρi, ρw, g, H, zb, n, A)
-    #@unpack n, A = p
     N = calc_N(ϕ, ρi, ρw, g, H, zb)
     return 2 / n^n * A * h * abs(N)^(n-1) * N
 end
@@ -280,7 +245,6 @@ end
 Calculate opening rate
 """
 function calc_vo(h, ub, hr, lr)
-    #@unpack ub, hr, lr = p
     if h < hr
         vo = ub * (hr - h) / lr
     else
@@ -329,15 +293,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     qy_ice = zeros(Int, nx, ny-1)
     qy_ice  .= idx_ice[:, 1:end-1]
     qy_ice .+= idx_ice[:, 2:end]
-    qx_xlbound  = Array(LazyArrays.Diff(idx_ice, dims=1) .== 1) # on qx grid
-    qx_xubound  = Array(LazyArrays.Diff(idx_ice, dims=1) .== -1)
-    qy_ylbound  = Array(LazyArrays.Diff(idx_ice, dims=2) .== 1) # on qy grid
-    qy_yubound  = Array(LazyArrays.Diff(idx_ice, dims=2) .== -1)
-
-    ϕ_outbound =    [LazyArrays.Diff(idx_ice, dims=1) .== 1; zeros(1, ny)] .+ # cells on ϕ grid that are just outside of H > 0 (idx_ice) area
-                    [LazyArrays.Diff(idx_ice, dims=2) .== 1 zeros(nx, 1)] .+
-                    [zeros(1, ny); LazyArrays.Diff(idx_ice, dims=1) .== -1] .+
-                    [zeros(nx, 1) LazyArrays.Diff(idx_ice, dims=2) .== -1]
+    qx_xlbound  = Array(Diff(idx_ice, dims=1) .== 1) # on qx grid
+    qx_xubound  = Array(Diff(idx_ice, dims=1) .== -1)
+    qy_ylbound  = Array(Diff(idx_ice, dims=2) .== 1) # on qy grid
+    qy_yubound  = Array(Diff(idx_ice, dims=2) .== -1)
 
     # Apply boundary conditions
     ϕ0, h0 = apply_bc(ϕ0, h0, H, ρw, g, zb)
@@ -357,22 +316,22 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
         m .= calc_m_t(t+dt)
         # Pseudo-transient iteration
         while !(max(err_ϕ, err_h) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
-        #while !(err_ϕ < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
+        #while !(err_ϕ < tol) && iter<itMax # only solving for ϕ
             # used indices:
-            # - normal grid (i,j)
-            #   e.g. ϕ[i,j]
-            # - staggered grid (m,n)
-            #   e.g. dϕ_dx[m,j]
-            # - staggered grid with ghost points (p,q)
-            #   e.g. qx[p,j], qy[i,q]
+            # - normal grid (i,j), size (nx, ny)
+            #   ϕ, h, Res_ϕ, Res_h, ..
+            # - qx grid (m,n) staggered in x-dir.: (nx-1, ny)
+            #   qx, dϕ_dx[m,j]
+            # - qy grid (m,n) staggered in y-dir.: (nx, ny-1)
+            #   qy, dϕ_dy
 
-            # save current ϕ for error calculation
+            # save current ϕ and h for error calculation
             Err_ϕ   .= ϕ
             Err_h   .= h
 
-            # quantities occurring in the equations
-            dϕ_dx   .= LazyArrays.Diff(ϕ, dims=1) ./ dx                  # hydraulic gradient
-            dϕ_dy   .= LazyArrays.Diff(ϕ, dims=2) ./ dy
+            # hydraulic gradient
+            dϕ_dx   .= Diff(ϕ, dims=1) ./ dx
+            dϕ_dy   .= Diff(ϕ, dims=2) ./ dy
 
             # flux boundary conditions
             dϕ_dx[qx_ice .== 0] .= 0.0
@@ -382,92 +341,21 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             dϕ_dy[qy_ylbound] .= 0.0
             dϕ_dy[qy_yubound] .= 0.0
 
+            # effective diffusivity
             gradϕ = sqrt.(av_xa(dϕ_dx[:, 2:end-1]).^2 .+ av_ya(dϕ_dy[2:end-1, :]).^2) # on ϕ/h grid, size (nx-2, ny-2)
             d_eff .= k*h[2:end-1, 2:end-1].^α .* (gradϕ .+ small).^(β-2) # on ϕ/h grid, size (nx-2, ny-2)
 
+            # calculate fluxes
             # upstream
-            qx[2:end-1, 2:end-1] .= (dϕ_dx[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
-                                    (dϕ_dx[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
-            qy[2:end-1, 2:end-1] .= (dϕ_dy[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
-                                    (dϕ_dy[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
+            #qx[2:end-1, 2:end-1] .= (dϕ_dx[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
+            #                        (dϕ_dx[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
+            #qy[2:end-1, 2:end-1] .= (dϕ_dy[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
+            #                        (dϕ_dy[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
             # central differences
-            #qx[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
-            #                        0.5 .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
-            #qy[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
-            #                        0.5 .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
-
-            # same as in Ludovic's ice flow code (gradϕ and d_eff defined on cells centered between ϕ/h points)
-            # https://github.com/luraess/julia-parallel-course-EGU21/blob/b700a9ad0d1d14f26e0590ce41a8e63380a1df15/scripts/iceflow.jl#L66-L72
-            #gradϕ = sqrt.(av_ya(dϕ_dx).^2 .+ av_xa(dϕ_dy).^2) # grid centered between ϕ/h points, size (nx-1, ny-1)
-            #d_eff = k*av(h).^α .* (gradϕ .+ small).^(β-2) # same grid as gradϕ
-            #qx   .= .-av_ya(d_eff).*diff(ϕ[:,2:end-1], dims=1)/dx # qx grid, size (nx-1, ny-2)
-            #qy   .= .-av_xa(d_eff).*diff(ϕ[2:end-1,:], dims=2)/dy # qy grid, size (nx-2, nx-1)
-
-            # # determine indexes of h that are upstream of dϕ/dx
-            # ix = upstream.(1:nx-1, (1:ny)', nx, dϕ_dx; dims=1)
-            # iy = upstream.(1:nx, (1:ny-1)', nx, dϕ_dy; dims=2)
-            # qx[2:end-1, :]         .= calc_q.(h[ix], dϕ_dx, k, α, β, small)
-            # qy[:, 2:end-1]         .= calc_q.(h[iy], dϕ_dy, k, α, β, small)
-
-            # dϕ_dy_ = 0.0
-            # dϕ_dx_ = 0.0
-            # for j = 1:size(qx,2)
-            #     for p = (1, size(qx,1))
-            #         # outer boundary
-            #         @assert qx[p,j] == 0
-            #     end
-            #     for p = 2:size(qx,1)-1
-            #         if idx_ice[p,j] == 0 || idx_ice[p-1,j] == 0
-            #             # BC: zero flux across boundary
-            #             @assert qx[p,j] == 0 # (already set at initialization)
-            #         else
-            #             dϕ_dx_ = (ϕ[p,j] - ϕ[p-1,j])/dx # i.e. between [i,j] and [i-1,j]
-            #             @assert (dϕ_dx_ == dϕ_dx[p-1,j]) (p,j)
-            #             i = dϕ_dx_ >= 0 ?
-            #                 p : # flux from cell [p,j] to [p-1,j]
-            #                 p-1 # flux from cell [p-1,j] to [p,j]\
-            #             if j-1 >= 1 && j <= size(dϕ_dy, 2)
-            #                 dϕ_dy_ = 0.5 * (dϕ_dy[i, j-1] + dϕ_dy[i, j]) # take average of upstream dϕ_dy
-            #             elseif j-1 < 1
-            #                 dϕ_dy_ = dϕ_dy[i, j] # lower y-boundary, only one upstream value available
-            #             elseif j > size(dϕ_dy, 2)
-            #                 dϕ_dy_ = dϕ_dy[i, j-1] # upper y-boundary, ...
-            #             end
-            #             qx[p,j] = calc_q(h[i,j], dϕ_dx_, dϕ_dy_, k, α, β, small)                  # upstream scheme
-            #             # qx[p,j] = calc_q((h[p ,j] + h[p-1 ,j])/2, dϕ_dx_, k, α, β, small) # central differences
-            #         end
-            #     end
-            # end
-            # for q=1:size(qy,2)
-            #     if q == 1 || q == size(qy,2)
-            #         # outer boundary
-            #         @assert all(qy[:,q] .== 0)
-            #         continue
-            #     end
-            #     for i=1:size(qy,1)
-            #         if idx_ice[i,q] == 0 || idx_ice[i,q-1] == 0
-            #             # BC: zero flux across boundary
-            #             @assert qy[i,q] == 0 # (already set at initialization)
-            #         else
-            #             dϕ_dy_ = (ϕ[i,q] - ϕ[i,q-1])/dy # i.e. between [i,j] and [i,j-1]
-            #             @assert (dϕ_dy_ == dϕ_dy[i,q-1]) (i,q)
-            #             j = dϕ_dy_ >= 0 ?
-            #                 q : # flux from cell [i,q] to [i,q-1]
-            #                 q-1 # flux from cell [i,q-1] to [i,q]
-            #             # @assert qy[i,q] == calc_q(h[i,j], dϕ_dy_, k, α, β, small) i,q
-            #             if i-1 >= 1 && i <= size(dϕ_dx, 1)
-            #                 dϕ_dx_ = 0.5 * (dϕ_dx[i-1, j] + dϕ_dx[i, j])
-            #             elseif i-1 < 1
-            #                 dϕ_dx_ = dϕ_dx[i, j]
-            #             elseif i > size(dϕ_dx, 1)
-            #                 dϕ_dx_ = dϕ_dx[i-1, j]
-            #             end
-            #             qy[i,q] = calc_q(h[i,j], dϕ_dy_, dϕ_dx_, k, α, β, small)                  # upstream scheme
-            #             # qy[i,q] = calc_q((h[i,q] + h[i,q-1])/2, dϕ_dy_, k, α, β, small) # central differences
-            #         end
-            #     end
-            # end
-       #     @infiltrate iter==4000
+            qx[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
+                                    0.5 .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
+            qy[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
+                                    0.5 .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
 
             # set flux boundary conditions
             #qx[qx_ice .== 0]   .= 0.0
@@ -479,7 +367,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
-            div_q[2:end-1, 2:end-1]  .= LazyArrays.Diff(qx, dims=1)[:, 2:end-1]/dx .+ LazyArrays.Diff(qy, dims=2)[2:end-1, :]/dy .+ small
+            div_q[2:end-1, 2:end-1]  .= Diff(qx, dims=1)[:, 2:end-1]/dx .+ Diff(qy, dims=2)[2:end-1, :]/dy .+ small
 
             # calculate residuals
             Res_ϕ   .=  idx_ice .* (
@@ -493,19 +381,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
                             (Σ * vo .- Γ * vc)
                             )
 
-            # determine effecive diffusivity for pseudo-time step of ϕ: d_eff = divergence(q) / divergence(ϕ)
-            #div_ϕ[2:end-1, 2:end-1] .= LazyArrays.Diff(dϕ_dx, dims=1)[:, 2:end-1] / dx .+ LazyArrays.Diff(dϕ_dy, dims=2)[2:end-1, :] / dy .+ small
-            # dϕ_dy, dϕ_dx not defined at y-, x-boundary and corner points
-            # could be calculated from mean between qy, qx fluxes but maybe ok like this
-            # since mostly no flux boundaries (and for dirichlet boundaries it's not relevant)
-            #div_ϕ[2:end-1, [1, end]] .= LazyArrays.Diff(dϕ_dx, dims=1)[:, [1, end]] / dx .+ small
-            #div_ϕ[[1, end], 2:end-1] .= LazyArrays.Diff(dϕ_dy, dims=2)[[1, end], :] / dy .+ small
-            # div_ϕ[[1, 1, end, end], [1, end, 1, end]] .= small # corner points
-
-            #d_eff .=  abs.(div_q ./ div_ϕ)                          # effective diffusivity, spatially variable
-            #d_eff[end, 1] = 0.5 * (d_eff[end-1, 1] + d_eff[end, 2]) # for corner points take average of neighbours, otherwise they are far too large
-            #d_eff[end, end] = 0.5 * (d_eff[end-1, end] + d_eff[end, end-1])
-
+            # determine pseudo-time steps
             dτ_ϕ[2:end-1, 2:end-1] .= (1.0/dτ_ϕ_) .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1)
             dτ_h   = dt / dτ_h_   # pseudo-time step for h, scalar
 
@@ -548,7 +424,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     return N, ϕ, h, qx, qy, ittot, Err_ϕ, Err_h, qx_ice, qy_ice
 end
 
-function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice)
+function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, err_ϕ, err_h)
     x_plt = [xc[1]; xc .+ (xc[2]-xc[1])]
     y_plt = [yc[1]; yc .+ (yc[2]-yc[1])]
     N[H .== 0.0] .= NaN
@@ -586,6 +462,18 @@ function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice)
     pcolor(qy_plot')
     colorbar()
     title("qy (m/s)")
+
+    err_ϕ[H .== 0.0] .= NaN
+    err_h[H .== 0.0] .= NaN
+    figure()
+    subplot(1, 2, 1)
+    pcolormesh(err_h')
+    colorbar()
+    title("err_h")
+    subplot(1, 2, 2)
+    pcolormesh(err_ϕ')
+    colorbar()
+    title("err_ϕ")
 end
 
 

@@ -142,20 +142,8 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
     N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_ice, qy_ice = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
 
     if make_plot
-        S.plot_output(xc, yc, H, ϕ, h, qx, qy, qx_ice, qy_ice)
+        S.plot_output(xc, yc, H, ϕ, h, qx, qy, qx_ice, qy_ice, err_ϕ, err_h)
     end
-
-    err_ϕ'[H' .== 0.0] .= NaN
-    err_h'[H' .== 0.0] .= NaN
-    figure()
-    subplot(1, 2, 1)
-    pcolormesh(err_ϕ')
-    colorbar()
-    title("err_ϕ")
-    subplot(1, 2, 2)
-    pcolormesh(err_h')
-    colorbar()
-    title("err_h")
 
     return nit, ϕ, H, qx, qy, (;input_params, ϕ0, h0)
 end
