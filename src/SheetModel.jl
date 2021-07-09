@@ -347,15 +347,15 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # calculate fluxes
             # upstream
-            #qx[2:end-1, 2:end-1] .= (dϕ_dx[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
-            #                        (dϕ_dx[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
-            #qy[2:end-1, 2:end-1] .= (dϕ_dy[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
-            #                        (dϕ_dy[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
+            qx[2:end-1, 2:end-1] .= (dϕ_dx[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
+                                    (dϕ_dx[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
+            qy[2:end-1, 2:end-1] .= (dϕ_dy[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
+                                    (dϕ_dy[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
             # central differences
-            qx[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
-                                    0.5 .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
-            qy[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
-                                    0.5 .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
+            #qx[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
+            #                        0.5 .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
+            #qy[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
+            #                        0.5 .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
 
             # set flux boundary conditions
             #qx[qx_ice .== 0]   .= 0.0
@@ -399,10 +399,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
 
             # determine the errors (only consider points where the ice thickness is > 0)
-            Err_ϕ .= abs.(Err_ϕ .- ϕ)
+            Err_ϕ .= abs.(Err_ϕ .- ϕ) ./ norm(ϕ)
             err_ϕ = norm(Err_ϕ) # this error is smaller than the error using Res_ϕ
             # err_ϕ = norm(Res_ϕ[idx_ice])/sum(idx_ice) # with this error it also converges but more slowly
-            Err_h .= abs.(Err_h .- h)
+            Err_h .= abs.(Err_h .- h) ./ norm(h)
             err_h = norm(Err_h)
             # err_h   = norm(Res_h[idx_ice])/sum(idx_ice)
             iter += 1
