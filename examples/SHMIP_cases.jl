@@ -31,7 +31,7 @@ bed_val(x,y, para) = f(x,para) + g(y) * r(x, para)
 
 
 function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=10^5,
-                   γ_ϕ=0.29, γ_h=0.32, dτ_ϕ_=2e6, dτ_h_=2.1)      # parameters for pseudo-transient time stepping
+                   γ_ϕ=0.8, γ_h=0.9, dτ_ϕ_=1.0, dτ_h_=7e-6)      # parameters for pseudo-transient time stepping
 
     # suite A: use different steady and spatially uniform water inputs
     runoff = Dict("A1" => (x, y, t) -> 7.93e-11,
@@ -118,7 +118,7 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
         ttot = 50*s_per_day,
         dt   = 50*s_per_day, #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
 
-        itMax = 10^6,
+        itMax = 5*10^4,
         γ_ϕ  = γ_ϕ,  # damping parameter for ϕ
         γ_h  = γ_h,  # damping parameter for h
         dτ_ϕ_ = dτ_ϕ_, # scaling factor for dτ_ϕ
