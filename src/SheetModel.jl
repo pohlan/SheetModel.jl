@@ -264,7 +264,7 @@ function runthemodel(input::Para, ϕ0, h0;
                     printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
                     printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
     params, ϕ0, h0, ϕ_, N_, h_, q_ = scaling(input, ϕ0, h0)
-    N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_ice, qy_ice = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
+    N, ϕ, h, qx, qy, nit, err_ϕ, err_h, Res_ϕ, Res_h, qx_ice, qy_ice = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     N .= N .* N_ # scaling for N same as for ϕ
     ϕ .= ϕ .* ϕ_
     h .= h .* h_
@@ -272,7 +272,7 @@ function runthemodel(input::Para, ϕ0, h0;
     qy .= qy .* q_
     err_ϕ .= err_ϕ .* ϕ_
     err_h .= err_h .* h_
-    return N, ϕ, h, qx, qy, nit, err_ϕ, err_h, qx_ice, qy_ice
+    return N, ϕ, h, qx, qy, nit, err_ϕ, err_h, Res_ϕ, Res_h, qx_ice, qy_ice
 end
 
 """
@@ -399,9 +399,13 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
 
             # determine the errors (only consider points where the ice thickness is > 0)
+            # error for ϕ
             Err_ϕ .= abs.(Err_ϕ .- ϕ) ./ norm(ϕ)
-            err_ϕ = norm(Err_ϕ) # this error is smaller than the error using Res_ϕ
+            err_ϕ = norm(Err_ϕ[idx_ice]) # this error is smaller than the error using Res_ϕ
+            # Res_ϕ[2, :] .= 0.0
             # err_ϕ = norm(Res_ϕ[idx_ice])/sum(idx_ice) # with this error it also converges but more slowly
+
+            # error for h
             Err_h .= abs.(Err_h .- h) ./ norm(h)
             err_h = norm(Err_h)
             # err_h   = norm(Res_h[idx_ice])/sum(idx_ice)
@@ -423,7 +427,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     # give the effective pressure as output instead of the hydraulic potential
     N = calc_N.(ϕ, ρi, ρw, g, H, zb)
 
-    return N, ϕ, h, qx, qy, ittot, Err_ϕ, Err_h, qx_ice, qy_ice
+    return N, ϕ, h, qx, qy, ittot, Err_ϕ, Err_h, Res_ϕ, Res_h, qx_ice, qy_ice
 end
 
 function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, err_ϕ, err_h)
