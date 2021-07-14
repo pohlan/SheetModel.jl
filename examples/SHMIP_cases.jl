@@ -139,10 +139,11 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
     )
 
 
-    N, ϕ, h, qx, qy, nit, err_ϕ, err_h, Res_ϕ, Res_h, qx_ice, qy_ice = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
+    model_output = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
+    @unpack N, ϕ, h, qx, qy, ittot, Err_ϕ, Err_h, Res_ϕ, Res_h, qx_ice, qy_ice = model_output
 
     if make_plot
-        S.plot_output(xc, yc, H, ϕ, h, qx, qy, qx_ice, qy_ice, err_ϕ, err_h)
+        S.plot_output(xc, yc, H, ϕ, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h)
     end
 
     return nit, ϕ, h, H, qx, qy, (;input_params, ϕ0, h0)

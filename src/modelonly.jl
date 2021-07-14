@@ -224,5 +224,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     # give the effective pressure as output instead of the hydraulic potential
     N = calc_N.(ϕ, ρi, ρw, g, H, zb)
 
-    return N, ϕ, h, qx, qy, ittot, Err_ϕ, Err_h, Res_ϕ, Res_h, qx_ice, qy_ice
+    return model_output(N=N, ϕ=ϕ, h=h, qx=qx, qy=qy, qx_ice=qx_ice, qy_ice=qy_ice,
+            Err_ϕ=Err_ϕ, Err_h=Err_h, Res_ϕ=Res_ϕ, Res_h=Res_h,
+            ittot=ittot)
 end

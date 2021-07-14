@@ -67,6 +67,22 @@ Create struct including all model parameters, physical and numerical
 end
 Broadcast.broadcastable(p::Para) = Ref(p)
 
+@with_kw struct model_output
+    N::Matrix{Float64}
+    ϕ::Matrix{Float64}
+    h::Matrix{Float64}
+    qx::Matrix{Float64}
+    qy::Matrix{Float64}
+    qx_ice::Matrix{Int64}
+    qy_ice::Matrix{Int64}
+    Err_ϕ::Matrix{Float64}
+    Err_h::Matrix{Float64}
+    Res_ϕ::Matrix{Float64}
+    Res_h::Matrix{Float64}
+    ittot::Int64
+end
+Broadcast.broadcastable(out::model_output) = Ref(out)
+
 """
 Pre-allocate arrays
 """
@@ -169,6 +185,27 @@ function scaling(p::Para, ϕ0, h0)
     return scaled_params, ϕ0, h0, ϕ_, N_, h_, q_
 end
 
+function descaling(output::model_output, N_, ϕ_, h_, q_)
+    @unpack N, ϕ, h, qx, qy, qx_ice, qy_ice,
+            Err_ϕ, Err_h , Res_ϕ, Res_h,
+            ittot = output
+    output_descaled = model_output(
+        N .= N .* N_,
+        ϕ .= ϕ .* ϕ_,
+        h .= h .* h_,
+        qx .= qx .* q_,
+        qy .= qy .* q_,
+        qx_ice .= qx_ice,
+        qy_ice .= qy_ice,
+        Err_ϕ .= Err_ϕ .* ϕ_,
+        Err_h .= Err_h .* h_,
+        Res_ϕ .= Res_ϕ .* ϕ_,
+        Res_h .= Res_h .* h_,
+        ittot = ittot
+        )::model_output
+    return output_descaled
+end
+
 """
 Scale the parameters and call the model run function
 """
@@ -176,15 +213,9 @@ function runthemodel(input::Para, ϕ0, h0;
                     printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
                     printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
     params, ϕ0, h0, ϕ_, N_, h_, q_ = scaling(input, ϕ0, h0)
-    N, ϕ, h, qx, qy, nit, err_ϕ, err_h, Res_ϕ, Res_h, qx_ice, qy_ice = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
-    N .= N .* N_ # scaling for N same as for ϕ
-    ϕ .= ϕ .* ϕ_
-    h .= h .* h_
-    qx .= qx .* q_
-    qy .= qy .* q_
-    err_ϕ .= err_ϕ .* ϕ_
-    err_h .= err_h .* h_
-    return N, ϕ, h, qx, qy, nit, err_ϕ, err_h, Res_ϕ, Res_h, qx_ice, qy_ice
+    output = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
+    output_descaled = descaling(output, N_, ϕ_, h_, q_)
+    return output_descaled
 end
 
 #----------------------------------#
