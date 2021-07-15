@@ -80,6 +80,8 @@ Broadcast.broadcastable(p::Para) = Ref(p)
     Res_ϕ::Matrix{Float64}
     Res_h::Matrix{Float64}
     ittot::Int64
+    errs_ϕ::Array{Float64, 1}
+    errs_h::Array{Float64, 1}
 end
 Broadcast.broadcastable(out::model_output) = Ref(out)
 
@@ -188,7 +190,7 @@ end
 function descaling(output::model_output, N_, ϕ_, h_, q_)
     @unpack N, ϕ, h, qx, qy, qx_ice, qy_ice,
             Err_ϕ, Err_h , Res_ϕ, Res_h,
-            ittot = output
+            ittot, errs_ϕ, errs_h = output
     output_descaled = model_output(
         N = N .* N_,
         ϕ = ϕ .* ϕ_,
@@ -201,7 +203,9 @@ function descaling(output::model_output, N_, ϕ_, h_, q_)
         Err_h = Err_h .* h_,
         Res_ϕ = Res_ϕ .* ϕ_,
         Res_h = Res_h .* h_,
-        ittot = ittot
+        ittot = ittot,
+        errs_ϕ = errs_ϕ,
+        errs_h = errs_h
         )::model_output
     return output_descaled
 end
@@ -230,7 +234,7 @@ function initial_conditions(xc, yc, H; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) ->
     return ϕ0, h0
 end
 
-function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, err_ϕ, err_h)
+function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h, errs_h, errs_ϕ)
     x_plt = [xc[1]; xc .+ (xc[2]-xc[1])]
     y_plt = [yc[1]; yc .+ (yc[2]-yc[1])]
     N[H .== 0.0] .= NaN
@@ -269,15 +273,23 @@ function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, err_ϕ, err_h)
     colorbar()
     title("qy (m/s)")
 
-    err_ϕ[H .== 0.0] .= NaN
-    err_h[H .== 0.0] .= NaN
+    Err_ϕ[H .== 0.0] .= NaN
+    Err_h[H .== 0.0] .= NaN
     figure()
     subplot(1, 2, 1)
-    pcolormesh(err_h')
+    pcolormesh(Err_h')
     colorbar()
     title("err_h")
     subplot(1, 2, 2)
-    pcolormesh(err_ϕ')
+    pcolormesh(Err_ϕ')
     colorbar()
     title("err_ϕ")
+
+    figure()
+    plot(errs_h, label="err_h")
+    plot(errs_ϕ, label="err_ϕ")
+    yscale("log")
+    xlabel("# iterations")
+    ylabel("error")
+    legend()
 end

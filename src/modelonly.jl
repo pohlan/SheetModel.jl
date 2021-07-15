@@ -106,6 +106,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     # initiate time loop parameters
     t, it, ittot = 0.0, 0, 0
 
+    # for iterations vs. error plot
+    errs_ϕ   = Float64[]
+    errs_h   = Float64[]
+
     # Physical time loop
     while t<ttot
         iter, err_ϕ, err_h = 0, 2*tol, 2*tol
@@ -211,6 +215,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             if mod(iter, printit) == 0
                 @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ, err_h)
             end
+
+            # save error evolution in vector
+            append!(errs_ϕ, err_ϕ)
+            append!(errs_h, err_h)
         end
         ittot += iter; it += 1; t += dt
         if mod(it, printtime) == 0
@@ -226,5 +234,5 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
     return model_output(N=N, ϕ=ϕ, h=h, qx=qx, qy=qy, qx_ice=qx_ice, qy_ice=qy_ice,
             Err_ϕ=Err_ϕ, Err_h=Err_h, Res_ϕ=Res_ϕ, Res_h=Res_h,
-            ittot=ittot)
+            ittot=ittot, errs_ϕ=errs_ϕ, errs_h=errs_h)
 end
