@@ -190,17 +190,17 @@ function descaling(output::model_output, N_, ϕ_, h_, q_)
             Err_ϕ, Err_h , Res_ϕ, Res_h,
             ittot = output
     output_descaled = model_output(
-        N .= N .* N_,
-        ϕ .= ϕ .* ϕ_,
-        h .= h .* h_,
-        qx .= qx .* q_,
-        qy .= qy .* q_,
-        qx_ice .= qx_ice,
-        qy_ice .= qy_ice,
-        Err_ϕ .= Err_ϕ .* ϕ_,
-        Err_h .= Err_h .* h_,
-        Res_ϕ .= Res_ϕ .* ϕ_,
-        Res_h .= Res_h .* h_,
+        N = N .* N_,
+        ϕ = ϕ .* ϕ_,
+        h = h .* h_,
+        qx = qx .* q_,
+        qy = qy .* q_,
+        qx_ice = qx_ice,
+        qy_ice = qy_ice,
+        Err_ϕ = Err_ϕ .* ϕ_,
+        Err_h = Err_h .* h_,
+        Res_ϕ = Res_ϕ .* ϕ_,
+        Res_h = Res_h .* h_,
         ittot = ittot
         )::model_output
     return output_descaled
