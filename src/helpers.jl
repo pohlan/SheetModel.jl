@@ -243,13 +243,13 @@ function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h, err
     # pcolor of ϕ and h fields
     figure()
     subplot(2, 2, 1)
-    pcolor(x_plt, y_plt, h', edgecolors="black")
+    pcolor(x_plt, y_plt, h')#, edgecolors="black")
     colorbar()
     title("h")
     subplot(2, 2, 2)
-    pcolor(x_plt, y_plt, N', edgecolors="black")
+    pcolor(x_plt, y_plt, N')#, edgecolors="black")
     colorbar()
-    title("ϕ")
+    title("N")
     # cross-sections of ϕ and h
     subplot(2, 2, 3)
     ind = size(N,2)÷2
@@ -257,7 +257,7 @@ function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h, err
     title(join(["h at y = ", string(round(yc[ind], digits=1))]))
     subplot(2, 2, 4)
     plot(xc, N[:, ind])
-    title(join(["ϕ at y = ", string(round(yc[ind], digits=1))]))
+    title(join(["N at y = ", string(round(yc[ind], digits=1))]))
 
     qx_plot = copy(qx)
     qy_plot = copy(qy)
@@ -286,9 +286,8 @@ function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h, err
     title("err_ϕ")
 
     figure()
-    plot(errs_h, label="err_h")
-    plot(errs_ϕ, label="err_ϕ")
-    yscale("log")
+    loglog(errs_h, label="err_h")
+    loglog(errs_ϕ, label="err_ϕ")
     xlabel("# iterations")
     ylabel("error")
     legend()

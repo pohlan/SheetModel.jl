@@ -201,15 +201,16 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # determine the errors (only consider points where the ice thickness is > 0)
             # error for ϕ
-            Err_ϕ .= abs.(Err_ϕ .- ϕ) ./ norm(ϕ)
-            err_ϕ = norm(Err_ϕ[idx_ice]) # this error is smaller than the error using Res_ϕ
+            Err_ϕ .= abs.(Err_ϕ .- ϕ)
+            err_ϕ = norm(Err_ϕ[idx_ice]) ./ norm(ϕ)  # this error is smaller than the error using Res_ϕ
             # Res_ϕ[2, :] .= 0.0
             # err_ϕ = norm(Res_ϕ[idx_ice])/sum(idx_ice) # with this error it also converges but more slowly
 
             # error for h
-            Err_h .= abs.(Err_h .- h) ./ norm(h)
-            err_h = norm(Err_h)
+            Err_h .= abs.(Err_h .- h)
+            err_h = norm(Err_h[idx_ice]) ./ norm(h0)
             # err_h   = norm(Res_h[idx_ice])/sum(idx_ice)
+
             iter += 1
 
             if mod(iter, printit) == 0
