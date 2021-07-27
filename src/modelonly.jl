@@ -107,8 +107,14 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     t, it, ittot = 0.0, 0, 0
 
     # for iterations vs. error plot
-    errs_ϕ   = Float64[]
-    errs_h   = Float64[]
+    errs_ϕ     = Float64[]
+    errs_h     = Float64[]
+    errs_ϕ_res = Float64[]
+    errs_h_res = Float64[]
+    errs_ϕ_rel = Float64[]
+    errs_h_rel = Float64[]
+    err_ϕ_ini = 0.0
+    err_h_ini = 0.0
 
     # Physical time loop
     while t<ttot
@@ -194,27 +200,36 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # update fields
             ϕ .= ϕ .+ dτ_ϕ .* dϕ_dτ   # update ϕ
-            #h .= h .+ dτ_h .* dh_dτ   # update h
+            h .= h .+ dτ_h .* dh_dτ   # update h
 
-            ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
-            vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
-            vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
-            h .= h_old .+ dt * (Σ * vo .- Γ * vc)
+            # probably not going to use the following
+            # ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
+            # vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
+            # vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
+            # h .= h_old .+ dt * (Σ * vo .- Γ * vc)
 
             # apply boundary conditions
             ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
 
             # determine the errors (only consider points where the ice thickness is > 0)
             # error for ϕ
-            Err_ϕ .= abs.(Err_ϕ .- ϕ)
-            err_ϕ = norm(Err_ϕ[idx_ice]) ./ norm(ϕ)   # this error is smaller than the error using Res_ϕ
-            # Res_ϕ[2, :] .= 0.0
-            # err_ϕ = norm(Res_ϕ[idx_ice])/sum(idx_ice) # with this error it also converges but more slowly
+            Err_ϕ .= abs.(Err_ϕ .- ϕ) # ./ dτ_ϕ
+            err_ϕ = norm(Err_ϕ[idx_ice]) ./ norm(ϕ0)   # this error is smaller than the error using Res_ϕ
+            #err_ϕ = norm(Err_ϕ[idx_ice]) ./ sum(idx_ice)
+            if (iter==1)  err_ϕ_ini = err_ϕ  end
+            err_ϕ_rel = err_ϕ/err_ϕ_ini
+
+            Res_ϕ[2, :] .= 0.0
+            err_ϕ_res = norm(Res_ϕ[idx_ice])/sum(idx_ice) # with this error it also converges but more slowly
 
             # error for h
-            Err_h .= abs.(Err_h .- h)
-            err_h = norm(Err_h[idx_ice]) ./ norm(h)
-            # err_h   = norm(Res_h[idx_ice])/sum(idx_ice)
+            Err_h .= abs.(Err_h .- h) #./ dτ_h
+            err_h = norm(Err_h[idx_ice]) ./ norm(h0)
+            #err_h = norm(Err_h[idx_ice]) ./ sum(idx_ice)
+            if (iter==1)  err_h_ini = err_h  end
+            err_h_rel = err_h/err_h_ini
+
+            err_h_res   = norm(Res_h[idx_ice]) / sum(idx_ice)
 
             iter += 1
 
@@ -225,6 +240,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             # save error evolution in vector
             append!(errs_ϕ, err_ϕ)
             append!(errs_h, err_h)
+            append!(errs_ϕ_res, err_ϕ_res)
+            append!(errs_h_res, err_h_res)
+            append!(errs_ϕ_rel, err_ϕ_rel)
+            append!(errs_h_rel, err_h_rel)
         end
         ittot += iter; it += 1; t += dt
         if mod(it, printtime) == 0
@@ -240,5 +259,8 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
     return model_output(N=N, ϕ=ϕ, h=h, qx=qx, qy=qy, qx_ice=qx_ice, qy_ice=qy_ice,
             Err_ϕ=Err_ϕ, Err_h=Err_h, Res_ϕ=Res_ϕ, Res_h=Res_h,
-            ittot=ittot, errs_ϕ=errs_ϕ, errs_h=errs_h)
+            ittot=ittot,
+            errs_ϕ=errs_ϕ, errs_h=errs_h,
+            errs_ϕ_res=errs_ϕ_res, errs_h_res=errs_h_res,
+            errs_ϕ_rel=errs_ϕ_rel, errs_h_rel=errs_h_rel)
 end
