@@ -164,7 +164,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             #qy[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
             #                        0.5 .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
 
-            # set flux boundary conditions
+            # set flux boundary conditions (not necessary here, it has to be imposed before calculating gradϕ and d_eff via dϕ_d...)
             #qx[qx_ice .== 0]   .= 0.0
             #qy[qy_ice .== 0]   .= 0.0
             #qx[qx_xubound] .= 0.0 # no flux boundary condition
@@ -213,13 +213,14 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # determine the errors (only consider points where the ice thickness is > 0)
             # error for ϕ
+
             Err_ϕ .= abs.(Err_ϕ .- ϕ) # ./ dτ_ϕ
             err_ϕ = norm(Err_ϕ[idx_ice]) ./ norm(ϕ0)   # this error is smaller than the error using Res_ϕ
             #err_ϕ = norm(Err_ϕ[idx_ice]) ./ sum(idx_ice)
             if (iter==1)  err_ϕ_ini = err_ϕ  end
-            err_ϕ_rel = err_ϕ/err_ϕ_ini
+            err_ϕ_rel = err_ϕ/err_ϕ_ini # relative error
 
-            Res_ϕ[2, :] .= 0.0
+            Res_ϕ[2, :] .= 0.0 # residual at b.c. should not be part of ϕ error
             err_ϕ_res = norm(Res_ϕ[idx_ice])/sum(idx_ice) # with this error it also converges but more slowly
 
             # error for h
@@ -227,7 +228,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             err_h = norm(Err_h[idx_ice]) ./ norm(h0)
             #err_h = norm(Err_h[idx_ice]) ./ sum(idx_ice)
             if (iter==1)  err_h_ini = err_h  end
-            err_h_rel = err_h/err_h_ini
+            err_h_rel = err_h/err_h_ini # relative error
 
             err_h_res   = norm(Res_h[idx_ice]) / sum(idx_ice)
 
@@ -254,7 +255,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
         h_old .= h
     end
 
-    # give the effective pressure as output instead of the hydraulic potential
+    # give the effective pressure as output
     N = calc_N.(ϕ, ρi, ρw, g, H, zb)
 
     return model_output(N=N, ϕ=ϕ, h=h, qx=qx, qy=qy, qx_ice=qx_ice, qy_ice=qy_ice,

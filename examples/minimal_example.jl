@@ -1,3 +1,8 @@
+# -------------------------------------------------------------------------#
+# This script runs the model directly with dimensionless numbers as input  #
+# Without scaling and descaling as in SHMIP_cases.jl                       #
+# -------------------------------------------------------------------------#
+
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../"))
 using SheetModel, Parameters
@@ -7,36 +12,36 @@ function run_example(;dt,
                       tsteps,               # number of timesteps
                       plot_output=true)     # whether to produce plots from model output
     input_params = S.Para(
-            g     = 1.0,              # gravitational acceleration, m/s^2
-            ρw    = 1.0,              # water density, kg/m^3
-            ρi    = 0.91,             # ice density, kg/m^3
+            g     = 1.0,              # gravitational acceleration
+            ρw    = 1.0,              # water density
+            ρi    = 0.91,             # ice density
             α     = 1.25,             # first sheet flow exponent
             β     = 1.5,              # second sheet flow exponent
-            k     = 1.0,              # sheet conductivity, m^(7/4)kg^(-1/2)
+            k     = 1.0,              # sheet conductivity
             n     = 3.0,              # Glen's flow law exponent
-            A     = 1.0,              # ice flow constant, Pa^(-n)s^(-1)
+            A     = 1.0,              # ice flow constant
             ev    = 0.0,              # englacial void ratio; SHMIP: 0 for ice-sheet, 1e-3 for valley glacier
-            lr    = 1.0,              # horizontal cavity spacing, m
-            hr    = 1.0,              # bedrock bump height, m
-            ub    = 1.0,              # basal sliding speed, m/s
+            lr    = 1.0,              # horizontal cavity spacing
+            hr    = 1.0,              # bedrock bump height
+            ub    = 1.0,              # basal sliding speed
 
-            xrange = (0.0, 1.0),  # domain length in x-direction, m
-            yrange = (0.0, 1.5),  # domain length in y-direction, m
+            xrange = (0.0, 1.0),  # domain length in x-direction
+            yrange = (0.0, 1.5),  # domain length in y-direction
             nx = 64,
             ny = 64,
 
-            calc_zs =  (x, y) -> 0.5 * sqrt(x+0.05),    # surface elevation, m (SHMIP)
-            calc_zb = (x, y) -> 0.0,                    # bed elevation, m
-            calc_m_xyt  = (x, y, t) -> 1.0,             # source term, m/s
+            calc_zs =  (x, y) -> 0.5 * sqrt(x+0.05),    # surface elevation (SHMIP)
+            calc_zb = (x, y) -> 0.0,                    # bed elevation
+            calc_m_xyt  = (x, y, t) -> 1.0,             # source term
 
-            dt   = dt, #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
-            ttot = dt * tsteps,
+            dt   = dt,                  # time step
+            ttot = dt * tsteps,         # total time
 
             itMax = 5*10^4,
-            γ_ϕ  = 0.8,     # damping parameter for ϕ 0.6
-            γ_h  = 0.7,     # damping parameter for h 0.8
-            dτ_ϕ_ = 1.0,    # scaling factor for dτ_ϕ 1.0
-            dτ_h_ = 1e-4,   # scaling factor for dτ_h 1e-7
+            γ_ϕ  = 0.6,     # damping parameter for ϕ
+            γ_h  = 0.7,     # damping parameter for h
+            dτ_ϕ_ = 1.0,    # scaling factor for dτ_ϕ
+            dτ_h_ = 1e-7,   # scaling factor for dτ_h
 
             # Dimensionless numbers
             Σ   = 2.0,

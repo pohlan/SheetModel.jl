@@ -1,4 +1,4 @@
-## RUN SHMIP TEST CASES
+## RUN SHMIP TEST CASES (to be run with "run_SHMIP.jl")
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../"))
@@ -140,7 +140,11 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
 
 
     model_output = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
-    @unpack N, ϕ, h, qx, qy, ittot, Err_ϕ, Err_h, errs_ϕ, errs_ϕ_res, errs_h, errs_ϕ_rel, errs_h_rel, Res_ϕ, Res_h, qx_ice, qy_ice = model_output
+    @unpack N, ϕ, h, qx, qy, qx_ice, qy_ice,
+            ittot, Err_ϕ, Err_h, Res_ϕ, Res_h,
+            errs_ϕ, errs_h,
+            errs_ϕ_res, errs_h_res,
+            errs_ϕ_rel, errs_h_rel = model_output
 
     if make_plot
         S.plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h, errs_h, errs_ϕ, errs_ϕ_res, errs_h_res, errs_ϕ_rel, errs_h_rel)
