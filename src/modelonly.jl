@@ -2,32 +2,19 @@ using LazyArrays: Diff
 using Printf, Infiltrator
 
 """
-Calculate discharge
+Calculate discharge; qx = calc_q(h, dϕ_dx, dϕ_dy, ...), qy = calc_q(h, dϕ_dy, dϕ_dx, ...)
 """
-function calc_q(h, dϕ_du1, dϕ_du2, k, α, β, small) # qx -> u1 = x, u2 = y; other way round for qy
-    return - k * h^α * (sqrt(dϕ_du1^2 + dϕ_du2^2) + small)^(β-2) * dϕ_du1
-end
+calc_q(h, dϕ_du1, dϕ_du2, k, α, β, small) = - k * h^α * (sqrt(dϕ_du1^2 + dϕ_du2^2) + small)^(β-2) * dϕ_du1
 
 """
 Calculate water pressure
-
-# Example
-```jldoctest
-julia> calc_pw(1.0, 1.0, 1.0, 0.5)
-0.5
-```
 """
-function calc_pw(ϕ, ρw, g, zb)
-    return ϕ - ρw * g * zb
-end
+calc_pw(ϕ, ρw, g, zb) = ϕ - ρw * g * zb
 
 """
 Calculate effective pressure
 """
-function calc_N(ϕ, ρi, ρw, g, H, zb)
-    pw = calc_pw(ϕ, ρw, g, zb)
-    return ρi * g * H - pw
-end
+calc_N(ϕ, ρi, ρw, g, H, zb) = ρi * g * H - calc_pw(ϕ, ρw, g, zb)
 
 """
 Calculate closure rate
@@ -40,14 +27,7 @@ end
 """
 Calculate opening rate
 """
-function calc_vo(h, ub, hr, lr)
-    if h < hr
-        vo = ub * (hr - h) / lr
-    else
-        vo = 0.0
-    end
-    return vo
-end
+calc_vo(h, ub, hr, lr) = h < hr ? ub * (hr - h) / lr : 0.0
 
 @views av(A)    = 0.25*(A[1:end-1,1:end-1].+A[2:end,1:end-1].+A[1:end-1,2:end].+A[2:end,2:end]) # average
 @views av_xa(A) = 0.5.*(A[1:end-1,:].+A[2:end,:]) # average x-dir
