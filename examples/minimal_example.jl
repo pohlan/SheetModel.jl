@@ -10,7 +10,7 @@ const S = SheetModel
 
 function run_example(;dt,
                       tsteps,               # number of timesteps
-                      plot_output=true)     # whether to produce plots from model output
+                      plotting=true)     # whether to produce plots from model output
     input_params = S.Para(
             g     = 1.0,              # gravitational acceleration
             ρw    = 1.0,              # water density
@@ -39,9 +39,9 @@ function run_example(;dt,
 
             itMax = 5*10^4,
             γ_ϕ  = 0.6,     # damping parameter for ϕ
-            γ_h  = 0.7,     # damping parameter for h
+            γ_h  = 0.8,     # damping parameter for h
             dτ_ϕ_ = 1.0,    # scaling factor for dτ_ϕ
-            dτ_h_ = 1e-7,   # scaling factor for dτ_h
+            dτ_h_ = 3e-3,   # scaling factor for dτ_h
 
             # Dimensionless numbers
             Σ   = 2.0,
@@ -53,14 +53,20 @@ function run_example(;dt,
         ϕ0 = 0.5 * ones(nx, ny)
         h0 = 0.5 * ones(nx, ny)
 
-    output = S.runthemodel_scaled(input_params, ϕ0, h0, 100, 1) # output is a struct (see model_output in SheetModel.jl) containing all the variable and error fields as well as number of iterations
+    output = S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1) # output is a struct (see model_output in SheetModel.jl) containing all the variable and error fields as well as number of iterations
 
     # plot output
     @unpack xc, yc, H = input_params
-    @unpack N, ϕ, h, qx, qy, ittot, Err_ϕ, Err_h, errs_ϕ, errs_h, errs_ϕ_res, errs_h_res, errs_ϕ_rel, errs_h_rel, Res_ϕ, Res_h, qx_ice, qy_ice = output
-    if plot_output
-        S.plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h, errs_h, errs_ϕ, errs_ϕ_res, errs_h_res, errs_ϕ_rel, errs_h_rel)
+    @unpack N, ϕ, h, qx, qy, qx_ice, qy_ice,
+            ittot, Err_ϕ, Err_h, Res_ϕ, Res_h,
+            errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
+            errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel = output
+    if plotting
+        S.plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
+                      errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
+                      errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
     end
 end
 
-run_example(dt=100, tsteps=1, plot_output=true)
+run_example(dt=1e8, tsteps=1, plotting=true)
+#run_example(dt=2e7, tsteps=5, plotting=true)

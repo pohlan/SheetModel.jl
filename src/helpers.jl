@@ -82,10 +82,12 @@ Broadcast.broadcastable(p::Para) = Ref(p)
     ittot::Int64
     errs_ϕ::Array{Float64, 1}
     errs_h::Array{Float64, 1}
-    errs_ϕ_res::Array{Float64, 1}
-    errs_h_res::Array{Float64, 1}
     errs_ϕ_rel::Array{Float64, 1}
     errs_h_rel::Array{Float64, 1}
+    errs_ϕ_res::Array{Float64, 1}
+    errs_h_res::Array{Float64, 1}
+    errs_ϕ_resrel::Array{Float64, 1}
+    errs_h_resrel::Array{Float64, 1}
 end
 Broadcast.broadcastable(out::model_output) = Ref(out)
 
@@ -196,8 +198,9 @@ function descaling(output::model_output, N_, ϕ_, h_, q_)
             Err_ϕ, Err_h , Res_ϕ, Res_h,
             ittot,
             errs_ϕ, errs_h,
+            errs_ϕ_rel, errs_h_rel,
             errs_ϕ_res, errs_h_res,
-            errs_ϕ_rel, errs_h_rel = output
+            errs_ϕ_resrel, errs_h_resrel = output
     output_descaled = model_output(
         N = N .* N_,
         ϕ = ϕ .* ϕ_,
@@ -213,10 +216,12 @@ function descaling(output::model_output, N_, ϕ_, h_, q_)
         ittot = ittot,
         errs_ϕ = errs_ϕ,
         errs_h = errs_h,
+        errs_ϕ_rel = errs_ϕ_rel,
+        errs_h_rel = errs_h_rel,
         errs_ϕ_res = errs_ϕ_res,
         errs_h_res = errs_h_res,
-        errs_ϕ_rel = errs_ϕ_rel,
-        errs_h_rel = errs_h_rel
+        errs_ϕ_resrel = errs_ϕ_resrel,
+        errs_h_resrel = errs_h_resrel
         )::model_output
     return output_descaled
 end
@@ -246,7 +251,8 @@ function initial_conditions(xc, yc, H; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) ->
 end
 
 function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
-                     errs_h, errs_ϕ, errs_ϕ_res, errs_h_res, errs_ϕ_rel, errs_h_rel)
+                     errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
+                     errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
     x_plt = [xc[1]; xc .+ (xc[2]-xc[1])]
     y_plt = [yc[1]; yc .+ (yc[2]-yc[1])]
     N[H .== 0.0] .= NaN
@@ -298,12 +304,15 @@ function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
     title("err_ϕ")
 
     figure()
-    loglog(errs_ϕ, label="err_ϕ", color="orange")
+    loglog(errs_ϕ, label="err_ϕ", color="darkorange")
     loglog(errs_h, label="err_h", color="darkblue")
-    loglog(errs_ϕ_res, label="err_ϕ_res", color="orange", linestyle="--")
-    loglog(errs_h_res, label="err_h_res", color="darkblue", linestyle="--")
-    loglog(errs_ϕ_rel, label="err_ϕ_rel", color="orange", linestyle=":")
-    loglog(errs_h_rel, label="err_h_rel", color="darkblue", linestyle=":")
+    loglog(errs_ϕ_rel, label="relative err_ϕ", color="darkorange", linestyle=":")
+    loglog(errs_h_rel, label="relative err_h", color="darkblue", linestyle=":")
+    loglog(errs_ϕ_res, label="err_ϕ_res", color="gold")
+    loglog(errs_h_res, label="err_h_res", color="deepskyblue")
+    loglog(errs_ϕ_resrel, label="relative err_ϕ_res", color="gold", linestyle=":")
+    loglog(errs_h_resrel, label="relative err_h_res", color="deepskyblue", linestyle=":")
+
     xlabel("# iterations")
     ylabel("error")
     legend()
