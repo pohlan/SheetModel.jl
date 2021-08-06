@@ -227,7 +227,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             err_h_resrel = err_h_res/err_h_ini # relative error
 
             # decide which errors should be below the tolerance and be printed out
-            err_ϕ_tol, err_h_tol = err_ϕ_res, err_h_res
+            err_ϕ_tol, err_h_tol = err_ϕ, err_h
 
             iter += 1
 

@@ -31,7 +31,7 @@ bed_val(x,y, para) = f(x,para) + g(y) * r(x, para)
 
 
 function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=10^5,
-                   dt, tsteps,
+                   dt, tsteps=1,
                    γ_ϕ=0.8, γ_h=0.9, dτ_ϕ_=1.0, dτ_h_=7e-6)      # parameters for pseudo-transient time stepping
 
     # suite A: use different steady and spatially uniform water inputs

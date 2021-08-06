@@ -20,15 +20,10 @@ end
 # Test the model output #
 # ----------------------#
 
-# repr(ϕ[1:20:end, 1:20:end]) and repr(h[1:20:end, 1:20:end])
-# ttot = ..., dt = ...
-ϕ_ref = Dict("A1"   =>  [],
-             "A2"   =>  [],
-             "A3"   =>  [],
-             "A4"   =>  [],
-             "A5"   =>  [],
-             "A6"   =>  [])
+# read the reference ϕ and h fields
+include("test_references.jl")
 
+# run the cases
 include(joinpath(@__DIR__, "../examples/SHMIP_cases.jl"))
 nx, ny = 64, 32
 ϕ_test = Dict()
@@ -39,14 +34,15 @@ test_cases = ["A1", "A2", "A3", "A4", "A5", "A6"] #,
               #"E1", "E2", "E3", "E4", "E5",
               #"F1", "F2", "F3", "F4", "F5"]
 for test_case in test_cases
-    nit, ϕ, h, rest = run_SHMIP(test_case, Nx=nx, Ny=ny)
-    ϕ_test[test_case] = ϕ
-    h_test[test_case] = h
+    inputs, outputs = run_SHMIP(test_case, Nx=nx, Ny=ny, dt = 5e7)
+    ϕ_test[test_case] = outputs.ϕ
+    h_test[test_case] = outputs.h
 end
 
+# test whether the runs agree with the references
 @testset "Model runs" begin
     for test_case in test_cases
-        @test ϕ_test[test_case][1:20:end, 1:20:end] ≈ ϕ_ref[test_case]["ϕ"]
-        @test h_test[test_case][1:20:end, 1:20:end] ≈ ϕ_ref[test_case]["h"]
+        @test ϕ_test[test_case][1:20:end, 1:10:end] ≈ ϕ_ref[test_case]
+        @test h_test[test_case][1:20:end, 1:10:end] ≈ h_ref[test_case]
     end
 end
