@@ -67,10 +67,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     qy_ice = zeros(Int, nx, ny-1)
     qy_ice  .= idx_ice[:, 1:end-1]
     qy_ice .+= idx_ice[:, 2:end]
-    qx_xlbound  = Array(Diff(idx_ice, dims=1) .== 1) # on qx grid
-    qx_xubound  = Array(Diff(idx_ice, dims=1) .== -1)
-    qy_ylbound  = Array(Diff(idx_ice, dims=2) .== 1) # on qy grid
-    qy_yubound  = Array(Diff(idx_ice, dims=2) .== -1)
+    qx_xlbound  = Diff(idx_ice, dims=1) .== 1 # on qx grid
+    qx_xubound  = Diff(idx_ice, dims=1) .== -1
+    qy_ylbound  = Diff(idx_ice, dims=2) .== 1 # on qy grid
+    qy_yubound  = Diff(idx_ice, dims=2) .== -1
 
     # Apply boundary conditions
     ϕ0, h0 = apply_bc(ϕ0, h0, H, ρw, g, zb)
