@@ -80,9 +80,6 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     h_old   = copy(h0)
     h       = copy(h0)
 
-    # initiate time loop parameters
-    t, it, ittot = 0.0, 0, 0
-
     # for iterations vs. error plot
     errs_ϕ     = Float64[]
     errs_h     = Float64[]
@@ -94,6 +91,9 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     errs_h_resrel = Float64[]
     err_ϕ_ini = 0.0
     err_h_ini = 0.0
+
+    # initiate time loop parameters
+    t = 0.0; it=0; ittot = 0; t_tic = Base.time()
 
     # Physical time loop
     while t<ttot
@@ -237,6 +237,14 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
         ϕ_old .= ϕ
         h_old .= h
     end
+
+    # Perfomance measures
+    t_toc = Base.time() - t_tic                # execution time, s
+    A_eff = (2*5+2)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
+                                               # 5 read+write arrays (ϕ, dϕ_dτ, h, dh_dτ, m), 2 read arrays (ϕ_old, h_old) --> check!
+    t_it  = t_toc/ittot                        # execution time per iteration, s
+    T_eff = A_eff/t_it                         # effective memory throughput, GB/s
+    @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
 
     # give the effective pressure as output
     N = calc_N.(ϕ, ρi, ρw, g, H, zb)
