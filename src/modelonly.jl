@@ -39,11 +39,8 @@ Apply Dirichlet boundary conditions to ϕ, at the moment pw(x=0) = 0
 function apply_bc(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with arrays as arguments
                                    # TODO: don't hard-wire, give bc as input parameters
     nx, ny = size(ϕ)
-    #ϕ[H .== 0.0] .= ρw .* g .* zb[H .== 0.0] # zero water pressure outside of glacier domain
     h[H .== 0.0] .= 0.0                       # zero sheet thickness outside of glacier domain
     ϕ[2, :] .= ρw .* g .* zb[2, :]
-
-    # ϕ[end-1,:] = ρw .* g .* zb[end-1,:]
     # ϕ[2, ny÷2+1] = ρw .* g .* zb[2, ny÷2+1]
     # if iseven(size(ϕ,2))
     #     ϕ[2, ny÷2] = ρw .* g .* zb[2, ny÷2]
@@ -147,14 +144,6 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             #qy[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
             #                        0.5 .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
 
-            # set flux boundary conditions (not necessary here, it has to be imposed before calculating gradϕ and d_eff via dϕ_d...)
-            #qx[qx_ice .== 0]   .= 0.0
-            #qy[qy_ice .== 0]   .= 0.0
-            #qx[qx_xubound] .= 0.0 # no flux boundary condition
-            #qx[qx_xlbound] .= 0.0
-            #qy[qy_ylbound] .= 0.0
-            #qy[qy_yubound] .= 0.0
-
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
             div_q[2:end-1, 2:end-1]  .= Diff(qx, dims=1)[:, 2:end-1]/dx .+ Diff(qy, dims=2)[2:end-1, :]/dy .+ small
@@ -184,12 +173,6 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             # update fields
             ϕ .= ϕ .+ dτ_ϕ .* dϕ_dτ   # update ϕ
             h .= h .+ dτ_h .* dh_dτ   # update h
-
-            # probably not going to use the following
-            # ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
-            # vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
-            # vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
-            # h .= h_old .+ dt * (Σ * vo .- Γ * vc)
 
             # apply boundary conditions
             ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
