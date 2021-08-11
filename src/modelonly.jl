@@ -16,6 +16,7 @@ Calculate effective pressure
 """
 calc_N(ϕ, ρi, ρw, g, H, zb) = ρi * g * H - calc_pw(ϕ, ρw, g, zb)
 
+
 """
 Calculate closure rate
 """
@@ -29,25 +30,163 @@ Calculate opening rate
 """
 calc_vo(h, ub, hr, lr) = h < hr ? ub * (hr - h) / lr : 0.0
 
-@views av(A)    = 0.25*(A[1:end-1,1:end-1].+A[2:end,1:end-1].+A[1:end-1,2:end].+A[2:end,2:end]) # average
-@views av_xa(A) = 0.5.*(A[1:end-1,:].+A[2:end,:]) # average x-dir
-@views av_ya(A) = 0.5.*(A[:,1:end-1].+A[:,2:end]) # average y-dir
+
+macro pw(ix, iy) esc(:(ϕ[$ix, $iy] - ρw * g * zb[$ix, $iy])) end
+
+macro N(ix, iy) esc(:(ρi * g * H[$ix, $iy] - @pw($ix, $iy))) end
+
+macro vc_(ix, iy) esc(:(Γ * 2 / n^n * A * h[$ix, $iy] * abs(@N($ix, $iy))^(n-1) * @N($ix, $iy))) end # scaled version
+
+macro vo_(ix, iy) esc(:(h[$ix, $iy] < hr ? Σ * ub * (hr - h[$ix, $iy]) / lr : 0.0)) end # scaled version
+
+macro dϕ_dx(ix, iy) esc(:( qx_ice[$ix, $iy] * qx_xubound[$ix, $iy] * qx_xlbound[$ix, $iy] # leave qx_ice away?
+                           * (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) / dx
+                        )) end
+macro dϕ_dy(ix, iy) esc(:( qy_ice[$ix, $iy] * qy_yubound[$ix, $iy] * qy_ylbound[$ix, $iy] # leave qy_ice away?
+                            * (ϕ[$ix, iy+1] - ϕ[$ix, $iy]) / dy
+                         )) end
+
+macro gradϕ(ix, iy) esc(:( sqrt(                                                      # gradϕ only defined on interior points
+                                  (0.5 * (@dϕ_dx($ix+1, $iy) + @dϕ_dx($ix, $iy)))^2
+                                + (0.5 * (@dϕ_dy($ix, iy+1) + @dϕ_dx($ix, $iy)))^2
+                                  ))) end
+macro d_eff(ix, iy) esc(:( k * h[$ix+1, iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end # d_eff only defined on interior points
+
+# upstream scheme for fluxes
+macro qx(ix, iy) esc(:( @dϕ_dx($ix, $iy) * (
+                        - @d_eff($ix, $iy)   * (@dϕ_dx($ix, $iy) >= 0)    # flux in negative x-direction
+                        - @d_eff($ix-1, $iy) * (@dϕ_dx($ix, $iy) < 0) )   # flux in positive x-direction
+                      )) end
+
+macro qy(ix, iy) esc(:( @dϕ_dy($ix, $iy) * (
+                        - @d_eff($ix, $iy)   * (@dϕ_dy($ix, $iy) >= 0)    # flux in negative y-direction
+                        - @d_eff($ix, iy-1) * (@dϕ_dy($ix, $iy) < 0) )   # flux in positive y-direction
+                      )) end
+
+macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ @d_eff($ix, $iy) / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
+
+
+### KERNEL functions ###
+
+function output_params!(N, ϕ, ρi, ρw, g, H, zb, qx, qy, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
+    for iy = 1:size(ϕ, 2)
+        for ix = 1:size(ϕ, 1)
+            N[ix, iy] = @N(ix, iy)
+            if (1 < ix < size(ϕ, 1)-1) && (iy < size(ϕ, 2)-1)
+                qx[ix, iy] = @qx(ix, iy)
+            end
+            if (1 < iy < size(ϕ, 2)-1) && (ix < size(ϕ, 1)-1)
+                qy[ix, iy] = @qy(ix, iy)
+            end
+        end
+    end
+    return
+end
+
+
+function compute_residuals!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
+                            k, α, β, small,
+                            ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
+    nx, ny = size(ϕ)
+    #Threads.@threads for iy=1:ny
+    for iy = 1:ny
+        for ix = 1:nx
+            # ϕ: without boundary points (divergence of q not defined there)
+            if ix == 2
+                Res_ϕ[ix, iy] = 0. # position where dirichlet b.c. are imposed
+            elseif (2 < ix < nx-1) && (2 < iy < ny-1)
+                Res_ϕ[ix, iy] = idx_ice[ix, iy] * (
+                                                    - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                                   # dhe/dt
+                                                    - ( (@qx(ix, iy) - @qx(ix-1, iy)) / dx + (@qy(ix, iy) - @qy(ix, iy-1)) / dy )    # divergence
+                                                    - (@vo_(ix, iy) - @vc_(ix, iy))                                                  # dh/dt
+                                                    + Λ * m[ix, iy]                                                                  # source term
+                                                    )
+            end
+
+            Res_h[ix, iy] = idx_ice[ix, iy] * (
+                                        - (h[ix, iy] - h_old[ix, iy]) / dt
+                                        + (@vo_(ix, iy) - @vc_(ix, iy))
+                                        )
+        end
+    end
+    return
+end
+
+function update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
+    #Threads.@threads for iy=1:size(ϕ, 2)
+    for iy = 1:size(ϕ, 2)
+        for ix = 1:size(ϕ, 1)
+            Δϕ[ix, iy] = abs(ϕ[ix, iy] - ϕ2[ix, iy])
+            Δh[ix, iy] = abs(h[ix, iy] - h2[ix, iy])
+        end
+    end
+    return
+end
+
+function update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
+                        k, α, β, small,
+                        ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_)
+    nx, ny = size(ϕ)
+    #Threads.@threads for iy=1:ny
+    for iy = 1:ny
+        for ix = 1:nx
+            # update ϕ: without boundary and ghost points (divergence of q not defined there)
+            if (2 < ix < nx-1) && (2 < iy < ny-1)
+                dϕ_dτ[ix-1, iy-1] = # residual
+                                    idx_ice[ix, iy] * (
+                                                       - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                                   # dhe/dt
+                                                       - ( (@qx(ix, iy) - @qx(ix-1, iy)) / dx + (@qy(ix, iy) - @qy(ix, iy-1)) / dy )    # divergence
+                                                       - (@vo_(ix, iy) - @vc_(ix, iy))                                                  # dh/dt
+                                                       + Λ * m[ix, iy]                                                                  # source term
+                                                       ) +
+                                    # damping
+                                    γ_ϕ * dϕ_dτ[ix-1, iy-1]
+
+                ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix-1, iy-1]
+            end
+
+            # update h: on all grid points
+            dh_dτ[ix, iy] = # residual
+                            idx_ice[ix, iy] * (
+                                               - (h[ix, iy] .- h_old[ix, iy]) / dt
+                                               + (@vo_(ix, iy) - @vc_(ix, iy))
+                                               ) +
+                            # damping
+                            γ_h * dh_dτ[ix, iy]
+
+            h2[ix, iy] = h[ix, iy] + dτ_h_ * dh_dτ[ix, iy]
+
+        end
+    end
+    return
+end
 
 """
 Apply Dirichlet boundary conditions to ϕ, at the moment pw(x=0) = 0
 """
-function apply_bc(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with arrays as arguments
+function apply_bc!(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with arrays as arguments
                                    # TODO: don't hard-wire, give bc as input parameters
     nx, ny = size(ϕ)
-    h[H .== 0.0] .= 0.0                       # zero sheet thickness outside of glacier domain
-    ϕ[2, :] .= ρw .* g .* zb[2, :]
-    # ϕ[2, ny÷2+1] = ρw .* g .* zb[2, ny÷2+1]
-    # if iseven(size(ϕ,2))
-    #     ϕ[2, ny÷2] = ρw .* g .* zb[2, ny÷2]
-    # end
-
-    return ϕ, h
+    #Threads.@threads for iy=1:ny
+    for iy = 1:ny
+        for ix = 1:nx
+            if H[ix, iy] == 0.             # zero sheet thickness outside of glacier domain; necessary ??
+                h[ix, iy] = 0.
+            end
+            if ix == 2
+                ϕ[ix, iy] = ρw * g * zb[ix, iy]
+            end
+            #if (ix == 2) && (iy == ny÷2+1)
+            #    ϕ[2, ny÷2+1] = ρw .* g .* zb[2, ny÷2+1]
+            #end
+            #if (ix == 2) && (iy == ny÷2) && iseven(ny)
+            #    ϕ[2, ny÷2] = ρw .* g .* zb[2, ny÷2]
+            #end
+        end
+    end
+    return
 end
+
 
 """
 Run the model with scaled parameters
@@ -55,9 +194,10 @@ Run the model with scaled parameters
 function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β, small,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
+
     # Array allocation
-    vo, vc, dϕ_dx, dϕ_dy, qx, qy, gp_ice, ix, iy, m, div_q, div_ϕ,
-    dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ = array_allocation(params)
+    Δϕ, Δh, qx, qy,  m, N,
+    dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
 
     # determine indices of glacier domain
     idx_ice = H .> 0.0
@@ -73,12 +213,14 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     qy_yubound  = Diff(idx_ice, dims=2) .== -1
 
     # Apply boundary conditions
-    ϕ0, h0 = apply_bc(ϕ0, h0, H, ρw, g, zb)
+    apply_bc!(ϕ0, h0, H, ρw, g, zb)
 
     ϕ_old   = copy(ϕ0)
     ϕ       = copy(ϕ0)
+    ϕ2      = copy(ϕ0)
     h_old   = copy(h0)
     h       = copy(h0)
+    h2      = copy(h0)
 
     # for iterations vs. error plot
     errs_ϕ     = Float64[]
@@ -89,11 +231,19 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     errs_h_res = Float64[]
     errs_ϕ_resrel = Float64[]
     errs_h_resrel = Float64[]
+    err_ϕ = 0.
+    err_h = 0.
+    err_ϕ_rel = 0.
+    err_h_rel = 0.
+    err_ϕ_res = 0.
+    err_h_res = 0.
+    err_ϕ_resrel = 0.
+    err_h_resrel = 0.
     err_ϕ_ini = 0.0
     err_h_ini = 0.0
 
     # initiate time loop parameters
-    t = 0.0; it=0; ittot = 0; t_tic = Base.time()
+    t = 0.0; tstep=0; ittot = 0; t_tic = Base.time()
 
     # Physical time loop
     while t<ttot
@@ -103,7 +253,6 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
         m .= calc_m_t(t+dt)
         # Pseudo-transient iteration
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
-        #while !(err_ϕ < tol) && iter<itMax # only solving for ϕ
             # used indices:
             # - normal grid (i,j), size (nx, ny)
             #   ϕ, h, Res_ϕ, Res_h, ..
@@ -112,109 +261,66 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             # - qy grid (m,n) staggered in y-dir.: (nx, ny-1)
             #   qy, dϕ_dy
 
-            # save current ϕ and h for error calculation
-            Err_ϕ   .= ϕ
-            Err_h   .= h
-
-            # hydraulic gradient
-            dϕ_dx   .= Diff(ϕ, dims=1) ./ dx
-            dϕ_dy   .= Diff(ϕ, dims=2) ./ dy
-
-            # flux boundary conditions
-            dϕ_dx[qx_ice .== 0] .= 0.0
-            dϕ_dy[qy_ice .== 0] .= 0.0
-            dϕ_dx[qx_xubound] .= 0.0
-            dϕ_dx[qx_xlbound] .= 0.0
-            dϕ_dy[qy_ylbound] .= 0.0
-            dϕ_dy[qy_yubound] .= 0.0
-
-            # effective diffusivity
-            gradϕ = sqrt.(av_xa(dϕ_dx[:, 2:end-1]).^2 .+ av_ya(dϕ_dy[2:end-1, :]).^2) # on ϕ/h grid, size (nx-2, ny-2)
-            d_eff .= k*h[2:end-1, 2:end-1].^α .* (gradϕ .+ small).^(β-2) # on ϕ/h grid, size (nx-2, ny-2)
-
-            # calculate fluxes
-            # upstream
-            qx[2:end-1, 2:end-1] .= (dϕ_dx[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
-                                    (dϕ_dx[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
-            qy[2:end-1, 2:end-1] .= (dϕ_dy[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
-                                    (dϕ_dy[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
             # central differences
             #qx[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
             #                        0.5 .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
             #qy[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
             #                        0.5 .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
 
-            vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
-            vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
-            div_q[2:end-1, 2:end-1]  .= Diff(qx, dims=1)[:, 2:end-1]/dx .+ Diff(qy, dims=2)[2:end-1, :]/dy .+ small
 
-            # calculate residuals
-            Res_ϕ   .=  idx_ice .* (
-                            - ev/(ρw*g) * (ϕ .- ϕ_old)/dt .-         # dhe/dt
-                            div_q .-                                 # div(q)
-                            (Σ * vo .- Γ * vc)            .+         # dh/dt
-                            Λ * m                                    # source term
-                            )
-            Res_h   .=  idx_ice .* (
-                            - (h .- h_old) / dt  .+
-                            (Σ * vo .- Γ * vc)
-                            )
 
             # determine pseudo-time steps
             #dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1)
             #dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1)) .^(-1) # with this, if eq. are time-independent, #iterations is indep. of dt
-            dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* min.(min(dx, dy)^2 ./ d_eff / 4.1, dt)
-            dτ_h   = dτ_h_   # pseudo-time step for h, scalar
+            #dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* min.(min(dx, dy)^2 ./ d_eff / 4.1, dt)
+            #dτ_h   = dτ_h_   # pseudo-time step for h, scalar
 
-            # damped rate of change
-            dϕ_dτ .= Res_ϕ .+ γ_ϕ .* dϕ_dτ
-            dh_dτ .= Res_h .+ γ_h .* dh_dτ
 
-            # update fields
-            ϕ .= ϕ .+ dτ_ϕ .* dϕ_dτ   # update ϕ
-            h .= h .+ dτ_h .* dh_dτ   # update h
+            update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
+                           k, α, β, small,
+                           ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_)
 
             # apply boundary conditions
-            ϕ, h = apply_bc(ϕ, h, H, ρw, g, zb)
+            apply_bc!(ϕ2, h2, H, ρw, g, zb)
+
+            # switch pointer
+            ϕ, ϕ2 = ϕ2, ϕ
+            h, h2 = h2, h
 
             # determine the errors (only consider points where the ice thickness is > 0)
-            # error for ϕ
 
-            # from Err - ϕ
-            Err_ϕ .= abs.(Err_ϕ .- ϕ) # ./ dτ_ϕ
-            #err_ϕ = norm(Err_ϕ[idx_ice]) ./ norm(Λ * m)
-            err_ϕ = norm(Err_ϕ[idx_ice]) ./ sum(idx_ice)
-            if (iter==1)  err_ϕ_ini = err_ϕ  end
-            err_ϕ_rel = err_ϕ/err_ϕ_ini # relative error
+            if iter % 100 == 0
+                # residual error
+                compute_residuals!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
+                                  k, α, β, small,
+                                  ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
+                err_ϕ_res = norm(Res_ϕ[idx_ice]) / sum(idx_ice) # or length(Res_ϕ) instead of sum(idx_ice) ??
+                err_h_res = norm(Res_h[idx_ice]) / sum(idx_ice)
+                if (iter==0)
+                    err_ϕ_ini = err_ϕ_res
+                    err_h_ini = err_h_res
+                end
+                err_ϕ_resrel = err_ϕ_res / err_ϕ_ini
+                err_h_resrel = err_h_res / err_h_ini
 
-            # from residual
-            Res_ϕ[2, :] .= 0.0 # residual at b.c. should not be part of ϕ error
-            #err_ϕ_res = norm(Res_ϕ[idx_ice]) / norm(Λ * m)
-            err_ϕ_res = norm(Res_ϕ[idx_ice]) /sum(idx_ice)
-            if (iter==1)  err_ϕ_ini = err_ϕ_res  end
-            err_ϕ_resrel = err_ϕ_res/err_ϕ_ini # relative error
+                # update error
+                update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
+                err_ϕ = norm(Δϕ[idx_ice]) / sum(idx_ice)
+                err_h = norm(Δh[idx_ice]) / sum(idx_ice)
+                if (iter==0)
+                    err_ϕ_ini = err_ϕ
+                    err_h_ini = err_h
+                end
+                err_ϕ_rel = err_ϕ / err_ϕ_ini
+                err_h_rel = err_h / err_h_ini
 
-            # error for h
-
-            # from Error - h
-            Err_h .= abs.(Err_h .- h)
-            err_h = norm(Err_h[idx_ice]) ./ norm(h0)
-            #err_h = norm(Err_h[idx_ice]) ./ sum(idx_ice)
-            if (iter==1)  err_h_ini = err_h  end
-            err_h_rel = err_h/err_h_ini # relative error
-
-            # from residual
-            err_h_res   = norm(Res_h[idx_ice]) / norm(h0)
-            #err_h_res   = norm(Res_h[idx_ice]) / sum(idx_ice)
-            if (iter==1)  err_h_ini = err_h_res  end
-            err_h_resrel = err_h_res/err_h_ini # relative error
-
-            # decide which errors should be below the tolerance and be printed out
-            err_ϕ_tol, err_h_tol = err_ϕ, err_h
+                # decide which errors should be below the tolerance and be printed out
+                err_ϕ_tol, err_h_tol = err_ϕ, err_h
+            end
 
             iter += 1
 
-            if mod(iter, printit) == 0
+            if iter % printit == 0
                 @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
             end
 
@@ -229,10 +335,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             append!(errs_h_resrel, err_h_resrel)
 
         end
-        ittot += iter; it += 1; t += dt
-        if mod(it, printtime) == 0
-            @printf("time step = %d, number of iterations = %d \n", it, iter)
-        end
+        ittot += iter; tstep += 1; t += dt
+        #if mod(tstep, printtime) == 0
+        #    @printf("time step = %d, number of iterations = %d \n", tstep, iter)
+        #end
 
         ϕ_old .= ϕ
         h_old .= h
@@ -246,14 +352,26 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     T_eff = A_eff/t_it                         # effective memory throughput, GB/s
     @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
 
-    # give the effective pressure as output
-    N = calc_N.(ϕ, ρi, ρw, g, H, zb)
+    # calculate N, qx and qy as output parameters
+    output_params!(N, ϕ, ρi, ρw, g, H, zb, qx, qy, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
 
     return model_output(N=N, ϕ=ϕ, h=h, qx=qx, qy=qy, qx_ice=qx_ice, qy_ice=qy_ice,
-            Err_ϕ=Err_ϕ, Err_h=Err_h, Res_ϕ=Res_ϕ, Res_h=Res_h,
+            Err_ϕ=Δϕ, Err_h=Δh, Res_ϕ=Res_ϕ, Res_h=Res_h,
             ittot=ittot,
             errs_ϕ=errs_ϕ, errs_h=errs_h,
             errs_ϕ_rel=errs_ϕ_rel, errs_h_rel=errs_h_rel,
             errs_ϕ_res=errs_ϕ_res, errs_h_res=errs_h_res,
             errs_ϕ_resrel=errs_ϕ_resrel, errs_h_resrel=errs_h_resrel)
+end
+
+"""
+Scale the parameters and call the model run function
+"""
+function runthemodel(input::Para, ϕ0, h0;
+                    printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
+                    printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
+    params, ϕ0, h0, ϕ_, N_, h_, q_ = scaling(input, ϕ0, h0)
+    output = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
+    output_descaled = descaling(output, N_, ϕ_, h_, q_)
+    return output_descaled
 end

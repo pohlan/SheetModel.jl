@@ -96,27 +96,17 @@ Pre-allocate arrays
 """
 function array_allocation(nu::Para)
     @unpack nx, ny = nu
-    vo     = zeros(nx, ny)
-    vc     = zeros(nx, ny)
-    dϕ_dx  = zeros(nx-1, ny)
-    dϕ_dy  = zeros(nx, ny-1)
+    Δϕ     = zeros(nx, ny)
+    Δh     = zeros(nx, ny)
     qx     = zeros(nx-1, ny)
     qy     = zeros(nx, ny-1)
-    gp_ice  = zeros(Int, nx+2, ny+2)
-    ix     = zeros(Int, nx-1, ny)
-    iy     = zeros(Int, nx, ny-1)
     m      = zeros(nx, ny)
-    div_q  = zeros(nx, ny)
-    div_ϕ  = zeros(nx, ny)
+    N      = zeros(nx, ny)
     dϕ_dτ  = zeros(nx, ny)
     dh_dτ  = zeros(nx, ny)
     Res_ϕ  = zeros(nx, ny)
     Res_h  = zeros(nx, ny)
-    Err_ϕ  = zeros(nx, ny)
-    Err_h  = zeros(nx, ny)
-    d_eff  = zeros(nx-2, ny-2)
-    dτ_ϕ   = zeros(nx, ny)
-    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, gp_ice, ix, iy, m, div_q, div_ϕ, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ
+    return Δϕ, Δh, qx, qy,  m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h
 end
 
 """
@@ -226,17 +216,6 @@ function descaling(output::model_output, N_, ϕ_, h_, q_)
     return output_descaled
 end
 
-"""
-Scale the parameters and call the model run function
-"""
-function runthemodel(input::Para, ϕ0, h0;
-                    printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
-                    printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
-    params, ϕ0, h0, ϕ_, N_, h_, q_ = scaling(input, ϕ0, h0)
-    output = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
-    output_descaled = descaling(output, N_, ϕ_, h_, q_)
-    return output_descaled
-end
 
 #----------------------------------#
 # Functions used in SHMIP_cases.jl #
