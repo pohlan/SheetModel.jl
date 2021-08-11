@@ -31,8 +31,8 @@ h_test = Dict()
 nit_test = Dict()
 test_cases = ["A1", "A2", "A3", "A4", "A5", "A6"] #,
               #"D1", "D2", "D3", "D4", "D5",
-              #"E1", "E2", "E3", "E4", "E5",
-              #"F1", "F2", "F3", "F4", "F5"]
+              #"E1", "E2", "E3", "E4", "E5",      # not referenced yet
+              #"F1", "F2", "F3", "F4", "F5"]      # not referenced yet
 for test_case in test_cases
     inputs, outputs = run_SHMIP(test_case, Nx=nx, Ny=ny, dt = 5e7)
     ϕ_test[test_case] = outputs.ϕ
