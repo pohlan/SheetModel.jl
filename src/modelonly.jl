@@ -39,31 +39,33 @@ macro vc_(ix, iy) esc(:(Γ * 2 / n^n * A * h[$ix, $iy] * abs(@N($ix, $iy))^(n-1)
 
 macro vo_(ix, iy) esc(:(h[$ix, $iy] < hr ? Σ * ub * (hr - h[$ix, $iy]) / lr : 0.0)) end # scaled version
 
-macro dϕ_dx(ix, iy) esc(:( qx_ice[$ix, $iy] * qx_xubound[$ix, $iy] * qx_xlbound[$ix, $iy] # leave qx_ice away?
+macro dϕ_dx(ix, iy) esc(:( (qx_ice[$ix, $iy] == 2) #* !qx_xubound[$ix, $iy] * !qx_xlbound[$ix, $iy] # leave qx_ice away?
                            * (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) / dx
                         )) end
-macro dϕ_dy(ix, iy) esc(:( qy_ice[$ix, $iy] * qy_yubound[$ix, $iy] * qy_ylbound[$ix, $iy] # leave qy_ice away?
-                            * (ϕ[$ix, iy+1] - ϕ[$ix, $iy]) / dy
+macro dϕ_dy(ix, iy) esc(:( (qy_ice[$ix, $iy] == 2) #* !qy_yubound[$ix, $iy] * !qy_ylbound[$ix, $iy] # leave qy_ice away?
+                            * (ϕ[$ix, $iy+1] - ϕ[$ix, $iy]) / dy
                          )) end
 
 macro gradϕ(ix, iy) esc(:( sqrt(                                                      # gradϕ only defined on interior points
                                   (0.5 * (@dϕ_dx($ix+1, $iy) + @dϕ_dx($ix, $iy)))^2
-                                + (0.5 * (@dϕ_dy($ix, iy+1) + @dϕ_dx($ix, $iy)))^2
+                                + (0.5 * (@dϕ_dy($ix, $iy+1) + @dϕ_dy($ix, $iy)))^2
                                   ))) end
-macro d_eff(ix, iy) esc(:( k * h[$ix+1, iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end # d_eff only defined on interior points
+macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end # d_eff only defined on interior points
 
 # upstream scheme for fluxes
-macro qx(ix, iy) esc(:( @dϕ_dx($ix, $iy) * (
-                        - @d_eff($ix, $iy)   * (@dϕ_dx($ix, $iy) >= 0)    # flux in negative x-direction
-                        - @d_eff($ix-1, $iy) * (@dϕ_dx($ix, $iy) < 0) )   # flux in positive x-direction
-                      )) end
+#macro qx(ix, iy) esc(:( @dϕ_dx($ix, $iy) * (
+#                        - @d_eff($ix, $iy)   * (@dϕ_dx($ix, $iy) >= 0)    # flux in negative x-direction
+#                        - @d_eff($ix-1, $iy) * (@dϕ_dx($ix, $iy) < 0) )   # flux in positive x-direction
+#                      )) end
 
-macro qy(ix, iy) esc(:( @dϕ_dy($ix, $iy) * (
-                        - @d_eff($ix, $iy)   * (@dϕ_dy($ix, $iy) >= 0)    # flux in negative y-direction
-                        - @d_eff($ix, iy-1) * (@dϕ_dy($ix, $iy) < 0) )   # flux in positive y-direction
-                      )) end
+#macro qy(ix, iy) esc(:( @dϕ_dy($ix, $iy) * (
+#                        - @d_eff($ix, $iy)   * (@dϕ_dy($ix, $iy) >= 0)    # flux in negative y-direction
+#                        - @d_eff($ix, iy-1) * (@dϕ_dy($ix, $iy) < 0) )   # flux in positive y-direction
+#                      )) end
 
-macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ @d_eff($ix, $iy) / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
+
+#macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ @d_eff($ix, $iy) / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
+macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / @d_eff($ix, $iy) / 4.1, dt))) end
 
 
 ### KERNEL functions ###
@@ -72,12 +74,12 @@ function output_params!(N, ϕ, ρi, ρw, g, H, zb, qx, qy, dx, dy, k, h, α, β,
     for iy = 1:size(ϕ, 2)
         for ix = 1:size(ϕ, 1)
             N[ix, iy] = @N(ix, iy)
-            if (1 < ix < size(ϕ, 1)-1) && (iy < size(ϕ, 2)-1)
-                qx[ix, iy] = @qx(ix, iy)
-            end
-            if (1 < iy < size(ϕ, 2)-1) && (ix < size(ϕ, 1)-1)
-                qy[ix, iy] = @qy(ix, iy)
-            end
+            #if (1 < ix < size(ϕ, 1)-1) && (iy < size(ϕ, 2)-1)
+            #    qx[ix, iy] = @qx(ix, iy)
+            #end
+            #if (1 < iy < size(ϕ, 2)-1) && (ix < size(ϕ, 1)-1)
+            #    qy[ix, iy] = @qy(ix, iy)
+            #end
         end
     end
     return
@@ -85,7 +87,7 @@ end
 
 
 function compute_residuals!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
-                            k, α, β, small,
+                            k, α, β, small, qx, qy,
                             ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
     nx, ny = size(ϕ)
     #Threads.@threads for iy=1:ny
@@ -97,7 +99,7 @@ function compute_residuals!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_
             elseif (2 < ix < nx-1) && (2 < iy < ny-1)
                 Res_ϕ[ix, iy] = idx_ice[ix, iy] * (
                                                     - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                                   # dhe/dt
-                                                    - ( (@qx(ix, iy) - @qx(ix-1, iy)) / dx + (@qy(ix, iy) - @qy(ix, iy-1)) / dy )    # divergence
+                                                    - ( (qx[ix, iy] - qx[ix-1, iy]) / dx + (qy[ix, iy] - qy[ix, iy-1]) / dy )    # divergence
                                                     - (@vo_(ix, iy) - @vc_(ix, iy))                                                  # dh/dt
                                                     + Λ * m[ix, iy]                                                                  # source term
                                                     )
@@ -123,8 +125,42 @@ function update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
     return
 end
 
+function flux_x!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
+    nx, ny = size(ϕ)
+    #Threads.@threads for iy=1:ny
+    for iy = 1:ny-2
+        for ix = 1:nx-1
+            qx[ix, iy] = @dϕ_dx(ix, iy)
+            if ix < nx-1
+                qx[ix, iy] *= - @d_eff(ix, iy) * (@dϕ_dx(ix, iy) >= 0)   # flux in negative x-direction
+            end
+            if ix > 1
+                qx[ix, iy] *= - @d_eff(ix-1, iy) * (@dϕ_dx(ix, iy) < 0)  # flux in positive x-direction
+            end
+        end
+    end
+    return
+end
+
+function flux_y!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
+    nx, ny = size(ϕ)
+    #Threads.@threads for iy=1:ny-1
+    for iy = 1:ny-1
+        for ix = 1:nx-2
+            qy[ix, iy] = @dϕ_dy(ix, iy)
+            if iy < ny-1
+                qy[ix, iy] *= - @d_eff(ix, iy) * (@dϕ_dy(ix, iy) >= 0)   # flux in negative y-direction
+            end
+            if iy > 1
+                qy[ix, iy] *= - @d_eff(ix, iy-1) * (@dϕ_dy(ix, iy) < 0)  # flux in positive y-direction
+            end
+        end
+    end
+    return
+end
+
 function update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
-                        k, α, β, small,
+                        k, α, β, small, qx, qy,
                         ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_)
     nx, ny = size(ϕ)
     #Threads.@threads for iy=1:ny
@@ -135,7 +171,7 @@ function update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx
                 dϕ_dτ[ix-1, iy-1] = # residual
                                     idx_ice[ix, iy] * (
                                                        - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                                   # dhe/dt
-                                                       - ( (@qx(ix, iy) - @qx(ix-1, iy)) / dx + (@qy(ix, iy) - @qy(ix, iy-1)) / dy )    # divergence
+                                                       - ( (qx[ix, iy] - qx[ix-1, iy]) / dx + (qy[ix, iy] - qy[ix, iy-1]) / dy )    # divergence
                                                        - (@vo_(ix, iy) - @vc_(ix, iy))                                                  # dh/dt
                                                        + Λ * m[ix, iy]                                                                  # source term
                                                        ) +
@@ -275,9 +311,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             #dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* min.(min(dx, dy)^2 ./ d_eff / 4.1, dt)
             #dτ_h   = dτ_h_   # pseudo-time step for h, scalar
 
-
+            flux_x!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
+            flux_y!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
             update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
-                           k, α, β, small,
+                           k, α, β, small, qx, qy,
                            ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_)
 
             # apply boundary conditions
@@ -292,10 +329,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             if iter % 100 == 0
                 # residual error
                 compute_residuals!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
-                                  k, α, β, small,
+                                  k, α, β, small, qx, qy,
                                   ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
                 err_ϕ_res = norm(Res_ϕ[idx_ice]) / sum(idx_ice) # or length(Res_ϕ) instead of sum(idx_ice) ??
-                err_h_res = norm(Res_h[idx_ice]) / sum(idx_ice)
+                err_h_res = norm(Res_h[idx_ice]) / norm(h0)
                 if (iter==0)
                     err_ϕ_ini = err_ϕ_res
                     err_h_ini = err_h_res
@@ -306,7 +343,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
                 # update error
                 update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
                 err_ϕ = norm(Δϕ[idx_ice]) / sum(idx_ice)
-                err_h = norm(Δh[idx_ice]) / sum(idx_ice)
+                err_h = norm(Δh[idx_ice]) / norm(h0)
                 if (iter==0)
                     err_ϕ_ini = err_ϕ
                     err_h_ini = err_h
