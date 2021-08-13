@@ -35,9 +35,9 @@ macro pw(ix, iy) esc(:(ϕ[$ix, $iy] - ρw * g * zb[$ix, $iy])) end
 
 macro N(ix, iy) esc(:(ρi * g * H[$ix, $iy] - @pw($ix, $iy))) end
 
-macro vc_(ix, iy) esc(:(Γ * 2 / n^n * A * h[$ix, $iy] * abs(@N($ix, $iy))^(n-1) * @N($ix, $iy))) end # scaled version
+macro vc_(ix, iy) esc(:(2 / n^n * A * h[$ix, $iy] * abs(@N($ix, $iy))^(n-1) * @N($ix, $iy))) end # scaled version
 
-macro vo_(ix, iy) esc(:(h[$ix, $iy] < hr ? Σ * ub * (hr - h[$ix, $iy]) / lr : 0.0)) end # scaled version
+macro vo_(ix, iy) esc(:(h[$ix, $iy] < hr ? ub * (hr - h[$ix, $iy]) / lr : 0.0)) end # scaled version
 
 macro dϕ_dx(ix, iy) esc(:( (qx_ice[$ix, $iy] == 2) #* !qx_xubound[$ix, $iy] * !qx_xlbound[$ix, $iy] # leave qx_ice away?
                            * (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) / dx
@@ -47,8 +47,8 @@ macro dϕ_dy(ix, iy) esc(:( (qy_ice[$ix, $iy] == 2) #* !qy_yubound[$ix, $iy] * !
                          )) end
 
 macro gradϕ(ix, iy) esc(:( sqrt(                                                      # gradϕ only defined on interior points
-                                  (0.5 * (@dϕ_dx($ix+1, $iy) + @dϕ_dx($ix, $iy)))^2
-                                + (0.5 * (@dϕ_dy($ix, $iy+1) + @dϕ_dy($ix, $iy)))^2
+                                  (0.5 * (@dϕ_dx($ix+1, $iy+1) + @dϕ_dx($ix, $iy+1)))^2
+                                + (0.5 * (@dϕ_dy($ix+1, $iy+1) + @dϕ_dy($ix+1, $iy)))^2
                                   ))) end
 macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end # d_eff only defined on interior points
 
@@ -100,14 +100,14 @@ function compute_residuals!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_
                 Res_ϕ[ix, iy] = idx_ice[ix, iy] * (
                                                     - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                                   # dhe/dt
                                                     - ( (qx[ix, iy] - qx[ix-1, iy]) / dx + (qy[ix, iy] - qy[ix, iy-1]) / dy )    # divergence
-                                                    - (@vo_(ix, iy) - @vc_(ix, iy))                                                  # dh/dt
+                                                    - (Σ * @vo_(ix, iy) - Γ * @vc_(ix, iy))                                                   # dh/dt
                                                     + Λ * m[ix, iy]                                                                  # source term
                                                     )
             end
 
             Res_h[ix, iy] = idx_ice[ix, iy] * (
                                         - (h[ix, iy] - h_old[ix, iy]) / dt
-                                        + (@vo_(ix, iy) - @vc_(ix, iy))
+                                        + (Σ * @vo_(ix, iy) - Γ * @vc_(ix, iy))
                                         )
         end
     end
@@ -128,15 +128,15 @@ end
 function flux_x!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
     nx, ny = size(ϕ)
     #Threads.@threads for iy=1:ny
-    for iy = 1:ny-2
-        for ix = 1:nx-1
-            qx[ix, iy] = @dϕ_dx(ix, iy)
-            if ix < nx-1
-                qx[ix, iy] *= - @d_eff(ix, iy) * (@dϕ_dx(ix, iy) >= 0)   # flux in negative x-direction
-            end
-            if ix > 1
-                qx[ix, iy] *= - @d_eff(ix-1, iy) * (@dϕ_dx(ix, iy) < 0)  # flux in positive x-direction
-            end
+    for iy = 2:ny-1
+        for ix = 2:nx-2
+            qx[ix, iy] = 0.
+            #if ix < nx-1
+                qx[ix, iy] += - @d_eff(ix, iy-1) * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) >= 0)   # flux in negative x-direction
+            #end@
+            #if ix > 1
+                qx[ix, iy] += - @d_eff(ix-1, iy-1) * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) < 0)  # flux in positive x-direction
+            #end
         end
     end
     return
@@ -145,15 +145,15 @@ end
 function flux_y!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
     nx, ny = size(ϕ)
     #Threads.@threads for iy=1:ny-1
-    for iy = 1:ny-1
-        for ix = 1:nx-2
-            qy[ix, iy] = @dϕ_dy(ix, iy)
-            if iy < ny-1
-                qy[ix, iy] *= - @d_eff(ix, iy) * (@dϕ_dy(ix, iy) >= 0)   # flux in negative y-direction
-            end
-            if iy > 1
-                qy[ix, iy] *= - @d_eff(ix, iy-1) * (@dϕ_dy(ix, iy) < 0)  # flux in positive y-direction
-            end
+    for iy = 2:ny-2
+        for ix = 2:nx-1
+            qy[ix, iy] = 0.
+            #if iy < ny-1
+                qy[ix, iy] += - @d_eff(ix-1, iy) * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) >= 0)   # flux in negative y-direction
+            #end
+            #if iy > 1
+                qy[ix, iy] += - @d_eff(ix-1, iy-1)  * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) < 0)  # flux in positive y-direction
+            #end
         end
     end
     return
@@ -172,7 +172,7 @@ function update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx
                                     idx_ice[ix, iy] * (
                                                        - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                                   # dhe/dt
                                                        - ( (qx[ix, iy] - qx[ix-1, iy]) / dx + (qy[ix, iy] - qy[ix, iy-1]) / dy )    # divergence
-                                                       - (@vo_(ix, iy) - @vc_(ix, iy))                                                  # dh/dt
+                                                       - (Σ * @vo_(ix, iy) - Γ * @vc_(ix, iy))                                                  # dh/dt
                                                        + Λ * m[ix, iy]                                                                  # source term
                                                        ) +
                                     # damping
@@ -185,7 +185,7 @@ function update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx
             dh_dτ[ix, iy] = # residual
                             idx_ice[ix, iy] * (
                                                - (h[ix, iy] .- h_old[ix, iy]) / dt
-                                               + (@vo_(ix, iy) - @vc_(ix, iy))
+                                               + (Σ * @vo_(ix, iy) - Γ * @vc_(ix, iy))
                                                ) +
                             # damping
                             γ_h * dh_dτ[ix, iy]
