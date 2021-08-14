@@ -96,7 +96,7 @@ function compute_residuals!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_
             # ϕ: without boundary points (divergence of q not defined there)
             if ix == 2
                 Res_ϕ[ix, iy] = 0. # position where dirichlet b.c. are imposed
-            elseif (2 < ix < nx-1) && (2 < iy < ny-1)
+            elseif (1 < ix < nx) && (1 < iy < ny)
                 Res_ϕ[ix, iy] = idx_ice[ix, iy] * (
                                                     - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                                   # dhe/dt
                                                     - ( (qx[ix, iy] - qx[ix-1, iy]) / dx + (qy[ix, iy] - qy[ix, iy-1]) / dy )    # divergence
@@ -167,8 +167,8 @@ function update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx
     for iy = 1:ny
         for ix = 1:nx
             # update ϕ: without boundary and ghost points (divergence of q not defined there)
-            if (2 < ix < nx-1) && (2 < iy < ny-1)
-                dϕ_dτ[ix-1, iy-1] = # residual
+            if (1 < ix < nx) && (1 < iy < ny)
+                dϕ_dτ[ix, iy] = # residual
                                     idx_ice[ix, iy] * (
                                                        - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                                   # dhe/dt
                                                        - ( (qx[ix, iy] - qx[ix-1, iy]) / dx + (qy[ix, iy] - qy[ix, iy-1]) / dy )    # divergence
@@ -176,9 +176,9 @@ function update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx
                                                        + Λ * m[ix, iy]                                                                  # source term
                                                        ) +
                                     # damping
-                                    γ_ϕ * dϕ_dτ[ix-1, iy-1]
+                                    γ_ϕ * dϕ_dτ[ix, iy]
 
-                ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix-1, iy-1]
+                ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
             end
 
             # update h: on all grid points
