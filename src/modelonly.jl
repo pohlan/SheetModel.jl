@@ -67,6 +67,9 @@ macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^
 #macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ @d_eff($ix, $iy) / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
 macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / @d_eff($ix, $iy) / 4.1, dt))) end
 
+@views av(A)    = 0.25*(A[1:end-1,1:end-1].+A[2:end,1:end-1].+A[1:end-1,2:end].+A[2:end,2:end]) # average
+@views av_xa(A) = 0.5.*(A[1:end-1,:].+A[2:end,:]) # average x-dir
+@views av_ya(A) = 0.5.*(A[:,1:end-1].+A[:,2:end]) # average y-dir
 
 ### KERNEL functions ###
 
@@ -278,6 +281,13 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     err_ϕ_ini = 0.0
     err_h_ini = 0.0
 
+    qx_test = zeros(nx-1, ny)
+    qy_test = zeros(nx, ny-1)
+    div_q   = zeros(nx, ny)
+    dϕ_dτ_test = zeros(nx, ny)
+    dh_dτ_test = zeros(nx, ny)
+    dτ_ϕ  = zeros(nx, ny)
+
     # initiate time loop parameters
     t = 0.0; tstep=0; ittot = 0; t_tic = Base.time()
 
@@ -297,25 +307,74 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             # - qy grid (m,n) staggered in y-dir.: (nx, ny-1)
             #   qy, dϕ_dy
 
+
+            # hydraulic gradient
+            dϕ_dx_test   = diff(ϕ, dims=1) ./ dx
+            dϕ_dy_test   = diff(ϕ, dims=2) ./ dy
+
+            # flux boundary conditions
+            dϕ_dx_test[qx_ice .== 0] .= 0.0
+            dϕ_dy_test[qy_ice .== 0] .= 0.0
+            dϕ_dx_test[qx_xubound] .= 0.0
+            dϕ_dx_test[qx_xlbound] .= 0.0
+            dϕ_dy_test[qy_ylbound] .= 0.0
+            dϕ_dy_test[qy_yubound] .= 0.0
+
+            # effective diffusivity
+            gradϕ_test = sqrt.(av_xa(dϕ_dx_test[:, 2:end-1]).^2 .+ av_ya(dϕ_dy_test[2:end-1, :]).^2) # on ϕ/h grid, size (nx-2, ny-2)
+            d_eff_test = k*h[2:end-1, 2:end-1].^α .* (gradϕ_test .+ small).^(β-2) # on ϕ/h grid, size (nx-2, ny-2)
+
+            # calculate fluxes
+            # upstream
+            qx_test[2:end-1, 2:end-1] .= (dϕ_dx_test[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff_test[2:end, :]   .* dϕ_dx_test[2:end-1, 2:end-1]) .+
+                                    (dϕ_dx_test[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff_test[1:end-1, :] .* dϕ_dx_test[2:end-1, 2:end-1])
+            qy_test[2:end-1, 2:end-1] .= (dϕ_dy_test[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff_test[:, 2:end]   .* dϕ_dy_test[2:end-1, 2:end-1]) .+
+                                    (dϕ_dy_test[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff_test[:, 1:end-1] .* dϕ_dy_test[2:end-1, 2:end-1])
             # central differences
             #qx[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
             #                        0.5 .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
             #qy[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
             #                        0.5 .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
 
+            vo     = calc_vo.(h, ub, hr, lr)                 # opening rate
+            vc     = calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
+            div_q[2:end-1, 2:end-1]  .= diff(qx_test, dims=1)[:, 2:end-1]/dx .+ diff(qy_test, dims=2)[2:end-1, :]/dy .+ small
 
+            # calculate residuals
+            Res_ϕ_test   =  idx_ice .* (
+                            - ev/(ρw*g) * (ϕ .- ϕ_old)/dt .-         # dhe/dt
+                            div_q .-                                 # div(q)
+                            (Σ * vo .- Γ * vc)            .+         # dh/dt
+                            Λ * m                                    # source term
+                            )
+            Res_h_test   =  idx_ice .* (
+                            - (h .- h_old) / dt  .+
+                            (Σ * vo .- Γ * vc)
+                            )
 
             # determine pseudo-time steps
             #dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1)
             #dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1)) .^(-1) # with this, if eq. are time-independent, #iterations is indep. of dt
-            #dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* min.(min(dx, dy)^2 ./ d_eff / 4.1, dt)
-            #dτ_h   = dτ_h_   # pseudo-time step for h, scalar
+            dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* min.(min(dx, dy)^2 ./ d_eff_test / 4.1, dt)
+            dτ_h   = dτ_h_   # pseudo-time step for h, scalar
+
+            # damped rate of change
+            dϕ_dτ_test = Res_ϕ_test .+ γ_ϕ .* dϕ_dτ_test
+            dh_dτ_test = Res_h_test .+ γ_h .* dh_dτ_test
+
+            # update fields
+            ϕ_test = ϕ .+ dτ_ϕ .* dϕ_dτ_test   # update ϕ
+            h_test = h .+ dτ_h .* dh_dτ_test   # update h
 
             flux_x!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
             flux_y!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
             update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
                            k, α, β, small, qx, qy,
                            ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_)
+
+            if (ϕ2 != ϕ_test) && iter < 100
+                print(join(["iter=", iter]))
+            end
 
             # apply boundary conditions
             apply_bc!(ϕ2, h2, H, ρw, g, zb)
