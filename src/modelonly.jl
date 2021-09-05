@@ -286,7 +286,9 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     div_q   = zeros(nx, ny)
     dϕ_dτ_test = zeros(nx, ny)
     dh_dτ_test = zeros(nx, ny)
-    dτ_ϕ  = zeros(nx, ny)
+    dτ_ϕ_test  = zeros(nx, ny)
+    h_test = copy(h0)
+    ϕ_test = copy(ϕ0)
 
     # initiate time loop parameters
     t = 0.0; tstep=0; ittot = 0; t_tic = Base.time()
@@ -336,9 +338,9 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             #qy[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
             #                        0.5 .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
 
-            vo     = calc_vo.(h, ub, hr, lr)                 # opening rate
-            vc     = calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
-            div_q[2:end-1, 2:end-1]  .= diff(qx_test, dims=1)[:, 2:end-1]/dx .+ diff(qy_test, dims=2)[2:end-1, :]/dy .+ small
+            vo     = calc_vo.(h_test, ub, hr, lr)                 # opening rate
+            vc     = calc_vc.(ϕ_test, h_test, ρi, ρw, g, H, zb, n, A)  # closure rate
+            div_q[2:end-1, 2:end-1]  .= diff(qx_test, dims=1)[:, 2:end-1]/dx .+ diff(qy_test, dims=2)[2:end-1, :]/dy
 
             # calculate residuals
             Res_ϕ_test   =  idx_ice .* (
@@ -355,16 +357,16 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             # determine pseudo-time steps
             #dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1)
             #dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1)) .^(-1) # with this, if eq. are time-independent, #iterations is indep. of dt
-            dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* min.(min(dx, dy)^2 ./ d_eff_test / 4.1, dt)
-            dτ_h   = dτ_h_   # pseudo-time step for h, scalar
+            dτ_ϕ_test[2:end-1, 2:end-1] .= dτ_ϕ_ .* min.(min(dx, dy)^2 ./ d_eff_test / 4.1, dt)
+            dτ_h_test   = dτ_h_   # pseudo-time step for h, scalar
 
             # damped rate of change
             dϕ_dτ_test = Res_ϕ_test .+ γ_ϕ .* dϕ_dτ_test
             dh_dτ_test = Res_h_test .+ γ_h .* dh_dτ_test
 
             # update fields
-            ϕ_test = ϕ .+ dτ_ϕ .* dϕ_dτ_test   # update ϕ
-            h_test = h .+ dτ_h .* dh_dτ_test   # update h
+            ϕ_test = ϕ .+ dτ_ϕ_test .* dϕ_dτ_test   # update ϕ
+            h_test = h .+ dτ_h_test .* dh_dτ_test   # update h
 
             flux_x!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
             flux_y!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
@@ -378,6 +380,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # apply boundary conditions
             apply_bc!(ϕ2, h2, H, ρw, g, zb)
+            apply_bc!(ϕ_test, h_test, H, ρw, g, zb)
 
             # switch pointer
             ϕ, ϕ2 = ϕ2, ϕ
