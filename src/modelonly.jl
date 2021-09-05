@@ -146,7 +146,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             vo     .= calc_vo.(h, ub, hr, lr)                 # opening rate
             vc     .= calc_vc.(ϕ, h, ρi, ρw, g, H, zb, n, A)  # closure rate
-            div_q[2:end-1, 2:end-1]  .= Diff(qx, dims=1)[:, 2:end-1]/dx .+ Diff(qy, dims=2)[2:end-1, :]/dy .+ small
+            div_q[2:end-1, 2:end-1]  .= Diff(qx, dims=1)[:, 2:end-1]/dx .+ Diff(qy, dims=2)[2:end-1, :]/dy
 
             # calculate residuals
             Res_ϕ   .=  idx_ice .* (
