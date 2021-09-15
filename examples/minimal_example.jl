@@ -37,7 +37,7 @@ function run_example(;dt,
             dt   = dt,                  # time step
             ttot = dt * tsteps,         # total time
 
-            itMax = 5*10^4,
+            itMax = 10^3,
             γ_ϕ  = 0.6,     # damping parameter for ϕ
             γ_h  = 0.8,     # damping parameter for h
             dτ_ϕ_ = 1.0,    # scaling factor for dτ_ϕ
@@ -56,17 +56,17 @@ function run_example(;dt,
     output = S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1) # output is a struct (see model_output in SheetModel.jl) containing all the variable and error fields as well as number of iterations
 
     # plot output
-    @unpack xc, yc, H = input_params
-    @unpack N, ϕ, h, qx, qy, qx_ice, qy_ice,
-            ittot, Err_ϕ, Err_h, Res_ϕ, Res_h,
-            errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
-            errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel = output
-    if plotting
-        S.plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
-                      errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
-                      errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
-    end
+    #@unpack xc, yc, H = input_params
+    #@unpack N, ϕ, h, qx, qy, qx_ice, qy_ice,
+    #        ittot, iters, Err_ϕ, Err_h, Res_ϕ, Res_h,
+    #        errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
+    #        errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel = output
+    #if plotting
+    #    S.plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
+    #                  iters, errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
+    #                  errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
+    #end
 end
 
-run_example(dt=1e8, tsteps=1, plotting=true)
+run_example(dt=1e8, tsteps=1, plotting=false)
 #run_example(dt=2e7, tsteps=5, plotting=true)

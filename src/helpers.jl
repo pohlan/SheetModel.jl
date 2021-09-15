@@ -1,10 +1,24 @@
 using Base: Float64, Int64
 using LinearAlgebra, Parameters, Statistics, PyPlot
 
+# misc fudge factors to avoid dividing by zero
+small = eps(Float64)
+
+"""
+Turn all negative numbers into 0.0
+"""
+pos(x) = x > 0.0 ? x : 0.0
+
+"""
+Creates a vector of lenght nx where boundary points are zeros and interior points ones.
+Used to achieve zero ice thickness (H=0) at ghost points
+"""
+ghostp(nx) = [0.0; ones(nx-2); 0.0]
+
 """
 Create struct including all model parameters, physical and numerical
 """
-@with_kw struct Para @deftype Float64
+@with_kw struct Para{F1, F2} @deftype Float64
     # Scalars (one global value)
     g     = 9.81              # gravitational acceleration, m/s^2
     ρw    = 1000.0            # water density, kg/m^3
@@ -22,39 +36,30 @@ Create struct including all model parameters, physical and numerical
     # Numerical domain
     xrange::Tuple{Float64, Float64}   # domain size
     yrange::Tuple{Float64, Float64}
-    x1   = xrange[1]
-    xend = xrange[2]
-    y1   = yrange[1]
-    yend = yrange[2]
-    nx::Int64                        # number of grid points, including ghost points where ice thickness = 0
+    nx::Int64                         # number of grid points, including ghost points where ice thickness = 0
     ny::Int64
-    dx = (xend-x1) / (nx-3)          # grid size
-    dy = (yend-y1) / (ny-3)
-    xc::LinRange{Float64} = LinRange(x1-dx, xend+dx, nx) # vector of x-coordinates
-    yc::LinRange{Float64} = LinRange(y1-dy, yend+dy, ny) # vector of y-coordinates
+    dx = (xrange[2]-xrange[1]) / (nx-3)          # grid size
+    dy = (yrange[2]-yrange[1]) / (ny-3)
+    xc::LinRange{Float64} = LinRange(xrange[1]-dx, xrange[2]+dx, nx) # vector of x-coordinates
+    yc::LinRange{Float64} = LinRange(yrange[1]-dy, yrange[2]+dy, ny) # vector of y-coordinates
 
     # Field parameters (defined on every grid point)
     calc_zs::Function
     calc_zb::Function
-    calc_m_xyt::Function # fct(x, y, t)
-    fct_pos::Function = x -> x > 0.0 ? x : 0.0 # turn all negative numbers into 0.0
-    gp_x::Array{Float64, 1} = [0.0; ones(length(xc)-2); 0.0] # to achieve H = 0 at ghost points
-    gp_y::Array{Float64, 1} = [0.0; ones(length(yc)-2); 0.0]
-    H::Matrix{Float64} = (gp_x * gp_y') .* ( fct_pos.(calc_zs.(xc, yc') .- calc_zb.(xc, yc')) )  # ice thickness, m
-    zb::Matrix{Float64} = calc_zb.(xc, yc')                      # bed elevation, m
-    calc_m_t::Function = t -> calc_m_xyt.(xc, yc', t)                # source term, m/s, fct(t)
+    calc_m_xyt::F1 # f(x, y, t)
+
+    H::Matrix{Float64} = (ghostp(nx) * ghostp(ny)') .* ( pos.(calc_zs.(xc, yc') .- calc_zb.(xc, yc')) )  # ice thickness, m
+    zb::Matrix{Float64} = calc_zb.(xc, yc')                    # bed elevation, m
+    calc_m_t::F2 = t -> calc_m_xyt.(xc, yc', t)                # source term, m/s, f(t)
 
     # Physical time stepping
     ttot        # total simulation time
     dt          # physical time step
 
-    # misc fudge factors
-    small = eps(Float32) # maybe a Float64 is needed here
-
     # Pseudo-time iteration
     tol    = 1e-6       # tolerance
-    itMax  = 5*10^3       # max number of iterations
-    γ_ϕ    = 1e-3        # damping parameter for ϕ update
+    itMax  = 5*10^3     # max number of iterations
+    γ_ϕ    = 1e-3       # damping parameter for ϕ update
     γ_h    = 0.8        # damping parameter for h update
     dτ_ϕ_   = 1e6       # scaling factor for dτ_ϕ
     dτ_h_   = 50.0      # scaling factor for dτ_h
@@ -80,15 +85,15 @@ Broadcast.broadcastable(p::Para) = Ref(p)
     Res_ϕ::Matrix{Float64}
     Res_h::Matrix{Float64}
     ittot::Int64
-    iters::Array{Int64, 1}
-    errs_ϕ::Array{Float64, 1}
-    errs_h::Array{Float64, 1}
-    errs_ϕ_rel::Array{Float64, 1}
-    errs_h_rel::Array{Float64, 1}
-    errs_ϕ_res::Array{Float64, 1}
-    errs_h_res::Array{Float64, 1}
-    errs_ϕ_resrel::Array{Float64, 1}
-    errs_h_resrel::Array{Float64, 1}
+    iters::Vector{Int64}
+    errs_ϕ::Vector{Float64}
+    errs_h::Vector{Float64}
+    errs_ϕ_rel::Vector{Float64}
+    errs_h_rel::Vector{Float64}
+    errs_ϕ_res::Vector{Float64}
+    errs_h_res::Vector{Float64}
+    errs_ϕ_resrel::Vector{Float64}
+    errs_h_resrel::Vector{Float64}
 end
 Broadcast.broadcastable(out::model_output) = Ref(out)
 

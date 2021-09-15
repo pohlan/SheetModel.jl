@@ -64,7 +64,8 @@ macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / @d_eff($ix, $iy) / 4.1
 
 ### KERNEL functions ###
 
-function output_params!(N, ϕ, ρi, ρw, g, H, zb, qx, qy, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
+function output_params!(N, ϕ, p::Para)
+    @unpack ρi, ρw, g, H, zb = p
     for iy = 1:size(ϕ, 2)
         for ix = 1:size(ϕ, 1)
             N[ix, iy] = @N(ix, iy)
@@ -87,8 +88,8 @@ end
 """
 Calculate fluxes in x-direction using upstream scheme
 """
-function flux_x!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
-    nx, ny = size(ϕ)
+function flux_x!(qx, ϕ, h, p::Para, qx_ice, qy_ice) #, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
+    @unpack nx, ny, dx, dy, k, α, β = p
     #Threads.@threads for iy=1:ny
     for iy = 2:ny-1
         for ix = 2:nx-2
@@ -102,8 +103,8 @@ end
 """
 Calculate fluxes in y-direction using upstream scheme
 """
-function flux_y!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
-    nx, ny = size(ϕ)
+function flux_y!(qy, ϕ, h, p::Para, qx_ice, qy_ice)
+    @unpack nx, ny, dx, dy, k, α, β = p
     #Threads.@threads for iy=1:ny-1
     for iy = 2:ny-2
         for ix = 2:nx-1
@@ -117,11 +118,11 @@ end
 """
 Calculate residuals of ϕ & h and update the fields
 """
-function update_fields!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
-                            k, α, β, small, qx, qy,
-                            ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ,
-                            γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
-    nx, ny = size(ϕ)
+function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
+                        qx, qy, qx_ice, qy_ice, idx_ice, m, p::Para,
+                        Res_ϕ, Res_h, dϕ_dτ, dh_dτ,
+                        γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
+    @unpack nx, ny, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb,Σ, Γ, Λ = p
     #Threads.@threads for iy=1:ny
     for iy = 1:ny
         for ix = 1:nx
@@ -187,7 +188,7 @@ end
 Run the model with scaled parameters
 """
 function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
-    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β, small,
+    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
 
     # Array allocation
@@ -196,16 +197,14 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
     # determine indices of glacier domain
     idx_ice = H .> 0.0
-    qx_ice = zeros(Int, nx-1, ny)
-    qx_ice  .= idx_ice[1:end-1, :]
-    qx_ice .+= idx_ice[2:end, :]   # qx_ice = 1 for boundary, 2 for interior
-    qy_ice = zeros(Int, nx, ny-1)
-    qy_ice  .= idx_ice[:, 1:end-1]
-    qy_ice .+= idx_ice[:, 2:end]
-    qx_xlbound  = Diff(idx_ice, dims=1) .== 1 # on qx grid
-    qx_xubound  = Diff(idx_ice, dims=1) .== -1
-    qy_ylbound  = Diff(idx_ice, dims=2) .== 1 # on qy grid
-    qy_yubound  = Diff(idx_ice, dims=2) .== -1
+    qx_ice  = idx_ice[1:end-1, :] .+  # qx_ice = 1 for boundary, 2 for interior
+              idx_ice[2:end, :]
+    qy_ice  = idx_ice[:, 1:end-1] .+
+              idx_ice[:, 2:end]
+    #qx_xlbound  = Diff(idx_ice, dims=1) .== 1 # on qx grid
+    #qx_xubound  = Diff(idx_ice, dims=1) .== -1
+    #qy_ylbound  = Diff(idx_ice, dims=2) .== 1 # on qy grid
+    #qy_yubound  = Diff(idx_ice, dims=2) .== -1
 
     # Apply boundary conditions
     apply_bc!(ϕ0, h0, H, ρw, g, zb)
@@ -246,16 +245,16 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
         iter = 0
         err_ϕ_tol, err_h_tol = 2*tol, 2*tol
 
-        m .= calc_m_t::Float64(t+dt)
+        m .= calc_m_t(t+dt)
         # Pseudo-transient iteration
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 
-            flux_x!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
-            flux_y!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
-            update_fields!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
-                            k, α, β, small, qx, qy,
-                            ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ,
-                            γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
+            flux_x!(qx, ϕ, h, params, qx_ice, qy_ice)
+            flux_y!(qy, ϕ, h, params, qx_ice, qy_ice)
+            update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
+                           qx, qy, qx_ice, qy_ice, idx_ice, m, params,
+                           Res_ϕ, Res_h, dϕ_dτ, dh_dτ,
+                           γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 
             # apply boundary conditions
             apply_bc!(ϕ2, h2, H, ρw, g, zb)
@@ -330,15 +329,13 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
 
     # calculate N, qx and qy as output parameters
-    output_params!(N, ϕ, ρi, ρw, g, H, zb, qx, qy, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
+    output_params!(N, ϕ, params)
 
-    return model_output(N=N, ϕ=ϕ, h=h, qx=qx, qy=qy, qx_ice=qx_ice, qy_ice=qy_ice,
-            Err_ϕ=Δϕ, Err_h=Δh, Res_ϕ=Res_ϕ, Res_h=Res_h,
-            ittot=ittot, iters=iters,
-            errs_ϕ=errs_ϕ, errs_h=errs_h,
-            errs_ϕ_rel=errs_ϕ_rel, errs_h_rel=errs_h_rel,
-            errs_ϕ_res=errs_ϕ_res, errs_h_res=errs_h_res,
-            errs_ϕ_resrel=errs_ϕ_resrel, errs_h_resrel=errs_h_resrel)
+    return model_output(;   N, ϕ, h, qx, qy, qx_ice, qy_ice,
+                            Err_ϕ=Δϕ, Err_h=Δh, Res_ϕ, Res_h,
+                            ittot, iters,
+                            errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
+                            errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
 end
 
 """
