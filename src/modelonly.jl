@@ -35,9 +35,9 @@ macro pw(ix, iy) esc(:(ϕ[$ix, $iy] - ρw * g * zb[$ix, $iy])) end
 
 macro N(ix, iy) esc(:(ρi * g * H[$ix, $iy] - @pw($ix, $iy))) end
 
-macro vc_(ix, iy) esc(:(2 / n^n * A * h[$ix, $iy] * abs(@N($ix, $iy))^(n-1) * @N($ix, $iy))) end # scaled version
+macro vc(ix, iy) esc(:(2 / n^n * A * h[$ix, $iy] * abs(@N($ix, $iy))^(n-1) * @N($ix, $iy))) end # scaled version
 
-macro vo_(ix, iy) esc(:(h[$ix, $iy] < hr ? ub * (hr - h[$ix, $iy]) / lr : 0.0)) end # scaled version
+macro vo(ix, iy) esc(:(h[$ix, $iy] < hr ? ub * (hr - h[$ix, $iy]) / lr : 0.0)) end # scaled version
 
 macro dϕ_dx(ix, iy) esc(:( (qx_ice[$ix, $iy] == 2) #* !qx_xubound[$ix, $iy] * !qx_xlbound[$ix, $iy] # leave qx_ice away?
                            * (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) / dx
@@ -103,14 +103,14 @@ function compute_residuals!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_
                 Res_ϕ[ix, iy] = idx_ice[ix, iy] * (
                                                     - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                                   # dhe/dt
                                                     - ( (qx[ix, iy] - qx[ix-1, iy]) / dx + (qy[ix, iy] - qy[ix, iy-1]) / dy )    # divergence
-                                                    - (Σ * @vo_(ix, iy) - Γ * @vc_(ix, iy))                                                   # dh/dt
+                                                    - (Σ * @vo(ix, iy) - Γ * @vc(ix, iy))                                                   # dh/dt
                                                     + Λ * m[ix, iy]                                                                  # source term
                                                     )
             end
 
             Res_h[ix, iy] = idx_ice[ix, iy] * (
                                         - (h[ix, iy] - h_old[ix, iy]) / dt
-                                        + (Σ * @vo_(ix, iy) - Γ * @vc_(ix, iy))
+                                        + (Σ * @vo(ix, iy) - Γ * @vc(ix, iy))
                                         )
         end
     end
@@ -175,7 +175,7 @@ function update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx
                                     idx_ice[ix, iy] * (
                                                        - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                                   # dhe/dt
                                                        - ( (qx[ix, iy] - qx[ix-1, iy]) / dx + (qy[ix, iy] - qy[ix, iy-1]) / dy )    # divergence
-                                                       - (Σ * @vo_(ix, iy) - Γ * @vc_(ix, iy))                                                  # dh/dt
+                                                       - (Σ * @vo(ix, iy) - Γ * @vc(ix, iy))                                                  # dh/dt
                                                        + Λ * m[ix, iy]                                                                  # source term
                                                        ) +
                                     # damping
@@ -188,7 +188,7 @@ function update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx
             dh_dτ[ix, iy] = # residual
                             idx_ice[ix, iy] * (
                                                - (h[ix, iy] .- h_old[ix, iy]) / dt
-                                               + (Σ * @vo_(ix, iy) - Γ * @vc_(ix, iy))
+                                               + (Σ * @vo(ix, iy) - Γ * @vc(ix, iy))
                                                ) +
                             # damping
                             γ_h * dh_dτ[ix, iy]
@@ -416,22 +416,23 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
                 # decide which errors should be below the tolerance and be printed out
                 err_ϕ_tol, err_h_tol = err_ϕ, err_h
+
+                # save error evolution in vector
+                append!(iters, iter)
+                append!(errs_ϕ, err_ϕ)
+                append!(errs_h, err_h)
+                append!(errs_ϕ_rel, err_ϕ_rel)
+                append!(errs_h_rel, err_h_rel)
+                append!(errs_ϕ_res, err_ϕ_res)
+                append!(errs_h_res, err_h_res)
+                append!(errs_ϕ_resrel, err_ϕ_resrel)
+                append!(errs_h_resrel, err_h_resrel)
+
             end
 
             if iter % printit == 0
                 @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
             end
-
-            # save error evolution in vector
-            append!(iters, iter)
-            append!(errs_ϕ, err_ϕ)
-            append!(errs_h, err_h)
-            append!(errs_ϕ_rel, err_ϕ_rel)
-            append!(errs_h_rel, err_h_rel)
-            append!(errs_ϕ_res, err_ϕ_res)
-            append!(errs_h_res, err_h_res)
-            append!(errs_ϕ_resrel, err_ϕ_resrel)
-            append!(errs_h_resrel, err_h_resrel)
 
             iter += 1
 
