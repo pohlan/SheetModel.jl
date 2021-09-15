@@ -1,6 +1,12 @@
 using LazyArrays: Diff
 using Printf, Infiltrator
 
+# used indices:
+# - normal grid (i,j), size (nx, ny)
+#   ϕ, h, Res_ϕ, Res_h, ..
+# - qx grid (m,n) staggered in x-dir.: (nx-1, ny)
+# - qy grid (m,n) staggered in y-dir.: (nx, ny-1)
+
 """
 Calculate discharge; qx = calc_q(h, dϕ_dx, dϕ_dy, ...), qy = calc_q(h, dϕ_dy, dϕ_dx, ...)
 """
@@ -52,24 +58,9 @@ macro gradϕ(ix, iy) esc(:( sqrt(                                               
                                   ))) end
 macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end # d_eff only defined on interior points
 
-# upstream scheme for fluxes
-#macro qx(ix, iy) esc(:( @dϕ_dx($ix, $iy) * (
-#                        - @d_eff($ix, $iy)   * (@dϕ_dx($ix, $iy) >= 0)    # flux in negative x-direction
-#                        - @d_eff($ix-1, $iy) * (@dϕ_dx($ix, $iy) < 0) )   # flux in positive x-direction
-#                      )) end
-
-#macro qy(ix, iy) esc(:( @dϕ_dy($ix, $iy) * (
-#                        - @d_eff($ix, $iy)   * (@dϕ_dy($ix, $iy) >= 0)    # flux in negative y-direction
-#                        - @d_eff($ix, iy-1) * (@dϕ_dy($ix, $iy) < 0) )   # flux in positive y-direction
-#                      )) end
-
-
 #macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ @d_eff($ix, $iy) / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
 macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / @d_eff($ix, $iy) / 4.1, dt))) end
 
-@views av(A)    = 0.25*(A[1:end-1,1:end-1].+A[2:end,1:end-1].+A[1:end-1,2:end].+A[2:end,2:end]) # average
-@views av_xa(A) = 0.5.*(A[1:end-1,:].+A[2:end,:]) # average x-dir
-@views av_ya(A) = 0.5.*(A[:,1:end-1].+A[:,2:end]) # average y-dir
 
 ### KERNEL functions ###
 
@@ -77,41 +68,6 @@ function output_params!(N, ϕ, ρi, ρw, g, H, zb, qx, qy, dx, dy, k, h, α, β,
     for iy = 1:size(ϕ, 2)
         for ix = 1:size(ϕ, 1)
             N[ix, iy] = @N(ix, iy)
-            #if (1 < ix < size(ϕ, 1)-1) && (iy < size(ϕ, 2)-1)
-            #    qx[ix, iy] = @qx(ix, iy)
-            #end
-            #if (1 < iy < size(ϕ, 2)-1) && (ix < size(ϕ, 1)-1)
-            #    qy[ix, iy] = @qy(ix, iy)
-            #end
-        end
-    end
-    return
-end
-
-
-function compute_residuals!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
-                            k, α, β, small, qx, qy,
-                            ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
-    nx, ny = size(ϕ)
-    #Threads.@threads for iy=1:ny
-    for iy = 1:ny
-        for ix = 1:nx
-            # ϕ: without boundary points (divergence of q not defined there)
-            if ix == 2
-                Res_ϕ[ix, iy] = 0. # position where dirichlet b.c. are imposed
-            elseif (1 < ix < nx) && (1 < iy < ny)
-                Res_ϕ[ix, iy] = idx_ice[ix, iy] * (
-                                                    - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                                   # dhe/dt
-                                                    - ( (qx[ix, iy] - qx[ix-1, iy]) / dx + (qy[ix, iy] - qy[ix, iy-1]) / dy )    # divergence
-                                                    - (Σ * @vo(ix, iy) - Γ * @vc(ix, iy))                                                   # dh/dt
-                                                    + Λ * m[ix, iy]                                                                  # source term
-                                                    )
-            end
-
-            Res_h[ix, iy] = idx_ice[ix, iy] * (
-                                        - (h[ix, iy] - h_old[ix, iy]) / dt
-                                        + (Σ * @vo(ix, iy) - Γ * @vc(ix, iy))
-                                        )
         end
     end
     return
@@ -128,73 +84,74 @@ function update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
     return
 end
 
+"""
+Calculate fluxes in x-direction using upstream scheme
+"""
 function flux_x!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
     nx, ny = size(ϕ)
     #Threads.@threads for iy=1:ny
     for iy = 2:ny-1
         for ix = 2:nx-2
-            qx[ix, iy] = 0.
-            #if ix < nx-1
-                qx[ix, iy] += - @d_eff(ix, iy-1) * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) >= 0)   # flux in negative x-direction
-            #end@
-            #if ix > 1
-                qx[ix, iy] += - @d_eff(ix-1, iy-1) * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) < 0)  # flux in positive x-direction
-            #end
+            qx[ix, iy] = - @d_eff(ix, iy-1)   * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) >= 0) +   # flux in negative x-direction
+                         - @d_eff(ix-1, iy-1) * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) <  0)     # flux in positive x-direction
         end
     end
     return
 end
 
+"""
+Calculate fluxes in y-direction using upstream scheme
+"""
 function flux_y!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
     nx, ny = size(ϕ)
     #Threads.@threads for iy=1:ny-1
     for iy = 2:ny-2
         for ix = 2:nx-1
-            qy[ix, iy] = 0.
-            #if iy < ny-1
-                qy[ix, iy] += - @d_eff(ix-1, iy) * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) >= 0)   # flux in negative y-direction
-            #end
-            #if iy > 1
-                qy[ix, iy] += - @d_eff(ix-1, iy-1)  * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) < 0)  # flux in positive y-direction
-            #end
+            qy[ix, iy] = - @d_eff(ix-1, iy)   * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) >= 0) +   # flux in negative y-direction
+                         - @d_eff(ix-1, iy-1) * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) <  0)     # flux in positive y-direction
         end
     end
     return
 end
 
-function update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
-                        k, α, β, small, qx, qy,
-                        ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_)
+"""
+Calculate residuals of ϕ & h and update the fields
+"""
+function update_fields!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
+                            k, α, β, small, qx, qy,
+                            ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ,
+                            γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     nx, ny = size(ϕ)
     #Threads.@threads for iy=1:ny
     for iy = 1:ny
         for ix = 1:nx
-            # update ϕ: without boundary and ghost points (divergence of q not defined there)
             if (1 < ix < nx) && (1 < iy < ny)
-                dϕ_dτ[ix, iy] = # residual
-                                    idx_ice[ix, iy] * (
-                                                       - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                                   # dhe/dt
-                                                       - ( (qx[ix, iy] - qx[ix-1, iy]) / dx + (qy[ix, iy] - qy[ix, iy-1]) / dy )    # divergence
-                                                       - (Σ * @vo(ix, iy) - Γ * @vc(ix, iy))                                                  # dh/dt
-                                                       + Λ * m[ix, iy]                                                                  # source term
-                                                       ) +
-                                    # damping
-                                    γ_ϕ * dϕ_dτ[ix, iy]
+                # residual of ϕ
+                if ix == 2 # ϕ: without boundary points (divergence of q not defined there)
+                    Res_ϕ[ix, iy] = 0. # position where dirichlet b.c. are imposed
+                else
+                    Res_ϕ[ix, iy] = idx_ice[ix, iy] * (
+                                    - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                               # dhe/dt
+                                    - ( (qx[ix, iy] - qx[ix-1, iy]) / dx + (qy[ix, iy] - qy[ix, iy-1]) / dy )    # divergence
+                                    - (Σ * @vo(ix, iy) - Γ * @vc(ix, iy))                                        # dh/dt
+                                    + Λ * m[ix, iy]                                                              # source term
+                                    )
+                end
 
+                # update ϕ
+                dϕ_dτ[ix, iy] = Res_ϕ[ix, iy] + γ_ϕ * dϕ_dτ[ix, iy]
                 ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
             end
 
-            # update h: on all grid points
-            dh_dτ[ix, iy] = # residual
-                            idx_ice[ix, iy] * (
-                                               - (h[ix, iy] .- h_old[ix, iy]) / dt
-                                               + (Σ * @vo(ix, iy) - Γ * @vc(ix, iy))
-                                               ) +
-                            # damping
-                            γ_h * dh_dτ[ix, iy]
+            # residual of h
+            Res_h[ix, iy] = idx_ice[ix, iy] * (
+                            - (h[ix, iy] - h_old[ix, iy]) / dt
+                            + (Σ * @vo(ix, iy) - Γ * @vc(ix, iy))
+                            )
 
+            # update h
+            dh_dτ[ix, iy] = Res_h[ix, iy] + γ_h * dh_dτ[ix, iy]
             h2[ix, iy] = h[ix, iy] + dτ_h_ * dh_dτ[ix, iy]
-
         end
     end
     return
@@ -203,8 +160,7 @@ end
 """
 Apply Dirichlet boundary conditions to ϕ, at the moment pw(x=0) = 0
 """
-function apply_bc!(ϕ, h, H, ρw, g, zb) # TODO: shouldn't have any function with arrays as arguments
-                                   # TODO: don't hard-wire, give bc as input parameters
+function apply_bc!(ϕ, h, H, ρw, g, zb) # TODO: don't hard-wire, give bc as input parameters
     nx, ny = size(ϕ)
     #Threads.@threads for iy=1:ny
     for iy = 1:ny
@@ -282,15 +238,6 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     err_ϕ_ini = 0.0
     err_h_ini = 0.0
 
-    qx_test = zeros(nx-1, ny)
-    qy_test = zeros(nx, ny-1)
-    div_q   = zeros(nx, ny)
-    dϕ_dτ_test = zeros(nx, ny)
-    dh_dτ_test = zeros(nx, ny)
-    dτ_ϕ_test  = zeros(nx, ny)
-    h_test = copy(h0)
-    ϕ_test = copy(ϕ0)
-
     # initiate time loop parameters
     t = 0.0; tstep=0; ittot = 0; t_tic = Base.time()
 
@@ -299,89 +246,19 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
         iter = 0
         err_ϕ_tol, err_h_tol = 2*tol, 2*tol
 
-        m .= calc_m_t(t+dt)
+        m .= calc_m_t::Float64(t+dt)
         # Pseudo-transient iteration
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
-            # used indices:
-            # - normal grid (i,j), size (nx, ny)
-            #   ϕ, h, Res_ϕ, Res_h, ..
-            # - qx grid (m,n) staggered in x-dir.: (nx-1, ny)
-            #   qx, dϕ_dx[m,j]
-            # - qy grid (m,n) staggered in y-dir.: (nx, ny-1)
-            #   qy, dϕ_dy
-
-
-            # hydraulic gradient
-            dϕ_dx_test   = diff(ϕ, dims=1) ./ dx
-            dϕ_dy_test   = diff(ϕ, dims=2) ./ dy
-
-            # flux boundary conditions
-            dϕ_dx_test[qx_ice .== 0] .= 0.0
-            dϕ_dy_test[qy_ice .== 0] .= 0.0
-            dϕ_dx_test[qx_xubound] .= 0.0
-            dϕ_dx_test[qx_xlbound] .= 0.0
-            dϕ_dy_test[qy_ylbound] .= 0.0
-            dϕ_dy_test[qy_yubound] .= 0.0
-
-            # effective diffusivity
-            gradϕ_test = sqrt.(av_xa(dϕ_dx_test[:, 2:end-1]).^2 .+ av_ya(dϕ_dy_test[2:end-1, :]).^2) # on ϕ/h grid, size (nx-2, ny-2)
-            d_eff_test = k*h[2:end-1, 2:end-1].^α .* (gradϕ_test .+ small).^(β-2) # on ϕ/h grid, size (nx-2, ny-2)
-
-            # calculate fluxes
-            # upstream
-            qx_test[2:end-1, 2:end-1] .= (dϕ_dx_test[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff_test[2:end, :]   .* dϕ_dx_test[2:end-1, 2:end-1]) .+
-                                    (dϕ_dx_test[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff_test[1:end-1, :] .* dϕ_dx_test[2:end-1, 2:end-1])
-            qy_test[2:end-1, 2:end-1] .= (dϕ_dy_test[2:end-1, 2:end-1] .>= 0.0) .* (.- d_eff_test[:, 2:end]   .* dϕ_dy_test[2:end-1, 2:end-1]) .+
-                                    (dϕ_dy_test[2:end-1, 2:end-1] .< 0.0)  .* (.- d_eff_test[:, 1:end-1] .* dϕ_dy_test[2:end-1, 2:end-1])
-            # central differences
-            #qx[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[2:end, :]   .* dϕ_dx[2:end-1, 2:end-1]) .+
-            #                        0.5 .* (.- d_eff[1:end-1, :] .* dϕ_dx[2:end-1, 2:end-1])
-            #qy[2:end-1, 2:end-1] .= 0.5 .* (.- d_eff[:, 2:end]   .* dϕ_dy[2:end-1, 2:end-1]) .+
-            #                        0.5 .* (.- d_eff[:, 1:end-1] .* dϕ_dy[2:end-1, 2:end-1])
-
-            vo     = calc_vo.(h_test, ub, hr, lr)                 # opening rate
-            vc     = calc_vc.(ϕ_test, h_test, ρi, ρw, g, H, zb, n, A)  # closure rate
-            div_q[2:end-1, 2:end-1]  .= diff(qx_test, dims=1)[:, 2:end-1]/dx .+ diff(qy_test, dims=2)[2:end-1, :]/dy
-
-            # calculate residuals
-            Res_ϕ_test   =  idx_ice .* (
-                            - ev/(ρw*g) * (ϕ .- ϕ_old)/dt .-         # dhe/dt
-                            div_q .-                                 # div(q)
-                            (Σ * vo .- Γ * vc)            .+         # dh/dt
-                            Λ * m                                    # source term
-                            )
-            Res_h_test   =  idx_ice .* (
-                            - (h .- h_old) / dt  .+
-                            (Σ * vo .- Γ * vc)
-                            )
-
-            # determine pseudo-time steps
-            #dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1) .+ 1.0 / dt) .^(-1)
-            #dτ_ϕ[2:end-1, 2:end-1] .= dτ_ϕ_ .* (1.0 ./ (min(dx, dy)^2 ./ d_eff / 4.1)) .^(-1) # with this, if eq. are time-independent, #iterations is indep. of dt
-            dτ_ϕ_test[2:end-1, 2:end-1] .= dτ_ϕ_ .* min.(min(dx, dy)^2 ./ d_eff_test / 4.1, dt)
-            dτ_h_test   = dτ_h_   # pseudo-time step for h, scalar
-
-            # damped rate of change
-            dϕ_dτ_test = Res_ϕ_test .+ γ_ϕ .* dϕ_dτ_test
-            dh_dτ_test = Res_h_test .+ γ_h .* dh_dτ_test
-
-            # update fields
-            ϕ_test = ϕ .+ dτ_ϕ_test .* dϕ_dτ_test   # update ϕ
-            h_test = h .+ dτ_h_test .* dh_dτ_test   # update h
 
             flux_x!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
             flux_y!(qx, qy, ϕ, dx, dy, k, h, α, β, small, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
-            update_fields!(dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
-                           k, α, β, small, qx, qy,
-                           ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_)
-
-            if (ϕ2 != ϕ_test) && iter < 100
-                print(join(["iter=", iter]))
-            end
+            update_fields!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
+                            k, α, β, small, qx, qy,
+                            ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ,
+                            γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 
             # apply boundary conditions
             apply_bc!(ϕ2, h2, H, ρw, g, zb)
-            apply_bc!(ϕ_test, h_test, H, ρw, g, zb)
 
             # switch pointer
             ϕ, ϕ2 = ϕ2, ϕ
@@ -391,9 +268,6 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             if iter % 100 == 0
                 # residual error
-                compute_residuals!(Res_ϕ, Res_h, dϕ_dτ, dh_dτ, idx_ice, qx_ice, qy_ice, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound, dx, dy,
-                                  k, α, β, small, qx, qy,
-                                  ϕ, ϕ2, ϕ_old, h, h2, h_old, dt, ev, m, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
                 err_ϕ_res = norm(Res_ϕ[idx_ice]) / sum(idx_ice) # or length(Res_ϕ) instead of sum(idx_ice) ??
                 err_h_res = norm(Res_h[idx_ice]) / norm(h0)
                 if (iter==0)
