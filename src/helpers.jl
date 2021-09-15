@@ -80,6 +80,7 @@ Broadcast.broadcastable(p::Para) = Ref(p)
     Res_ϕ::Matrix{Float64}
     Res_h::Matrix{Float64}
     ittot::Int64
+    iters::Array{Int64, 1}
     errs_ϕ::Array{Float64, 1}
     errs_h::Array{Float64, 1}
     errs_ϕ_rel::Array{Float64, 1}
@@ -186,7 +187,7 @@ end
 function descaling(output::model_output, N_, ϕ_, h_, q_)
     @unpack N, ϕ, h, qx, qy, qx_ice, qy_ice,
             Err_ϕ, Err_h , Res_ϕ, Res_h,
-            ittot,
+            ittot, iters,
             errs_ϕ, errs_h,
             errs_ϕ_rel, errs_h_rel,
             errs_ϕ_res, errs_h_res,
@@ -204,6 +205,7 @@ function descaling(output::model_output, N_, ϕ_, h_, q_)
         Res_ϕ = Res_ϕ .* ϕ_,
         Res_h = Res_h .* h_,
         ittot = ittot,
+        iters = iters,
         errs_ϕ = errs_ϕ,
         errs_h = errs_h,
         errs_ϕ_rel = errs_ϕ_rel,
@@ -230,7 +232,7 @@ function initial_conditions(xc, yc, H; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) ->
 end
 
 function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
-                     errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
+                     iters, errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
                      errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
     x_plt = [xc[1]; xc .+ (xc[2]-xc[1])]
     y_plt = [yc[1]; yc .+ (yc[2]-yc[1])]
@@ -283,14 +285,14 @@ function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
     title("err_ϕ")
 
     figure()
-    semilogy(errs_ϕ, label="err_ϕ", color="darkorange")
-    semilogy(errs_h, label="err_h", color="darkblue")
-    semilogy(errs_ϕ_rel, label="relative err_ϕ", color="darkorange", linestyle=":")
-    semilogy(errs_h_rel, label="relative err_h", color="darkblue", linestyle=":")
-    semilogy(errs_ϕ_res, label="err_ϕ_res", color="gold")
-    semilogy(errs_h_res, label="err_h_res", color="deepskyblue")
-    semilogy(errs_ϕ_resrel, label="relative err_ϕ_res", color="gold", linestyle=":")
-    semilogy(errs_h_resrel, label="relative err_h_res", color="deepskyblue", linestyle=":")
+    semilogy(iters, errs_ϕ, label="err_ϕ", color="darkorange")
+    semilogy(iters, errs_h, label="err_h", color="darkblue")
+    semilogy(iters, errs_ϕ_rel, label="relative err_ϕ", color="darkorange", linestyle=":")
+    semilogy(iters, errs_h_rel, label="relative err_h", color="darkblue", linestyle=":")
+    semilogy(iters, errs_ϕ_res, label="err_ϕ_res", color="gold")
+    semilogy(iters, errs_h_res, label="err_h_res", color="deepskyblue")
+    semilogy(iters, errs_ϕ_resrel, label="relative err_ϕ_res", color="gold", linestyle=":")
+    semilogy(iters, errs_h_resrel, label="relative err_h_res", color="deepskyblue", linestyle=":")
 
     xlabel("# iterations")
     ylabel("error")

@@ -141,7 +141,7 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
 
     model_output = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
     @unpack N, ϕ, h, qx, qy, qx_ice, qy_ice,
-            ittot, Err_ϕ, Err_h, Res_ϕ, Res_h,
+            ittot, iters, Err_ϕ, Err_h, Res_ϕ, Res_h,
             errs_ϕ, errs_h,
             errs_ϕ_rel, errs_h_rel,
             errs_ϕ_res, errs_h_res,
@@ -149,7 +149,7 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
 
     if make_plot
         S.plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
-                      errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
+                      iters, errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
                       errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
     end
 

@@ -29,11 +29,8 @@ nx, ny = 64, 32
 ϕ_test = Dict()
 h_test = Dict()
 nit_test = Dict()
-test_cases = ["A1", "A2", "A3", "A4", "A5", "A6"] #,
-              #"D1", "D2", "D3", "D4", "D5",
-              #"E1", "E2", "E3", "E4", "E5",      # not referenced yet
-              #"F1", "F2", "F3", "F4", "F5"]      # not referenced yet
-for test_case in test_cases
+
+for test_case in keys(ϕ_ref)
     inputs, outputs = run_SHMIP(test_case, Nx=nx, Ny=ny, dt = 5e7)
     ϕ_test[test_case] = outputs.ϕ
     h_test[test_case] = outputs.h
@@ -41,7 +38,7 @@ end
 
 # test whether the runs agree with the references
 @testset "Model runs" begin
-    for test_case in test_cases
+    for test_case in keys(ϕ_ref)
         @test ϕ_test[test_case][1:20:end, 1:10:end] ≈ ϕ_ref[test_case]
         @test h_test[test_case][1:20:end, 1:10:end] ≈ h_ref[test_case]
     end
