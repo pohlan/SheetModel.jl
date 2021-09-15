@@ -81,6 +81,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     h       = copy(h0)
 
     # for iterations vs. error plot
+    iters      = Float64[]
     errs_ϕ     = Float64[]
     errs_h     = Float64[]
     errs_ϕ_rel = Float64[]
@@ -179,54 +180,57 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # determine the errors (only consider points where the ice thickness is > 0)
             # error for ϕ
+            if iter % 100 == 0
+                # from Err - ϕ
+                Err_ϕ .= abs.(Err_ϕ .- ϕ) # ./ dτ_ϕ
+                #err_ϕ = norm(Err_ϕ[idx_ice]) ./ norm(Λ * m)
+                err_ϕ = norm(Err_ϕ[idx_ice]) ./ sum(idx_ice)
+                if (iter==1)  err_ϕ_ini = err_ϕ  end
+                err_ϕ_rel = err_ϕ/err_ϕ_ini # relative error
 
-            # from Err - ϕ
-            Err_ϕ .= abs.(Err_ϕ .- ϕ) # ./ dτ_ϕ
-            #err_ϕ = norm(Err_ϕ[idx_ice]) ./ norm(Λ * m)
-            err_ϕ = norm(Err_ϕ[idx_ice]) ./ sum(idx_ice)
-            if (iter==1)  err_ϕ_ini = err_ϕ  end
-            err_ϕ_rel = err_ϕ/err_ϕ_ini # relative error
+                # from residual
+                Res_ϕ[2, :] .= 0.0 # residual at b.c. should not be part of ϕ error
+                #err_ϕ_res = norm(Res_ϕ[idx_ice]) / norm(Λ * m)
+                err_ϕ_res = norm(Res_ϕ[idx_ice]) /sum(idx_ice)
+                if (iter==1)  err_ϕ_ini = err_ϕ_res  end
+                err_ϕ_resrel = err_ϕ_res/err_ϕ_ini # relative error
 
-            # from residual
-            Res_ϕ[2, :] .= 0.0 # residual at b.c. should not be part of ϕ error
-            #err_ϕ_res = norm(Res_ϕ[idx_ice]) / norm(Λ * m)
-            err_ϕ_res = norm(Res_ϕ[idx_ice]) /sum(idx_ice)
-            if (iter==1)  err_ϕ_ini = err_ϕ_res  end
-            err_ϕ_resrel = err_ϕ_res/err_ϕ_ini # relative error
+                # error for h
 
-            # error for h
+                # from Error - h
+                Err_h .= abs.(Err_h .- h)
+                err_h = norm(Err_h[idx_ice]) ./ norm(h0)
+                #err_h = norm(Err_h[idx_ice]) ./ sum(idx_ice)
+                if (iter==1)  err_h_ini = err_h  end
+                err_h_rel = err_h/err_h_ini # relative error
 
-            # from Error - h
-            Err_h .= abs.(Err_h .- h)
-            err_h = norm(Err_h[idx_ice]) ./ norm(h0)
-            #err_h = norm(Err_h[idx_ice]) ./ sum(idx_ice)
-            if (iter==1)  err_h_ini = err_h  end
-            err_h_rel = err_h/err_h_ini # relative error
+                # from residual
+                err_h_res   = norm(Res_h[idx_ice]) / norm(h0)
+                #err_h_res   = norm(Res_h[idx_ice]) / sum(idx_ice)
+                if (iter==1)  err_h_ini = err_h_res  end
+                err_h_resrel = err_h_res/err_h_ini # relative error
 
-            # from residual
-            err_h_res   = norm(Res_h[idx_ice]) / norm(h0)
-            #err_h_res   = norm(Res_h[idx_ice]) / sum(idx_ice)
-            if (iter==1)  err_h_ini = err_h_res  end
-            err_h_resrel = err_h_res/err_h_ini # relative error
+                # decide which errors should be below the tolerance and be printed out
+                err_ϕ_tol, err_h_tol = err_ϕ, err_h
 
-            # decide which errors should be below the tolerance and be printed out
-            err_ϕ_tol, err_h_tol = err_ϕ, err_h
+                # save error evolution in vector
+                append!(iters, iter)
+                append!(errs_ϕ, err_ϕ)
+                append!(errs_h, err_h)
+                append!(errs_ϕ_rel, err_ϕ_rel)
+                append!(errs_h_rel, err_h_rel)
+                append!(errs_ϕ_res, err_ϕ_res)
+                append!(errs_h_res, err_h_res)
+                append!(errs_ϕ_resrel, err_ϕ_resrel)
+                append!(errs_h_resrel, err_h_resrel)
 
-            iter += 1
+            end
 
             if mod(iter, printit) == 0
                 @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
             end
 
-            # save error evolution in vector
-            append!(errs_ϕ, err_ϕ)
-            append!(errs_h, err_h)
-            append!(errs_ϕ_rel, err_ϕ_rel)
-            append!(errs_h_rel, err_h_rel)
-            append!(errs_ϕ_res, err_ϕ_res)
-            append!(errs_h_res, err_h_res)
-            append!(errs_ϕ_resrel, err_ϕ_resrel)
-            append!(errs_h_resrel, err_h_resrel)
+            iter += 1
 
         end
         ittot += iter; it += 1; t += dt
@@ -251,7 +255,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
     return model_output(N=N, ϕ=ϕ, h=h, qx=qx, qy=qy, qx_ice=qx_ice, qy_ice=qy_ice,
             Err_ϕ=Err_ϕ, Err_h=Err_h, Res_ϕ=Res_ϕ, Res_h=Res_h,
-            ittot=ittot,
+            ittot=ittot, iters=iters,
             errs_ϕ=errs_ϕ, errs_h=errs_h,
             errs_ϕ_rel=errs_ϕ_rel, errs_h_rel=errs_h_rel,
             errs_ϕ_res=errs_ϕ_res, errs_h_res=errs_h_res,
