@@ -6,8 +6,8 @@ const S = SheetModel
 # -------------------------#
 
 @testset "Helper functions" begin
-    @test S.calc_q(0.5, 0.0, 0.0, 1.0, 1.25, 1.5, 1e-25) == 0.0 # shouldn't produce NaNs
-    @test S.calc_q(0.5, 1.0, 1.0, 1.0, 1.25, 1.5, 1e-25) == -0.35355339059327373
+    @test S.calc_q(0.5, 0.0, 0.0, 1.0, 1.25, 1.5, eps()) == 0.0 # shouldn't produce NaNs
+    @test S.calc_q(0.5, 1.0, 1.0, 1.0, 1.25, 1.5, eps()) == -0.35355339059327373
     @test S.calc_pw(1.0, 1.0, 1.0, 0.5) == 0.5
     @test S.calc_N(0.2, 0.9, 1.0, 1.0, 0.5, 0.1) == 0.35
     @test S.calc_vc(0.2, 0.5, 0.9, 1.0, 1.0, 0.5, 0.1, 3.0, 1.0) == 0.0015879629629629627
