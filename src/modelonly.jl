@@ -233,7 +233,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             iter += 1
 
         end
-        ittot += iter; it += 1; t += dt
+        ittot += iter-1; it += 1; t += dt
         if mod(it, printtime) == 0
             @printf("time step = %d, number of iterations = %d \n", it, iter)
         end
