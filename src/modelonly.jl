@@ -75,8 +75,8 @@ function output_params!(N, ϕ, p::Para)
 end
 
 function update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
-    #Threads.@threads for iy=1:size(ϕ, 2)
-    for iy = 1:size(ϕ, 2)
+    Threads.@threads for iy=1:size(ϕ, 2)
+    #for iy = 1:size(ϕ, 2)
         for ix = 1:size(ϕ, 1)
             Δϕ[ix, iy] = abs(ϕ[ix, iy] - ϕ2[ix, iy])
             Δh[ix, iy] = abs(h[ix, iy] - h2[ix, iy])
@@ -90,8 +90,8 @@ Calculate fluxes in x-direction using upstream scheme
 """
 function flux_x!(qx, ϕ, h, p::Para, qx_ice, qy_ice) #, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
     @unpack nx, ny, dx, dy, k, α, β = p
-    #Threads.@threads for iy=1:ny
-    for iy = 2:ny-1
+    Threads.@threads for iy=2:ny-1
+    #for iy = 2:ny-1
         for ix = 2:nx-2
             qx[ix, iy] = - @d_eff(ix, iy-1)   * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) >= 0) +   # flux in negative x-direction
                          - @d_eff(ix-1, iy-1) * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) <  0)     # flux in positive x-direction
@@ -105,8 +105,8 @@ Calculate fluxes in y-direction using upstream scheme
 """
 function flux_y!(qy, ϕ, h, p::Para, qx_ice, qy_ice)
     @unpack nx, ny, dx, dy, k, α, β = p
-    #Threads.@threads for iy=1:ny-1
-    for iy = 2:ny-2
+    Threads.@threads for iy = 2:ny-2
+    #for iy = 2:ny-2
         for ix = 2:nx-1
             qy[ix, iy] = - @d_eff(ix-1, iy)   * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) >= 0) +   # flux in negative y-direction
                          - @d_eff(ix-1, iy-1) * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) <  0)     # flux in positive y-direction
@@ -123,8 +123,8 @@ function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
                         Res_ϕ, Res_h, dϕ_dτ, dh_dτ,
                         γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     @unpack nx, ny, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb,Σ, Γ, Λ = p
-    #Threads.@threads for iy=1:ny
-    for iy = 1:ny
+    Threads.@threads for iy = 1:ny
+    #for iy = 1:ny
         for ix = 1:nx
             if (1 < ix < nx) && (1 < iy < ny)
                 # residual of ϕ
@@ -163,8 +163,8 @@ Apply Dirichlet boundary conditions to ϕ, at the moment pw(x=0) = 0
 """
 function apply_bc!(ϕ, h, H, ρw, g, zb) # TODO: don't hard-wire, give bc as input parameters
     nx, ny = size(ϕ)
-    #Threads.@threads for iy=1:ny
-    for iy = 1:ny
+    Threads.@threads for iy=1:ny
+    #for iy = 1:ny
         for ix = 1:nx
             if H[ix, iy] == 0.             # zero sheet thickness outside of glacier domain; necessary ??
                 h[ix, iy] = 0.
