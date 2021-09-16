@@ -5,7 +5,7 @@
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../"))
-using SheetModel, Parameters, Profile, PProf
+using SheetModel, Parameters, ProfileView # for ProfileView, gtk needs to be installed
 const S = SheetModel
 
 function run_example(;dt,
@@ -37,7 +37,7 @@ function run_example(;dt,
             dt   = dt,                  # time step
             ttot = dt * tsteps,         # total time
 
-            itMax = 2*10^3,
+            itMax = 1,
             γ_ϕ  = 0.6,     # damping parameter for ϕ
             γ_h  = 0.8,     # damping parameter for h
             dτ_ϕ_ = 1.0,    # scaling factor for dτ_ϕ
@@ -53,8 +53,10 @@ function run_example(;dt,
         ϕ0 = 0.5 * ones(nx, ny)
         h0 = 0.5 * ones(nx, ny)
 
-    #@profile S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1)
-    output = S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1)
+    ProfileView.@profview S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1) # for profiling
+    # In VSCode, ProfileView.xx is necessary (https://github.com/timholy/ProfileView.jl/pull/172/commits/5ea809fe6409a41b96cfba0800b78d708f1ad604)
+
+    #output = S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1)
 
     # plot output
     #@unpack xc, yc, H = input_params
@@ -71,5 +73,3 @@ end
 
 run_example(dt=1e8, tsteps=1, plotting=false)
 #run_example(dt=2e7, tsteps=5, plotting=true)
-
-#pprof() # will output a link to follow; go to view -> Flame Graph
