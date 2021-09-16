@@ -7,6 +7,8 @@ using Printf, Infiltrator
 # - qx grid (m,n) staggered in x-dir.: (nx-1, ny)
 # - qy grid (m,n) staggered in y-dir.: (nx, ny-1)
 
+
+### FUNCTIONS ###
 """
 Calculate discharge; qx = calc_q(h, dϕ_dx, dϕ_dy, ...), qy = calc_q(h, dϕ_dy, dϕ_dx, ...)
 """
@@ -36,18 +38,21 @@ Calculate opening rate
 """
 calc_vo(h, ub, hr, lr) = h < hr ? ub * (hr - h) / lr : 0.0
 
+### MACROS ###
 
 macro pw(ix, iy) esc(:(ϕ[$ix, $iy] - ρw * g * zb[$ix, $iy])) end
 
 macro N(ix, iy) esc(:(ρi * g * H[$ix, $iy] - @pw($ix, $iy))) end
 
-macro vc(ix, iy) esc(:(2 / n^n * A * h[$ix, $iy] * abs(@N($ix, $iy))^(n-1) * @N($ix, $iy))) end # scaled version
+macro vc(ix, iy) esc(:(2 / n^n * A * h[$ix, $iy] * abs(@N($ix, $iy))^(n-1) * @N($ix, $iy))) end
 
-macro vo(ix, iy) esc(:(h[$ix, $iy] < hr ? ub * (hr - h[$ix, $iy]) / lr : 0.0)) end # scaled version
+macro vo(ix, iy) esc(:(h[$ix, $iy] < hr ? ub * (hr - h[$ix, $iy]) / lr : 0.0)) end
+
 
 macro dϕ_dx(ix, iy) esc(:( (qx_ice[$ix, $iy] == 2) #* !qx_xubound[$ix, $iy] * !qx_xlbound[$ix, $iy] # leave qx_ice away?
                            * (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) / dx
                         )) end
+
 macro dϕ_dy(ix, iy) esc(:( (qy_ice[$ix, $iy] == 2) #* !qy_yubound[$ix, $iy] * !qy_ylbound[$ix, $iy] # leave qy_ice away?
                             * (ϕ[$ix, $iy+1] - ϕ[$ix, $iy]) / dy
                          )) end
@@ -56,17 +61,33 @@ macro gradϕ(ix, iy) esc(:( sqrt(                                               
                                   (0.5 * (@dϕ_dx($ix+1, $iy+1) + @dϕ_dx($ix, $iy+1)))^2
                                 + (0.5 * (@dϕ_dy($ix+1, $iy+1) + @dϕ_dy($ix+1, $iy)))^2
                                   ))) end
-macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end # d_eff only defined on interior points
 
-#macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ @d_eff($ix, $iy) / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
-macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / @d_eff($ix, $iy) / 4.1, dt))) end
+macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / d_eff[$ix, $iy] / 4.1, dt))) end
+#macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ d_eff[$ix, $iy] / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
 
+"""
+Calculate flux in x-direction; input coordinates on qx grid
+"""
+macro flux_x(ix, iy) esc(:( 1 < $ix < nx-1 ? @dϕ_dx($ix, $iy) * (
+    - d_eff[$ix,   $iy-1] * (@dϕ_dx($ix, $iy) >= 0) +   # flux in negative x-direction
+    - d_eff[$ix-1, $iy-1] * (@dϕ_dx($ix, $iy) <  0) )   # flux in positive x-direction
+    : 0.0)) end
+"""
+Calculate flux in y-direction; input coordinates on qy grid
+"""
+macro flux_y(ix, iy) esc(:( 1 < $iy < ny-1 ? @dϕ_dy($ix, $iy) * (
+    - d_eff[$ix-1, $iy  ] * (@dϕ_dy($ix, $iy) >= 0) +   # flux in negative y-direction
+    - d_eff[$ix-1, $iy-1] * (@dϕ_dy($ix, $iy) <  0) )   # flux in positive y-direction
+    : 0.0)) end
+
+#macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end # d_eff only defined on interior points
 
 ### KERNEL functions ###
 
 function output_params!(N, ϕ, p::Para)
     @unpack ρi, ρw, g, H, zb = p
-    for iy = 1:size(ϕ, 2)
+    Threads.@threads for iy = 1:size(ϕ, 2)
+    #for iy = 1:size(ϕ, 2)
         for ix = 1:size(ϕ, 1)
             N[ix, iy] = @N(ix, iy)
         end
@@ -75,7 +96,7 @@ function output_params!(N, ϕ, p::Para)
 end
 
 function update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
-    Threads.@threads for iy=1:size(ϕ, 2)
+    Threads.@threads for iy = 1:size(ϕ, 2)
     #for iy = 1:size(ϕ, 2)
         for ix = 1:size(ϕ, 1)
             Δϕ[ix, iy] = abs(ϕ[ix, iy] - ϕ2[ix, iy])
@@ -86,15 +107,48 @@ function update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
 end
 
 """
+Calculate the effective diffusivity; only on inner points of ϕ/h grid, coordinates (1:nx-2, 1:ny-2)
+"""
+function d_eff!(d_eff, ϕ, h, p::Para, qx_ice, qy_ice)
+    @unpack nx, ny, k, α, β, dx, dy = p
+    Threads.@threads for iy = 1:ny-2
+    #for iy = 1:ny-2
+        for ix = 1:nx-2
+            d_eff[ix, iy] = k * h[ix+1, iy+1]^α * (@gradϕ(ix, iy) + small)^(β-2)
+        end
+    end
+end
+
+# """
+# Calculate the hydraulic potentials dϕ_dx (1:nx-1, 1:ny) and dϕ_dy (1:nx, 1:ny-1)
+# """
+# function dϕ_d!(dϕ_dx, dϕ_dy, ϕ, p::Para, qx_ice, qy_ice)
+#     @unpack nx, ny, dx, dy = p
+#     Threads.@threads for iy = 1:ny
+#     #for iy = 1:ny
+#         for ix = 1:nx
+#             if ix < nx
+#                 dϕ_dx[ix, iy] = (qx_ice[ix, iy] == 2) *
+#                                 (ϕ[ix+1, iy] - ϕ[ix, iy]) / dx
+#             end
+#             if iy < ny
+#                 dϕ_dy[ix, iy] = (qy_ice[ix, iy] == 2) *
+#                                 (ϕ[ix, iy+1] - ϕ[ix, iy]) / dy
+#             end
+#         end
+#     end
+# end
+
+"""
 Calculate fluxes in x-direction using upstream scheme
 """
-function flux_x!(qx, ϕ, h, p::Para, qx_ice, qy_ice) #, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
+function flux_x!(qx, ϕ, h, d_eff, p::Para, qx_ice, qy_ice) #, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
     @unpack nx, ny, dx, dy, k, α, β = p
     Threads.@threads for iy=2:ny-1
     #for iy = 2:ny-1
         for ix = 2:nx-2
-            qx[ix, iy] = - @d_eff(ix, iy-1)   * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) >= 0) +   # flux in negative x-direction
-                         - @d_eff(ix-1, iy-1) * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) <  0)     # flux in positive x-direction
+            qx[ix, iy] = - d_eff[ix,   iy-1] * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) >= 0) +   # flux in negative x-direction
+                         - d_eff[ix-1, iy-1] * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) <  0)     # flux in positive x-direction
         end
     end
     return
@@ -103,13 +157,13 @@ end
 """
 Calculate fluxes in y-direction using upstream scheme
 """
-function flux_y!(qy, ϕ, h, p::Para, qx_ice, qy_ice)
+function flux_y!(qy, ϕ, h, d_eff, p::Para, qx_ice, qy_ice)
     @unpack nx, ny, dx, dy, k, α, β = p
     Threads.@threads for iy = 2:ny-2
     #for iy = 2:ny-2
         for ix = 2:nx-1
-            qy[ix, iy] = - @d_eff(ix-1, iy)   * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) >= 0) +   # flux in negative y-direction
-                         - @d_eff(ix-1, iy-1) * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) <  0)     # flux in positive y-direction
+            qy[ix, iy] = - d_eff[ix-1, iy  ] * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) >= 0) +   # flux in negative y-direction
+                         - d_eff[ix-1, iy-1] * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) <  0)     # flux in positive y-direction
         end
     end
     return
@@ -119,7 +173,7 @@ end
 Calculate residuals of ϕ & h and update the fields
 """
 function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
-                        qx, qy, qx_ice, qy_ice, idx_ice, m, p::Para,
+                        qx, qy, qx_ice, qy_ice, idx_ice, m, p::Para, d_eff,
                         Res_ϕ, Res_h, dϕ_dτ, dh_dτ,
                         γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     @unpack nx, ny, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb,Σ, Γ, Λ = p
@@ -134,6 +188,7 @@ function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
                     Res_ϕ[ix, iy] = idx_ice[ix, iy] * (
                                     - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                               # dhe/dt
                                     - ( (qx[ix, iy] - qx[ix-1, iy]) / dx + (qy[ix, iy] - qy[ix, iy-1]) / dy )    # divergence
+                                    #- ( (@flux_x(ix, iy) - @flux_x(ix-1, iy)) / dx + (@flux_y(ix, iy) - @flux_y(ix, iy-1)) / dy )    # divergence
                                     - (Σ * @vo(ix, iy) - Γ * @vc(ix, iy))                                        # dh/dt
                                     + Λ * m[ix, iy]                                                              # source term
                                     )
@@ -192,7 +247,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
 
     # Array allocation
-    Δϕ, Δh, qx, qy,  m, N,
+    Δϕ, Δh, qx, qy, d_eff, m, N,
     dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
 
     # determine indices of glacier domain
@@ -249,10 +304,12 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
         # Pseudo-transient iteration
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 
-            flux_x!(qx, ϕ, h, params, qx_ice, qy_ice)
-            flux_y!(qy, ϕ, h, params, qx_ice, qy_ice)
+            #dϕ_d!(dϕ_dx, dϕ_dy, ϕ, params, qx_ice, qy_ice)
+            d_eff!(d_eff, ϕ, h, params, qx_ice, qy_ice)
+            flux_x!(qx, ϕ, h, d_eff, params, qx_ice, qy_ice)
+            flux_y!(qy, ϕ, h, d_eff, params, qx_ice, qy_ice)
             update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
-                           qx, qy, qx_ice, qy_ice, idx_ice, m, params,
+                           qx, qy, qx_ice, qy_ice, idx_ice, m, params, d_eff,
                            Res_ϕ, Res_h, dϕ_dτ, dh_dτ,
                            γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 

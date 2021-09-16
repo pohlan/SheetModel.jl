@@ -106,13 +106,14 @@ function array_allocation(nu::Para)
     Δh     = zeros(nx, ny)
     qx     = zeros(nx-1, ny)
     qy     = zeros(nx, ny-1)
+    d_eff  = zeros(nx-2, ny-2)
     m      = zeros(nx, ny)
     N      = zeros(nx, ny)
     dϕ_dτ  = zeros(nx, ny)
     dh_dτ  = zeros(nx, ny)
     Res_ϕ  = zeros(nx, ny)
     Res_h  = zeros(nx, ny)
-    return Δϕ, Δh, qx, qy,  m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h
+    return Δϕ, Δh, qx, qy, d_eff, m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h
 end
 
 """
