@@ -8,36 +8,6 @@ using Printf, Infiltrator
 # - qy grid (m,n) staggered in y-dir.: (nx, ny-1)
 
 
-### FUNCTIONS ###
-"""
-Calculate discharge; qx = calc_q(h, dϕ_dx, dϕ_dy, ...), qy = calc_q(h, dϕ_dy, dϕ_dx, ...)
-"""
-calc_q(h, dϕ_du1, dϕ_du2, k, α, β, small) = - k * h^α * (sqrt(dϕ_du1^2 + dϕ_du2^2) + small)^(β-2) * dϕ_du1
-
-"""
-Calculate water pressure
-"""
-calc_pw(ϕ, ρw, g, zb) = ϕ - ρw * g * zb
-
-"""
-Calculate effective pressure
-"""
-calc_N(ϕ, ρi, ρw, g, H, zb) = ρi * g * H - calc_pw(ϕ, ρw, g, zb)
-
-
-"""
-Calculate closure rate
-"""
-function calc_vc(ϕ, h, ρi, ρw, g, H, zb, n, A)
-    N = calc_N(ϕ, ρi, ρw, g, H, zb)
-    return 2 / n^n * A * h * abs(N)^(n-1) * N
-end
-
-"""
-Calculate opening rate
-"""
-calc_vo(h, ub, hr, lr) = h < hr ? ub * (hr - h) / lr : 0.0
-
 ### MACROS ###
 
 macro pw(ix, iy) esc(:(ϕ[$ix, $iy] - ρw * g * zb[$ix, $iy])) end
@@ -62,27 +32,64 @@ macro gradϕ(ix, iy) esc(:( sqrt(                                               
                                 + (0.5 * (@dϕ_dy($ix+1, $iy+1) + @dϕ_dy($ix+1, $iy)))^2
                                   ))) end
 
-macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / d_eff[$ix, $iy] / 4.1, dt))) end
-#macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ d_eff[$ix, $iy] / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
+macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / @d_eff($ix, $iy) / 4.1, dt))) end
+#macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ @d_eff($ix, $iy) / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
 
 """
 Calculate flux in x-direction; input coordinates on qx grid
 """
 macro flux_x(ix, iy) esc(:( 1 < $ix < nx-1 ? @dϕ_dx($ix, $iy) * (
-    - d_eff[$ix,   $iy-1] * (@dϕ_dx($ix, $iy) >= 0) +   # flux in negative x-direction
-    - d_eff[$ix-1, $iy-1] * (@dϕ_dx($ix, $iy) <  0) )   # flux in positive x-direction
+    - @d_eff($ix,   $iy-1) * (@dϕ_dx($ix, $iy) >= 0) +   # flux in negative x-direction
+    - @d_eff($ix-1, $iy-1) * (@dϕ_dx($ix, $iy) <  0) )   # flux in positive x-direction
     : 0.0)) end
 """
 Calculate flux in y-direction; input coordinates on qy grid
 """
 macro flux_y(ix, iy) esc(:( 1 < $iy < ny-1 ? @dϕ_dy($ix, $iy) * (
-    - d_eff[$ix-1, $iy  ] * (@dϕ_dy($ix, $iy) >= 0) +   # flux in negative y-direction
-    - d_eff[$ix-1, $iy-1] * (@dϕ_dy($ix, $iy) <  0) )   # flux in positive y-direction
+    - @d_eff($ix-1, $iy  ) * (@dϕ_dy($ix, $iy) >= 0) +   # flux in negative y-direction
+    - @d_eff($ix-1, $iy-1) * (@dϕ_dy($ix, $iy) <  0) )   # flux in positive y-direction
     : 0.0)) end
 
-#macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end # d_eff only defined on interior points
+macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end # d_eff only defined on interior points
+
+macro Res_ϕ(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (                                                      # only calculate at points with non-zero ice thickness
+                                                  - ev/(ρw*g) * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) / dt                                                   # dhe/dt
+                                                  - ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) / dx + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) / dy )    # divergence
+                                                  - (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))                                                            # dh/dt
+                                                  + Λ * m[$ix, $iy]                                                                                  # source term
+                                                 )
+)) end
+
+macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
+                                                  - (h[$ix, $iy] - h_old[$ix, $iy]) / dt
+                                                  + (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))
+                                                 )
+)) end
 
 ### KERNEL functions ###
+
+"""
+Calculate residuals of ϕ and h and store them in arrays.
+Used for error calculation and only to be carried out every xx iterations, e.g. every thousand.
+"""
+function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h,
+                    qx, qy, qx_ice, qy_ice, m,
+                    nx, ny, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
+    Threads.@threads for iy = 1:ny
+    #for iy = 1:ny
+        for ix = 1:nx
+            # residual of ϕ
+            if ix == 2 # ϕ: without boundary points (divergence of q not defined there)
+                Res_ϕ[ix, iy] = 0. # position where dirichlet b.c. are imposed
+            elseif (1 < ix < nx) && (1 < iy < ny)
+                Res_ϕ[ix, iy] = @Res_ϕ(ix, iy)
+            end
+
+            # residual of h
+            Res_h[ix, iy] = @Res_h(ix, iy)
+        end
+    end
+end
 
 function output_params!(N, ϕ, p::Para)
     @unpack ρi, ρw, g, H, zb = p
@@ -107,69 +114,6 @@ function update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
 end
 
 """
-Calculate the effective diffusivity; only on inner points of ϕ/h grid, coordinates (1:nx-2, 1:ny-2)
-"""
-function d_eff!(d_eff, ϕ, h, p::Para, qx_ice, qy_ice)
-    @unpack nx, ny, k, α, β, dx, dy = p
-    Threads.@threads for iy = 1:ny-2
-    #for iy = 1:ny-2
-        for ix = 1:nx-2
-            d_eff[ix, iy] = k * h[ix+1, iy+1]^α * (@gradϕ(ix, iy) + small)^(β-2)
-        end
-    end
-end
-
-# """
-# Calculate the hydraulic potentials dϕ_dx (1:nx-1, 1:ny) and dϕ_dy (1:nx, 1:ny-1)
-# """
-# function dϕ_d!(dϕ_dx, dϕ_dy, ϕ, p::Para, qx_ice, qy_ice)
-#     @unpack nx, ny, dx, dy = p
-#     Threads.@threads for iy = 1:ny
-#     #for iy = 1:ny
-#         for ix = 1:nx
-#             if ix < nx
-#                 dϕ_dx[ix, iy] = (qx_ice[ix, iy] == 2) *
-#                                 (ϕ[ix+1, iy] - ϕ[ix, iy]) / dx
-#             end
-#             if iy < ny
-#                 dϕ_dy[ix, iy] = (qy_ice[ix, iy] == 2) *
-#                                 (ϕ[ix, iy+1] - ϕ[ix, iy]) / dy
-#             end
-#         end
-#     end
-# end
-
-"""
-Calculate fluxes in x-direction using upstream scheme
-"""
-function flux_x!(qx, ϕ, h, d_eff, p::Para, qx_ice, qy_ice) #, qx_xlbound, qx_xubound, qy_ylbound, qy_yubound)
-    @unpack nx, ny, dx, dy, k, α, β = p
-    Threads.@threads for iy=2:ny-1
-    #for iy = 2:ny-1
-        for ix = 2:nx-2
-            qx[ix, iy] = - d_eff[ix,   iy-1] * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) >= 0) +   # flux in negative x-direction
-                         - d_eff[ix-1, iy-1] * @dϕ_dx(ix, iy) * (@dϕ_dx(ix, iy) <  0)     # flux in positive x-direction
-        end
-    end
-    return
-end
-
-"""
-Calculate fluxes in y-direction using upstream scheme
-"""
-function flux_y!(qy, ϕ, h, d_eff, p::Para, qx_ice, qy_ice)
-    @unpack nx, ny, dx, dy, k, α, β = p
-    Threads.@threads for iy = 2:ny-2
-    #for iy = 2:ny-2
-        for ix = 2:nx-1
-            qy[ix, iy] = - d_eff[ix-1, iy  ] * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) >= 0) +   # flux in negative y-direction
-                         - d_eff[ix-1, iy-1] * @dϕ_dy(ix, iy) * (@dϕ_dy(ix, iy) <  0)     # flux in positive y-direction
-        end
-    end
-    return
-end
-
-"""
 Calculate residuals of ϕ & h and update the fields
 """
 function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
@@ -181,32 +125,13 @@ function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
     #for iy = 1:ny
         for ix = 1:nx
             if (1 < ix < nx) && (1 < iy < ny)
-                # residual of ϕ
-                if ix == 2 # ϕ: without boundary points (divergence of q not defined there)
-                    Res_ϕ[ix, iy] = 0. # position where dirichlet b.c. are imposed
-                else
-                    Res_ϕ[ix, iy] = idx_ice[ix, iy] * (
-                                    - ev/(ρw*g) * (ϕ[ix, iy] - ϕ_old[ix, iy]) / dt                               # dhe/dt
-                                    - ( (qx[ix, iy] - qx[ix-1, iy]) / dx + (qy[ix, iy] - qy[ix, iy-1]) / dy )    # divergence
-                                    #- ( (@flux_x(ix, iy) - @flux_x(ix-1, iy)) / dx + (@flux_y(ix, iy) - @flux_y(ix, iy-1)) / dy )    # divergence
-                                    - (Σ * @vo(ix, iy) - Γ * @vc(ix, iy))                                        # dh/dt
-                                    + Λ * m[ix, iy]                                                              # source term
-                                    )
-                end
-
                 # update ϕ
-                dϕ_dτ[ix, iy] = Res_ϕ[ix, iy] + γ_ϕ * dϕ_dτ[ix, iy]
+                dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
                 ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
             end
 
-            # residual of h
-            Res_h[ix, iy] = idx_ice[ix, iy] * (
-                            - (h[ix, iy] - h_old[ix, iy]) / dt
-                            + (Σ * @vo(ix, iy) - Γ * @vc(ix, iy))
-                            )
-
             # update h
-            dh_dτ[ix, iy] = Res_h[ix, iy] + γ_h * dh_dτ[ix, iy]
+            dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
             h2[ix, iy] = h[ix, iy] + dτ_h_ * dh_dτ[ix, iy]
         end
     end
@@ -304,16 +229,13 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
         # Pseudo-transient iteration
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 
-            #dϕ_d!(dϕ_dx, dϕ_dy, ϕ, params, qx_ice, qy_ice)
-            d_eff!(d_eff, ϕ, h, params, qx_ice, qy_ice)
-            flux_x!(qx, ϕ, h, d_eff, params, qx_ice, qy_ice)
-            flux_y!(qy, ϕ, h, d_eff, params, qx_ice, qy_ice)
+            # update ϕ and h
             update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
                            qx, qy, qx_ice, qy_ice, idx_ice, m, params, d_eff,
                            Res_ϕ, Res_h, dϕ_dτ, dh_dτ,
                            γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 
-            # apply boundary conditions
+            # apply dirichlet boundary conditions
             apply_bc!(ϕ2, h2, H, ρw, g, zb)
 
             # switch pointer
@@ -323,6 +245,11 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             # determine the errors (only consider points where the ice thickness is > 0)
 
             if iter % 100 == 0
+                # update the residual arrays
+                residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h,
+                           qx, qy, qx_ice, qy_ice, m,
+                           nx, ny, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
+
                 # residual error
                 err_ϕ_res = norm(Res_ϕ[idx_ice]) / sum(idx_ice) # or length(Res_ϕ) instead of sum(idx_ice) ??
                 err_h_res = norm(Res_h[idx_ice]) / norm(h0)
