@@ -123,7 +123,8 @@ Used for error calculation and only to be carried out every xx iterations, e.g. 
 """
 function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h,
                     qx, qy, m,
-                    nx, ny, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
+                    dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
+    nx, ny = size(ϕ)
     Threads.@threads for iy = 1:ny
     #for iy = 1:ny
         for ix = 1:nx
@@ -141,41 +142,14 @@ function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h,
 end
 
 """
-Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for plotting.
-"""
-function output_params!(N, ϕ, p::Para)
-    @unpack ρi, ρw, g, H, zb = p
-    Threads.@threads for iy = 1:size(ϕ, 2)
-    #for iy = 1:size(ϕ, 2)
-        for ix = 1:size(ϕ, 1)
-            N[ix, iy] = @N(ix, iy)
-        end
-    end
-    return
-end
-
-"""
-Calculate the difference between previous and updated ϕ and h, used for error calculation.
-"""
-function update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
-    Threads.@threads for iy = 1:size(ϕ, 2)
-    #for iy = 1:size(ϕ, 2)
-        for ix = 1:size(ϕ, 1)
-            Δϕ[ix, iy] = abs(ϕ[ix, iy] - ϕ2[ix, iy])
-            Δh[ix, iy] = abs(h[ix, iy] - h2[ix, iy])
-        end
-    end
-    return
-end
-
-"""
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
 function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
                         qx, qy, m, p::Para, d_eff,
                         Res_ϕ, Res_h, dϕ_dτ, dh_dτ,
                         γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
-    @unpack nx, ny, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb,Σ, Γ, Λ = p
+    @unpack dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb,Σ, Γ, Λ = p
+    nx, ny = size(ϕ)
     Threads.@threads for iy = 1:ny
     #for iy = 1:ny
         for ix = 1:nx
@@ -219,6 +193,38 @@ function apply_bc!(ϕ, h, H, ρw, g, zb) # TODO: don't hard-wire, give bc as inp
     return
 end
 
+"""
+Calculate the difference between previous and updated ϕ and h, used for error calculation.
+"""
+function update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
+    Threads.@threads for iy = 1:size(ϕ, 2)
+    #for iy = 1:size(ϕ, 2)
+        for ix = 1:size(ϕ, 1)
+            Δϕ[ix, iy] = abs(ϕ[ix, iy] - ϕ2[ix, iy])
+            Δh[ix, iy] = abs(h[ix, iy] - h2[ix, iy])
+        end
+    end
+    return
+end
+
+"""
+Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for plotting.
+"""
+function output_params!(N, qx, qy, ϕ, h, p::Para)
+    @unpack ρi, ρw, g, H, zb, k, α, β, dx, dy = p
+    nx, ny = size(ϕ)
+    Threads.@threads for iy = 1:size(ϕ, 2)
+    #for iy = 1:size(ϕ, 2)
+        for ix = 1:size(ϕ, 1)
+            N[ix, iy]  = @N(ix, iy)
+            if (1 < ix < nx) && (1 < iy < ny)
+                qx[ix, iy] = @flux_x(ix, iy)
+                qy[ix, iy] = @flux_y(ix, iy)
+            end
+        end
+    end
+    return
+end
 
 """
 Run the model with scaled parameters.
@@ -293,7 +299,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
                 # update the residual arrays
                 residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h,
                            qx, qy, m,
-                           nx, ny, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
+                           dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
 
                 # residual error
                 err_ϕ_res = norm(Res_ϕ[H .> 0.]) / sum(H .> 0.) # or length(Res_ϕ) instead of sum(H .> 0.) ??
@@ -332,11 +338,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             end
 
+            iter += 1
             if iter % printit == 0
                 @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
             end
-
-            iter += 1
 
         end
         ittot += iter-1; tstep += 1; t += dt
@@ -358,9 +363,9 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
 
     # calculate N, qx and qy as output parameters
-    output_params!(N, ϕ, params)
+    output_params!(N, qx, qy, ϕ, h, params)
 
-    return model_output(;   N, ϕ, h, qx, qy, H,
+    return model_output(;   N, ϕ, h, qx, qy,
                             Err_ϕ=Δϕ, Err_h=Δh, Res_ϕ, Res_h,
                             ittot, iters,
                             errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,

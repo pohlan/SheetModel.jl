@@ -60,12 +60,12 @@ function run_example(;dt,
 
     # plot output
     #@unpack xc, yc, H = input_params
-    #@unpack N, ϕ, h, qx, qy, qx_ice, qy_ice,
+    #@unpack N, ϕ, h, qx, qy,
     #        ittot, iters, Err_ϕ, Err_h, Res_ϕ, Res_h,
     #        errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
     #        errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel = output
     #if plotting
-    #    S.plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
+    #    S.plot_output(xc, yc, H, N, h, qx, qy, Err_ϕ, Err_h,
     #                  iters, errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
     #                  errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
     #end

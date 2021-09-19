@@ -76,7 +76,6 @@ Broadcast.broadcastable(p::Para) = Ref(p)
     N::Matrix{Float64}
     ϕ::Matrix{Float64}
     h::Matrix{Float64}
-    H::Matrix{Float64}
     qx::Matrix{Float64}
     qy::Matrix{Float64}
     Err_ϕ::Matrix{Float64}
@@ -261,10 +260,14 @@ function plot_output(xc, yc, H, N, h, qx, qy, Err_ϕ, Err_h,
     plot(xc, N[:, ind])
     title(join(["N at y = ", string(round(yc[ind], digits=1))]))
 
+    # don't show any value outside of glacier domain
     qx_plot = copy(qx)
     qy_plot = copy(qy)
-    qx_plot[H[1:end-1, :] .== 0. && H[2:end, :] .== 0.] .= NaN  # don't show any value outside of glacier domain
-    qy_plot[H[:, 1:end-1] .== 0. && H[:, 2:end] .== 0.] .= NaN
+    qx_plot[H[1:end-1, :] .== 0.] .= NaN
+    qx_plot[H[2:end, :]   .== 0.] .= NaN
+    qy_plot[H[:, 1:end-1] .== 0.] .= NaN
+    qy_plot[H[:, 2:end]   .== 0.] .= NaN
+
     figure()
     subplot(1, 2, 1)
     pcolor(qx_plot')
