@@ -39,24 +39,24 @@ macro vo(ix, iy) esc(:(h[$ix, $iy] < hr ? ub * (hr - h[$ix, $iy]) / lr : 0.0)) e
 """
 Calculate hydraulic gradient in x-direction; input coordinates on qx grid.
 Implicitly sets zero-flux boundary conditions.
-Needs access to qx_ice, ϕ, dx
+Needs access to H, ϕ, dx
 """
-macro dϕ_dx(ix, iy) esc(:( (qx_ice[$ix, $iy] == 2) #* !qx_xubound[$ix, $iy] * !qx_xlbound[$ix, $iy] # leave qx_ice away?
+macro dϕ_dx(ix, iy) esc(:( (H[$ix, $iy] > 0. && H[$ix+1, $iy] > 0.) # only consider ice interior; gradients at boundary and outside are zero
                            * (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) / dx
                         )) end
 
 """
 Calculate hydraulic gradient in y-direction; input coordinates on qy grid.
 Implicitly sets zero-flux boundary conditions.
-Needs access to qy_ice, ϕ, dy
+Needs access to H, ϕ, dy
 """
-macro dϕ_dy(ix, iy) esc(:( (qy_ice[$ix, $iy] == 2) #* !qy_yubound[$ix, $iy] * !qy_ylbound[$ix, $iy] # leave qy_ice away?
+macro dϕ_dy(ix, iy) esc(:( (H[$ix, $iy] > 0. && H[$ix, $iy+1] > 0.) # only consider ice interior; gradients at boundary and outside are zero
                             * (ϕ[$ix, $iy+1] - ϕ[$ix, $iy]) / dy
                          )) end
 
 """
 Calculate absolute hydraulic gradient, |∇ϕ|; input coordinates on d_eff grid (1:nx-2, 1:ny-2) -> inner points of ϕ/h grid.
-Needs access to ϕ, dx, dy, qx_ice, qy_ice
+Needs access to ϕ, dx, dy, H
 """
 macro gradϕ(ix, iy) esc(:( sqrt(
                                   (0.5 * (@dϕ_dx($ix+1, $iy+1) + @dϕ_dx($ix, $iy+1)))^2
@@ -64,20 +64,20 @@ macro gradϕ(ix, iy) esc(:( sqrt(
                                   ))) end
 """
 Calculate effective diffusivity, input coordinates on d_eff grid (inner points of ϕ/h grid).
-Needs access to k, h, α, β, small, ϕ, dx, dy, qx_ice, qy_ice
+Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
 macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end
 
 """
 Calculate pseudo-time step of ϕ, input coordinates on d_eff grid (inner points of ϕ/h grid).
-Needs access to dτ_ϕ_, dx, dy, dt, k, h, α, β, small, ϕ, qx_ice, qy_ice
+Needs access to dτ_ϕ_, dx, dy, dt, k, h, α, β, small, ϕ, H
 """
 macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / @d_eff($ix, $iy) / 4.1, dt))) end
 #macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ @d_eff($ix, $iy) / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
 
 """
 Calculate flux in x-direction using an upstream scheme; input coordinates on qx grid.
-Needs access to k, h, α, β, small, ϕ, dx, dy, qx_ice, qy_ice
+Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
 macro flux_x(ix, iy) esc(:( 1 < $ix < nx-1 ? @dϕ_dx($ix, $iy) * (
     - @d_eff($ix,   $iy-1) * (@dϕ_dx($ix, $iy) >= 0) +   # flux in negative x-direction
@@ -85,7 +85,7 @@ macro flux_x(ix, iy) esc(:( 1 < $ix < nx-1 ? @dϕ_dx($ix, $iy) * (
     : 0.0)) end
 """
 Calculate flux in y-direction using an upstream scheme; input coordinates on qy grid.
-Needs access to k, h, α, β, small, ϕ, dx, dy, qx_ice, qy_ice
+Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
 macro flux_y(ix, iy) esc(:( 1 < $iy < ny-1 ? @dϕ_dy($ix, $iy) * (
     - @d_eff($ix-1, $iy  ) * (@dϕ_dy($ix, $iy) >= 0) +   # flux in negative y-direction
@@ -95,7 +95,7 @@ macro flux_y(ix, iy) esc(:( 1 < $iy < ny-1 ? @dϕ_dy($ix, $iy) * (
 
 """
 Calculate residual of ϕ; input coordinates on ϕ/h grid (but only defined on inner grid points 2:nx-1, 2:ny-1, due to d_eff).
-Needs access to ϕ, ϕ_old, h, H, ev, ρw, ρi, g, k, α, β, small, qx_ice, qy_ice, dx, dy, dt, Σ, Γ, Λ, m, hr, ub, lr, zb, n, A
+Needs access to ϕ, ϕ_old, h, H, ev, ρw, ρi, g, k, α, β, small, dx, dy, dt, Σ, Γ, Λ, m, hr, ub, lr, zb, n, A
 """
 macro Res_ϕ(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (                                                      # only calculate at points with non-zero ice thickness
                                                   - ev/(ρw*g) * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) / dt                                                   # dhe/dt
@@ -122,7 +122,7 @@ Calculate residuals of ϕ and h and store them in arrays.
 Used for error calculation and only to be carried out every xx iterations, e.g. every thousand.
 """
 function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h,
-                    qx, qy, qx_ice, qy_ice, m,
+                    qx, qy, m,
                     nx, ny, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
     Threads.@threads for iy = 1:ny
     #for iy = 1:ny
@@ -172,7 +172,7 @@ end
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
 function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
-                        qx, qy, qx_ice, qy_ice, idx_ice, m, p::Para, d_eff,
+                        qx, qy, m, p::Para, d_eff,
                         Res_ϕ, Res_h, dϕ_dτ, dh_dτ,
                         γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     @unpack nx, ny, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb,Σ, Γ, Λ = p
@@ -202,9 +202,9 @@ function apply_bc!(ϕ, h, H, ρw, g, zb) # TODO: don't hard-wire, give bc as inp
     Threads.@threads for iy=1:ny
     #for iy = 1:ny
         for ix = 1:nx
-            if H[ix, iy] == 0.             # zero sheet thickness outside of glacier domain; necessary ??
-                h[ix, iy] = 0.
-            end
+            #if H[ix, iy] == 0.             # zero sheet thickness outside of glacier domain; necessary ??
+            #    h[ix, iy] = 0.
+            #end
             if ix == 2
                 ϕ[ix, iy] = ρw * g * zb[ix, iy]
             end
@@ -230,17 +230,6 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     # Array allocation
     Δϕ, Δh, qx, qy, d_eff, m, N,
     dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
-
-    # determine indices of glacier domain
-    idx_ice = H .> 0.0
-    qx_ice  = idx_ice[1:end-1, :] .+  # qx_ice = 1 for boundary, 2 for interior
-              idx_ice[2:end, :]
-    qy_ice  = idx_ice[:, 1:end-1] .+
-              idx_ice[:, 2:end]
-    #qx_xlbound  = Diff(idx_ice, dims=1) .== 1 # on qx grid
-    #qx_xubound  = Diff(idx_ice, dims=1) .== -1
-    #qy_ylbound  = Diff(idx_ice, dims=2) .== 1 # on qy grid
-    #qy_yubound  = Diff(idx_ice, dims=2) .== -1
 
     # Apply boundary conditions
     apply_bc!(ϕ0, h0, H, ρw, g, zb)
@@ -287,7 +276,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             # update ϕ and h
             update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
-                           qx, qy, qx_ice, qy_ice, idx_ice, m, params, d_eff,
+                           qx, qy, m, params, d_eff,
                            Res_ϕ, Res_h, dϕ_dτ, dh_dτ,
                            γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 
@@ -303,12 +292,12 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             if iter % 100 == 0
                 # update the residual arrays
                 residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h,
-                           qx, qy, qx_ice, qy_ice, m,
+                           qx, qy, m,
                            nx, ny, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
 
                 # residual error
-                err_ϕ_res = norm(Res_ϕ[idx_ice]) / sum(idx_ice) # or length(Res_ϕ) instead of sum(idx_ice) ??
-                err_h_res = norm(Res_h[idx_ice]) / norm(h0)
+                err_ϕ_res = norm(Res_ϕ[H .> 0.]) / sum(H .> 0.) # or length(Res_ϕ) instead of sum(H .> 0.) ??
+                err_h_res = norm(Res_h[H .> 0.]) / norm(h0)
                 if (iter==0)
                     err_ϕ_ini = err_ϕ_res
                     err_h_ini = err_h_res
@@ -318,8 +307,8 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
                 # update error
                 update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
-                err_ϕ = norm(Δϕ[idx_ice]) / sum(idx_ice)
-                err_h = norm(Δh[idx_ice]) / norm(h0)
+                err_ϕ = norm(Δϕ[H .> 0.]) / sum(H .> 0.)
+                err_h = norm(Δh[H .> 0.]) / norm(h0)
                 if (iter==0)
                     err_ϕ_ini = err_ϕ
                     err_h_ini = err_h
@@ -371,7 +360,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     # calculate N, qx and qy as output parameters
     output_params!(N, ϕ, params)
 
-    return model_output(;   N, ϕ, h, qx, qy, qx_ice, qy_ice,
+    return model_output(;   N, ϕ, h, qx, qy, H,
                             Err_ϕ=Δϕ, Err_h=Δh, Res_ϕ, Res_h,
                             ittot, iters,
                             errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,

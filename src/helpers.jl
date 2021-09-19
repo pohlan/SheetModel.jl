@@ -76,10 +76,9 @@ Broadcast.broadcastable(p::Para) = Ref(p)
     N::Matrix{Float64}
     ϕ::Matrix{Float64}
     h::Matrix{Float64}
+    H::Matrix{Float64}
     qx::Matrix{Float64}
     qy::Matrix{Float64}
-    qx_ice::Matrix{Int64}
-    qy_ice::Matrix{Int64}
     Err_ϕ::Matrix{Float64}
     Err_h::Matrix{Float64}
     Res_ϕ::Matrix{Float64}
@@ -191,7 +190,7 @@ function scaling(p::Para, ϕ0, h0)
 end
 
 function descaling(output::model_output, N_, ϕ_, h_, q_)
-    @unpack N, ϕ, h, qx, qy, qx_ice, qy_ice,
+    @unpack N, ϕ, h, qx, qy,
             Err_ϕ, Err_h , Res_ϕ, Res_h,
             ittot, iters,
             errs_ϕ, errs_h,
@@ -204,8 +203,6 @@ function descaling(output::model_output, N_, ϕ_, h_, q_)
         h = h .* h_,
         qx = qx .* q_,
         qy = qy .* q_,
-        qx_ice = qx_ice,
-        qy_ice = qy_ice,
         Err_ϕ = Err_ϕ .* ϕ_,
         Err_h = Err_h .* h_,
         Res_ϕ = Res_ϕ .* ϕ_,
@@ -237,7 +234,7 @@ function initial_conditions(xc, yc, H; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) ->
     return ϕ0, h0
 end
 
-function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
+function plot_output(xc, yc, H, N, h, qx, qy, Err_ϕ, Err_h,
                      iters, errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
                      errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
     x_plt = [xc[1]; xc .+ (xc[2]-xc[1])]
@@ -266,8 +263,8 @@ function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
 
     qx_plot = copy(qx)
     qy_plot = copy(qy)
-    qx_plot[qx_ice .== 0] .= NaN
-    qy_plot[qy_ice .== 0] .= NaN
+    qx_plot[H[1:end-1, :] .== 0. && H[2:end, :] .== 0.] .= NaN  # don't show any value outside of glacier domain
+    qy_plot[H[:, 1:end-1] .== 0. && H[:, 2:end] .== 0.] .= NaN
     figure()
     subplot(1, 2, 1)
     pcolor(qx_plot')

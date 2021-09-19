@@ -5,7 +5,7 @@
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../"))
-using SheetModel, Parameters, ProfileView # for ProfileView, gtk needs to be installed
+using SheetModel, Parameters #, ProfileView # for ProfileView, gtk needs to be installed
 const S = SheetModel
 
 function run_example(;dt,
@@ -53,10 +53,10 @@ function run_example(;dt,
         ϕ0 = 0.5 * ones(nx, ny)
         h0 = 0.5 * ones(nx, ny)
 
-    ProfileView.@profview S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1) # for profiling
+    #ProfileView.@profview S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1) # for profiling
     # In VSCode, ProfileView.xx is necessary (https://github.com/timholy/ProfileView.jl/pull/172/commits/5ea809fe6409a41b96cfba0800b78d708f1ad604)
 
-    #output = S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1)
+    output = S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1)
 
     # plot output
     #@unpack xc, yc, H = input_params
