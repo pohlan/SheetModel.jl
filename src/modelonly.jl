@@ -1,57 +1,102 @@
 using LazyArrays: Diff
 using Printf, Infiltrator
 
-# used indices:
+# used grids:
 # - normal grid (i,j), size (nx, ny)
 #   ϕ, h, Res_ϕ, Res_h, ..
+# - d_eff grid (p, q), size (nx-2, ny-2)
+#   only inner points of ϕ/h grid, e.g. p=1 corresponds to i=2
 # - qx grid (m,n) staggered in x-dir.: (nx-1, ny)
 # - qy grid (m,n) staggered in y-dir.: (nx, ny-1)
 
 
 ### MACROS ###
 
+"""
+Calculate water pressure; input coordinates on ϕ/h grid.
+Needs access to ϕ, ρw, g, zb.
+"""
 macro pw(ix, iy) esc(:(ϕ[$ix, $iy] - ρw * g * zb[$ix, $iy])) end
 
+"""
+Calculate effective pressure; input coordinates on ϕ/h grid.
+Needs access to ϕ, H, ρw, ρi, g, zb
+"""
 macro N(ix, iy) esc(:(ρi * g * H[$ix, $iy] - @pw($ix, $iy))) end
 
+"""
+Calculate closure rate; input coordinates on ϕ/h grid.
+Needs access to ϕ, H, ρw, ρi, g, zb, n, A, h
+"""
 macro vc(ix, iy) esc(:(2 / n^n * A * h[$ix, $iy] * abs(@N($ix, $iy))^(n-1) * @N($ix, $iy))) end
 
+"""
+Calculate opening rate; input coordinates on ϕ/h grid.
+Needs access to h, hr, ub, lr
+"""
 macro vo(ix, iy) esc(:(h[$ix, $iy] < hr ? ub * (hr - h[$ix, $iy]) / lr : 0.0)) end
 
-
+"""
+Calculate hydraulic gradient in x-direction; input coordinates on qx grid.
+Implicitly sets zero-flux boundary conditions.
+Needs access to qx_ice, ϕ, dx
+"""
 macro dϕ_dx(ix, iy) esc(:( (qx_ice[$ix, $iy] == 2) #* !qx_xubound[$ix, $iy] * !qx_xlbound[$ix, $iy] # leave qx_ice away?
                            * (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) / dx
                         )) end
 
+"""
+Calculate hydraulic gradient in y-direction; input coordinates on qy grid.
+Implicitly sets zero-flux boundary conditions.
+Needs access to qy_ice, ϕ, dy
+"""
 macro dϕ_dy(ix, iy) esc(:( (qy_ice[$ix, $iy] == 2) #* !qy_yubound[$ix, $iy] * !qy_ylbound[$ix, $iy] # leave qy_ice away?
                             * (ϕ[$ix, $iy+1] - ϕ[$ix, $iy]) / dy
                          )) end
 
-macro gradϕ(ix, iy) esc(:( sqrt(                                                      # gradϕ only defined on interior points
+"""
+Calculate absolute hydraulic gradient, |∇ϕ|; input coordinates on d_eff grid (1:nx-2, 1:ny-2) -> inner points of ϕ/h grid.
+Needs access to ϕ, dx, dy, qx_ice, qy_ice
+"""
+macro gradϕ(ix, iy) esc(:( sqrt(
                                   (0.5 * (@dϕ_dx($ix+1, $iy+1) + @dϕ_dx($ix, $iy+1)))^2
                                 + (0.5 * (@dϕ_dy($ix+1, $iy+1) + @dϕ_dy($ix+1, $iy)))^2
                                   ))) end
+"""
+Calculate effective diffusivity, input coordinates on d_eff grid (inner points of ϕ/h grid).
+Needs access to k, h, α, β, small, ϕ, dx, dy, qx_ice, qy_ice
+"""
+macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end
 
+"""
+Calculate pseudo-time step of ϕ, input coordinates on d_eff grid (inner points of ϕ/h grid).
+Needs access to dτ_ϕ_, dx, dy, dt, k, h, α, β, small, ϕ, qx_ice, qy_ice
+"""
 macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / @d_eff($ix, $iy) / 4.1, dt))) end
 #macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ @d_eff($ix, $iy) / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
 
 """
-Calculate flux in x-direction; input coordinates on qx grid
+Calculate flux in x-direction using an upstream scheme; input coordinates on qx grid.
+Needs access to k, h, α, β, small, ϕ, dx, dy, qx_ice, qy_ice
 """
 macro flux_x(ix, iy) esc(:( 1 < $ix < nx-1 ? @dϕ_dx($ix, $iy) * (
     - @d_eff($ix,   $iy-1) * (@dϕ_dx($ix, $iy) >= 0) +   # flux in negative x-direction
     - @d_eff($ix-1, $iy-1) * (@dϕ_dx($ix, $iy) <  0) )   # flux in positive x-direction
     : 0.0)) end
 """
-Calculate flux in y-direction; input coordinates on qy grid
+Calculate flux in y-direction using an upstream scheme; input coordinates on qy grid.
+Needs access to k, h, α, β, small, ϕ, dx, dy, qx_ice, qy_ice
 """
 macro flux_y(ix, iy) esc(:( 1 < $iy < ny-1 ? @dϕ_dy($ix, $iy) * (
     - @d_eff($ix-1, $iy  ) * (@dϕ_dy($ix, $iy) >= 0) +   # flux in negative y-direction
     - @d_eff($ix-1, $iy-1) * (@dϕ_dy($ix, $iy) <  0) )   # flux in positive y-direction
     : 0.0)) end
 
-macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end # d_eff only defined on interior points
 
+"""
+Calculate residual of ϕ; input coordinates on ϕ/h grid (but only defined on inner grid points 2:nx-1, 2:ny-1, due to d_eff).
+Needs access to ϕ, ϕ_old, h, H, ev, ρw, ρi, g, k, α, β, small, qx_ice, qy_ice, dx, dy, dt, Σ, Γ, Λ, m, hr, ub, lr, zb, n, A
+"""
 macro Res_ϕ(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (                                                      # only calculate at points with non-zero ice thickness
                                                   - ev/(ρw*g) * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) / dt                                                   # dhe/dt
                                                   - ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) / dx + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) / dy )    # divergence
@@ -60,13 +105,17 @@ macro Res_ϕ(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (                              
                                                  )
 )) end
 
+"""
+Calculate residual of h; input coordinates on ϕ/h grid.
+Needs access to ϕ, h, h_old, H, dt, Σ, Γ, hr, ub, lr, zb, n, A, ρw, ρi, g
+"""
 macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
                                                   - (h[$ix, $iy] - h_old[$ix, $iy]) / dt
                                                   + (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))
                                                  )
 )) end
 
-### KERNEL functions ###
+### KERNEL FUNCTIONS ###
 
 """
 Calculate residuals of ϕ and h and store them in arrays.
@@ -91,6 +140,9 @@ function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h,
     end
 end
 
+"""
+Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for plotting.
+"""
 function output_params!(N, ϕ, p::Para)
     @unpack ρi, ρw, g, H, zb = p
     Threads.@threads for iy = 1:size(ϕ, 2)
@@ -102,6 +154,9 @@ function output_params!(N, ϕ, p::Para)
     return
 end
 
+"""
+Calculate the difference between previous and updated ϕ and h, used for error calculation.
+"""
 function update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
     Threads.@threads for iy = 1:size(ϕ, 2)
     #for iy = 1:size(ϕ, 2)
@@ -114,7 +169,7 @@ function update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
 end
 
 """
-Calculate residuals of ϕ & h and update the fields
+Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
 function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
                         qx, qy, qx_ice, qy_ice, idx_ice, m, p::Para, d_eff,
@@ -139,7 +194,8 @@ function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
 end
 
 """
-Apply Dirichlet boundary conditions to ϕ, at the moment pw(x=0) = 0
+Apply Dirichlet boundary conditions to ϕ, at the moment pw(x=0) = 0.
+Neumann boundary conditions are applied when calculating the hydraulic gradient (@dϕ_dx and @dϕ_dy macros).
 """
 function apply_bc!(ϕ, h, H, ρw, g, zb) # TODO: don't hard-wire, give bc as input parameters
     nx, ny = size(ϕ)
@@ -165,7 +221,7 @@ end
 
 
 """
-Run the model with scaled parameters
+Run the model with scaled parameters.
 """
 function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β,
@@ -323,7 +379,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 end
 
 """
-Scale the parameters and call the model run function
+Scale the parameters and call the model run function.
 """
 function runthemodel(input::Para, ϕ0, h0;
                     printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
