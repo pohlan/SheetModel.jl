@@ -121,8 +121,7 @@ macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
 Calculate residuals of ϕ and h and store them in arrays.
 Used for error calculation and only to be carried out every xx iterations, e.g. every thousand.
 """
-function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h,
-                    qx, qy, m,
+function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
                     dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
     nx, ny = size(ϕ)
     Threads.@threads for iy = 1:ny
@@ -144,11 +143,9 @@ end
 """
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
-function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
-                        qx, qy, m, p::Para, d_eff,
-                        Res_ϕ, Res_h, dϕ_dτ, dh_dτ,
-                        γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
-    @unpack dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb,Σ, Γ, Λ = p
+function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
+                        dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ,
+                        dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     nx, ny = size(ϕ)
     Threads.@threads for iy = 1:ny
     #for iy = 1:ny
@@ -210,8 +207,8 @@ end
 """
 Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for plotting.
 """
-function output_params!(N, qx, qy, ϕ, h, p::Para)
-    @unpack ρi, ρw, g, H, zb, k, α, β, dx, dy = p
+function output_params!(N, qx, qy, ϕ, h,
+                        ρi, ρw, g, H, zb, k, α, β, dx, dy)
     nx, ny = size(ϕ)
     Threads.@threads for iy = 1:size(ϕ, 2)
     #for iy = 1:size(ϕ, 2)
@@ -281,10 +278,9 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 
             # update ϕ and h
-            update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old,
-                           qx, qy, m, params, d_eff,
-                           Res_ϕ, Res_h, dϕ_dτ, dh_dτ,
-                           γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
+            update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
+                           dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ,
+                           dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 
             # apply dirichlet boundary conditions
             apply_bc!(ϕ2, h2, H, ρw, g, zb)
@@ -297,8 +293,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
 
             if iter % 100 == 0
                 # update the residual arrays
-                residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h,
-                           qx, qy, m,
+                residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
                            dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
 
                 # residual error
@@ -363,7 +358,8 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
     @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
 
     # calculate N, qx and qy as output parameters
-    output_params!(N, qx, qy, ϕ, h, params)
+    output_params!(N, qx, qy, ϕ, h,
+                   ρi, ρw, g, H, zb, k, α, β, dx, dy)
 
     return model_output(;   N, ϕ, h, qx, qy,
                             Err_ϕ=Δϕ, Err_h=Δh, Res_ϕ, Res_h,
