@@ -190,13 +190,8 @@ end
 
 function descaling(output::model_output, N_, ϕ_, h_, q_)
     @unpack N, ϕ, h, qx, qy,
-            Err_ϕ, Err_h , Res_ϕ, Res_h,
-            ittot, iters,
-            errs_ϕ, errs_h,
-            errs_ϕ_rel, errs_h_rel,
-            errs_ϕ_res, errs_h_res,
-            errs_ϕ_resrel, errs_h_resrel = output
-    output_descaled = model_output(
+            Err_ϕ, Err_h , Res_ϕ, Res_h = output
+    output_descaled = model_output(output,
         N = N .* N_,
         ϕ = ϕ .* ϕ_,
         h = h .* h_,
@@ -206,16 +201,6 @@ function descaling(output::model_output, N_, ϕ_, h_, q_)
         Err_h = Err_h .* h_,
         Res_ϕ = Res_ϕ .* ϕ_,
         Res_h = Res_h .* h_,
-        ittot = ittot,
-        iters = iters,
-        errs_ϕ = errs_ϕ,
-        errs_h = errs_h,
-        errs_ϕ_rel = errs_ϕ_rel,
-        errs_h_rel = errs_h_rel,
-        errs_ϕ_res = errs_ϕ_res,
-        errs_h_res = errs_h_res,
-        errs_ϕ_resrel = errs_ϕ_resrel,
-        errs_h_resrel = errs_h_resrel
         )::model_output
     return output_descaled
 end
