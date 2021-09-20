@@ -226,7 +226,7 @@ end
 """
 Run the model with scaled parameters.
 """
-function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
+function runthemodel_scaled(params::Para, ϕ0, h0, printtime)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
 
@@ -289,9 +289,11 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
             ϕ, ϕ2 = ϕ2, ϕ
             h, h2 = h2, h
 
+            iter += 1
+
             # determine the errors (only consider points where the ice thickness is > 0)
 
-            if iter % 100 == 0
+            if iter % 1000 == 0
                 # update the residual arrays
                 residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
                            dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
@@ -331,12 +333,10 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
                 append!(errs_ϕ_resrel, err_ϕ_resrel)
                 append!(errs_h_resrel, err_h_resrel)
 
+                @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
+
             end
 
-            iter += 1
-            if iter % printit == 0
-                @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
-            end
 
         end
         ittot += iter-1; tstep += 1; t += dt
@@ -372,10 +372,9 @@ end
 Scale the parameters and call the model run function.
 """
 function runthemodel(input::Para, ϕ0, h0;
-                    printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
                     printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
     params, ϕ0, h0, ϕ_, N_, h_, q_ = scaling(input, ϕ0, h0)
-    output = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
+    output = runthemodel_scaled(params::Para, ϕ0, h0, printtime)
     output_descaled = descaling(output, N_, ϕ_, h_, q_)
     return output_descaled
 end

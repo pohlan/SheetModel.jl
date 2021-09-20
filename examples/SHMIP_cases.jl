@@ -30,7 +30,7 @@ r(x, para) = (-4.5*x/6e3 + 5) * (surface_val(x, 0) - f(x, para)) /
 bed_val(x,y, para) = f(x,para) + g(y) * r(x, para)
 
 
-function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=10^5,
+function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
                    dt, tsteps=1,
                    γ_ϕ=0.8, γ_h=0.9, dτ_ϕ_=1.0, dτ_h_=7e-6)      # parameters for pseudo-transient time stepping
 
@@ -139,8 +139,8 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
     )
 
 
-    model_output = S.runthemodel(input_params, ϕ0, h0, printtime=printtime, printit=printit);
-    @unpack N, ϕ, h, qx, qy, qx_ice, qy_ice,
+    model_output = S.runthemodel(input_params, ϕ0, h0, printtime=printtime);
+    @unpack N, ϕ, h, qx, qy,
             ittot, iters, Err_ϕ, Err_h, Res_ϕ, Res_h,
             errs_ϕ, errs_h,
             errs_ϕ_rel, errs_h_rel,
@@ -148,7 +148,7 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5, printit=1
             errs_ϕ_resrel, errs_h_resrel = model_output
 
     if make_plot
-        S.plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
+        S.plot_output(xc, yc, H, N, h, qx, qy, Err_ϕ, Err_h,
                       iters, errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
                       errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
     end
