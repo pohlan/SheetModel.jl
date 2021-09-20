@@ -151,7 +151,7 @@ function scaling(p::Para, ϕ0, h0)
     end
 
     # Dimensionless parameters
-    scaled_params = reconstruct_to(p, Para,
+    scaled_params = reconstruct(Para, p,
         # Scalars (one global value)
         g = g / g_,
         ρw = ρw / ρ_,
