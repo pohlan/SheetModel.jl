@@ -197,7 +197,7 @@ end
 Assign updated ϕ and h values to ϕ_old and h_old, respectively.
 Carried out after each physical time step.
 """
-@parallel_indices (ix,iy) function old2new(ϕ, ϕ_old, h, h_old)
+@parallel_indices (ix,iy) function old2new!(ϕ, ϕ_old, h, h_old)
     if (ix <= size(ϕ, 1) && iy <= size(ϕ, 2))
         ϕ_old[ix, iy] = ϕ[ix, iy]
         h_old[ix, iy] = h[ix, iy]
@@ -209,7 +209,7 @@ end
 Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for plotting.
 """
 @parallel_indices (ix,iy) function output_params!(N, qx, qy, ϕ, h,
-                        ρi, ρw, g, H, zb, k, α, β, dx, dy)
+                                                  ρi, ρw, g, H, zb, k, α, β, dx, dy)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
         N[ix, iy]  = @N(ix, iy)
@@ -356,8 +356,8 @@ Run the model with scaled parameters.
     @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
 
     # calculate N, qx and qy as output parameters
-    output_params!(N, qx, qy, ϕ, h,
-                   ρi, ρw, g, H, zb, k, α, β, dx, dy)
+    @parallel cublocks cuthreads output_params!(N, qx, qy, ϕ, h,
+                                                ρi, ρw, g, H, zb, k, α, β, dx, dy)
 
     return model_output(;   N, ϕ, h, qx, qy,
                             Err_ϕ=Δϕ, Err_h=Δh, Res_ϕ, Res_h,
