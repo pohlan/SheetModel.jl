@@ -17,13 +17,16 @@ ghostp(nx) = [0.0; ones(nx-2); 0.0]
 
 """
 Create struct containing the parameters used for CUDA within ParallelStencil
-    BLOCKX, BLOCKY, GRIDX, GRIDY, cuthreads, cublocks
+    nx, ny, BLOCKX, BLOCKY, GRIDX, GRIDY, cuthreads, cublocks
 """
 @with_kw struct CuParams @deftype Int64
+    nx                         # number of grid points, including ghost points where ice thickness = 0
+    ny
+
     BLOCKX = 1
     BLOCKY = 1
-    GRIDX  = 64*2
-    GRIDY  = 16*2
+    GRIDX  = div(nx, BLOCKX, RoundUp)
+    GRIDY  = div(ny, BLOCKY, RoundUp)
     cuthreads::Tuple{Int64, Int64, Int64} = (BLOCKX, BLOCKY, 1)
     cublocks::Tuple{Int64, Int64, Int64}  = (GRIDX,  GRIDY,  1)
 end

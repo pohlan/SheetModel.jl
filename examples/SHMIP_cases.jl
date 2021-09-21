@@ -105,7 +105,10 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
     end
 
     # CUDA parameters
-    cuda_params = S.CuParams()
+    cuda_params = S.CuParams(
+        nx = Nx,
+        ny = Ny,
+    )
 
     # Define numerical domain and input parameters
     input_params = S.Para(
