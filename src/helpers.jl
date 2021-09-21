@@ -2,7 +2,7 @@ using Base: Float64, Int64
 using LinearAlgebra, Parameters, Statistics, PyPlot
 
 # misc fudge factors to avoid dividing by zero
-small = eps(Float32)
+small = eps(Float64)
 
 """
 Turn all negative numbers into 0.0
