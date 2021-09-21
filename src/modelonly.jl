@@ -121,45 +121,40 @@ macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
 Calculate residuals of ϕ and h and store them in arrays.
 Used for error calculation and only to be carried out every xx iterations, e.g. every thousand.
 """
-function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
+@parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
                     dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
     nx, ny = size(ϕ)
-    Threads.@threads for iy = 1:ny
-    #for iy = 1:ny
-        for ix = 1:nx
-            # residual of ϕ
-            if ix == 2 # ϕ: without boundary points (divergence of q not defined there)
-                Res_ϕ[ix, iy] = 0. # position where dirichlet b.c. are imposed
-            elseif (1 < ix < nx) && (1 < iy < ny)
-                Res_ϕ[ix, iy] = @Res_ϕ(ix, iy)
-            end
-
-            # residual of h
-            Res_h[ix, iy] = @Res_h(ix, iy)
+    if (ix <= nx && iy <= ny)
+        # residual of ϕ
+        if ix == 2 # ϕ: without boundary points (divergence of q not defined there)
+            Res_ϕ[ix, iy] = 0. # position where dirichlet b.c. are imposed
+        elseif (1 < ix < nx && 1 < iy < ny)
+            Res_ϕ[ix, iy] = @Res_ϕ(ix, iy)
         end
+
+        # residual of h
+        Res_h[ix, iy] = @Res_h(ix, iy)
     end
+    return
 end
 
 """
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
-function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
+@parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
                         dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ,
                         dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     nx, ny = size(ϕ)
-    Threads.@threads for iy = 1:ny
-    #for iy = 1:ny
-        for ix = 1:nx
-            if (1 < ix < nx) && (1 < iy < ny)
-                # update ϕ
-                dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
-                ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
-            end
-
-            # update h
-            dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
-            h2[ix, iy] = h[ix, iy] + dτ_h_ * dh_dτ[ix, iy]
+    if (ix <= nx && iy <= ny)
+        # update ϕ
+        if (1 < ix < nx && 1 < iy < ny)
+            dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
+            ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
         end
+
+        # update h
+        dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
+        h2[ix, iy] = h[ix, iy] + dτ_h_ * dh_dτ[ix, iy]
     end
     return
 end
@@ -168,24 +163,21 @@ end
 Apply Dirichlet boundary conditions to ϕ, at the moment pw(x=0) = 0.
 Neumann boundary conditions are applied when calculating the hydraulic gradient (@dϕ_dx and @dϕ_dy macros).
 """
-function apply_bc!(ϕ, h, H, ρw, g, zb) # TODO: don't hard-wire, give bc as input parameters
+@parallel_indices (ix,iy) function apply_bc!(ϕ, h, H, ρw, g, zb) # TODO: don't hard-wire, give bc as input parameters
     nx, ny = size(ϕ)
-    Threads.@threads for iy=1:ny
-    #for iy = 1:ny
-        for ix = 1:nx
-            #if H[ix, iy] == 0.             # zero sheet thickness outside of glacier domain; necessary ??
-            #    h[ix, iy] = 0.
-            #end
-            if ix == 2
-                ϕ[ix, iy] = ρw * g * zb[ix, iy]
-            end
-            #if (ix == 2) && (iy == ny÷2+1)
-            #    ϕ[2, ny÷2+1] = ρw .* g .* zb[2, ny÷2+1]
-            #end
-            #if (ix == 2) && (iy == ny÷2) && iseven(ny)
-            #    ϕ[2, ny÷2] = ρw .* g .* zb[2, ny÷2]
-            #end
+    if (ix <= nx && iy <= ny)
+        #if H[ix, iy] == 0.             # zero sheet thickness outside of glacier domain; necessary ??
+        #    h[ix, iy] = 0.
+        #end
+        if ix == 2
+            ϕ[ix, iy] = ρw * g * zb[ix, iy]
         end
+        #if (ix == 2) && (iy == ny÷2+1)
+        #    ϕ[2, ny÷2+1] = ρw .* g .* zb[2, ny÷2+1]
+        #end
+        #if (ix == 2) && (iy == ny÷2) && iseven(ny)
+        #    ϕ[2, ny÷2] = ρw .* g .* zb[2, ny÷2]
+        #end
     end
     return
 end
@@ -193,13 +185,22 @@ end
 """
 Calculate the difference between previous and updated ϕ and h, used for error calculation.
 """
-function update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
-    Threads.@threads for iy = 1:size(ϕ, 2)
-    #for iy = 1:size(ϕ, 2)
-        for ix = 1:size(ϕ, 1)
-            Δϕ[ix, iy] = abs(ϕ[ix, iy] - ϕ2[ix, iy])
-            Δh[ix, iy] = abs(h[ix, iy] - h2[ix, iy])
-        end
+@parallel_indices (ix,iy) function update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
+    if (ix <= size(ϕ, 1) && iy <= size(ϕ, 2))
+        Δϕ[ix, iy] = abs(ϕ[ix, iy] - ϕ2[ix, iy])
+        Δh[ix, iy] = abs(h[ix, iy] - h2[ix, iy])
+    end
+    return
+end
+
+"""
+Assign updated ϕ and h values to ϕ_old and h_old, respectively.
+Carried out after each physical time step.
+"""
+@parallel_indices (ix,iy) function old2new(ϕ, ϕ_old, h, h_old)
+    if (ix <= size(ϕ, 1) && iy <= size(ϕ, 2))
+        ϕ_old[ix, iy] = ϕ[ix, iy]
+        h_old[ix, iy] = h[ix, iy]
     end
     return
 end
@@ -207,17 +208,14 @@ end
 """
 Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for plotting.
 """
-function output_params!(N, qx, qy, ϕ, h,
+@parallel_indices (ix,iy) function output_params!(N, qx, qy, ϕ, h,
                         ρi, ρw, g, H, zb, k, α, β, dx, dy)
     nx, ny = size(ϕ)
-    Threads.@threads for iy = 1:size(ϕ, 2)
-    #for iy = 1:size(ϕ, 2)
-        for ix = 1:size(ϕ, 1)
-            N[ix, iy]  = @N(ix, iy)
-            if (1 < ix < nx) && (1 < iy < ny)
-                qx[ix, iy] = @flux_x(ix, iy)
-                qy[ix, iy] = @flux_y(ix, iy)
-            end
+    if (ix <= nx && iy <= ny)
+        N[ix, iy]  = @N(ix, iy)
+        if (1 < ix < nx && 1 < iy < ny)
+            qx[ix, iy] = @flux_x(ix, iy)
+            qy[ix, iy] = @flux_y(ix, iy)
         end
     end
     return
@@ -226,16 +224,17 @@ end
 """
 Run the model with scaled parameters.
 """
-function runthemodel_scaled(params::Para, ϕ0, h0, printtime)
+@views function runthemodel_scaled(params::Para, ϕ0, h0, cuda_params, printtime)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
+    @unpack cublocks, cuthreads = cuda_params
 
     # Array allocation
     Δϕ, Δh, qx, qy, d_eff, m, N,
     dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
 
     # Apply boundary conditions
-    apply_bc!(ϕ0, h0, H, ρw, g, zb)
+    @parallel cublocks cuthreads apply_bc!(ϕ0, h0, H, ρw, g, zb)
 
     ϕ_old   = copy(ϕ0)
     ϕ       = copy(ϕ0)
@@ -278,12 +277,12 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printtime)
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 
             # update ϕ and h
-            update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
-                           dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ,
-                           dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
+            @parallel cublocks cuthreads update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
+                                                        dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ,
+                                                        dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 
             # apply dirichlet boundary conditions
-            apply_bc!(ϕ2, h2, H, ρw, g, zb)
+            @parallel cublocks cuthreads apply_bc!(ϕ2, h2, H, ρw, g, zb)
 
             # switch pointer
             ϕ, ϕ2 = ϕ2, ϕ
@@ -295,8 +294,8 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printtime)
 
             if iter % 1000 == 0
                 # update the residual arrays
-                residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
-                           dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
+                @parallel cublocks cuthreads residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
+                                                        dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
 
                 # residual error
                 err_ϕ_res = norm(Res_ϕ[H .> 0.]) / sum(H .> 0.) # or length(Res_ϕ) instead of sum(H .> 0.) ??
@@ -309,7 +308,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printtime)
                 err_h_resrel = err_h_res / err_h_ini
 
                 # update error
-                update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
+                @parallel cublocks cuthreads update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
                 err_ϕ = norm(Δϕ[H .> 0.]) / sum(H .> 0.)
                 err_h = norm(Δh[H .> 0.]) / norm(h0)
                 if (iter==0)
@@ -345,8 +344,7 @@ function runthemodel_scaled(params::Para, ϕ0, h0, printtime)
         #    @printf("time step = %d, number of iterations = %d \n", tstep, iter)
         #end
 
-        ϕ_old .= ϕ
-        h_old .= h
+        @parallel cublocks cuthreads old2new!(ϕ, ϕ_old, h, h_old)
     end
 
     # Perfomance measures
@@ -371,10 +369,11 @@ end
 """
 Scale the parameters and call the model run function.
 """
-function runthemodel(input::Para, ϕ0, h0;
+@views function runthemodel(input::Para, ϕ0, h0,
+                    cuda_params;
                     printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
     params, ϕ0, h0, ϕ_, N_, h_, q_ = scaling(input, ϕ0, h0)
-    output = runthemodel_scaled(params::Para, ϕ0, h0, printtime)
+    output = runthemodel_scaled(params::Para, ϕ0, h0, cuda_params, printtime)
     output_descaled = descaling(output, N_, ϕ_, h_, q_)
     return output_descaled
 end

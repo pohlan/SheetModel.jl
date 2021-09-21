@@ -10,10 +10,23 @@ Turn all negative numbers into 0.0
 pos(x) = x > 0.0 ? x : 0.0
 
 """
-Creates a vector of lenght nx where boundary points are zeros and interior points ones.
+Create a vector of lenght nx where boundary points are zeros and interior points ones.
 Used to achieve zero ice thickness (H=0) at ghost points
 """
 ghostp(nx) = [0.0; ones(nx-2); 0.0]
+
+"""
+Create struct containing the parameters used for CUDA within ParallelStencil
+    BLOCKX, BLOCKY, GRIDX, GRIDY, cuthreads, cublocks
+"""
+@with_kw struct CuParams @deftype Int64
+    BLOCKX = 1
+    BLOCKY = 1
+    GRIDX  = 64*2
+    GRIDY  = 16*2
+    cuthreads::Tuple{Int64, Int64, Int64} = (BLOCKX, BLOCKY, 1)
+    cublocks::Tuple{Int64, Int64, Int64}  = (GRIDX,  GRIDY,  1)
+end
 
 """
 Create struct including all model parameters, physical and numerical
@@ -100,17 +113,17 @@ Pre-allocate arrays
 """
 function array_allocation(nu::Para)
     @unpack nx, ny = nu
-    Δϕ     = zeros(nx, ny)
-    Δh     = zeros(nx, ny)
-    qx     = zeros(nx-1, ny)
-    qy     = zeros(nx, ny-1)
-    d_eff  = zeros(nx-2, ny-2)
-    m      = zeros(nx, ny)
-    N      = zeros(nx, ny)
-    dϕ_dτ  = zeros(nx, ny)
-    dh_dτ  = zeros(nx, ny)
-    Res_ϕ  = zeros(nx, ny)
-    Res_h  = zeros(nx, ny)
+    Δϕ     = @zeros(nx, ny)
+    Δh     = @zeros(nx, ny)
+    qx     = @zeros(nx-1, ny)
+    qy     = @zeros(nx, ny-1)
+    d_eff  = @zeros(nx-2, ny-2)
+    m      = @zeros(nx, ny)
+    N      = @zeros(nx, ny)
+    dϕ_dτ  = @zeros(nx, ny)
+    dh_dτ  = @zeros(nx, ny)
+    Res_ϕ  = @zeros(nx, ny)
+    Res_h  = @zeros(nx, ny)
     return Δϕ, Δh, qx, qy, d_eff, m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h
 end
 
