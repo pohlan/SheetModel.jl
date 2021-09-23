@@ -298,8 +298,8 @@ Run the model with scaled parameters.
                                                         dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
 
                 # residual error
-                err_ϕ_res = norm(Res_ϕ[H .> 0.]) / sum(H .> 0.) # or length(Res_ϕ) instead of sum(H .> 0.) ??
-                err_h_res = norm(Res_h[H .> 0.]) / norm(h0)
+                err_ϕ_res = norm(Res_ϕ) / length(Res_ϕ) # or length(Res_ϕ) instead of sum(H .> 0.) ??
+                err_h_res = norm(Res_h) / norm(h0)
                 if (iter==0)
                     err_ϕ_ini = err_ϕ_res
                     err_h_ini = err_h_res
@@ -309,8 +309,8 @@ Run the model with scaled parameters.
 
                 # update error
                 @parallel cublocks cuthreads update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
-                err_ϕ = norm(Δϕ[H .> 0.]) / sum(H .> 0.)
-                err_h = norm(Δh[H .> 0.]) / norm(h0)
+                err_ϕ = norm(Δϕ) / length(Δϕ)
+                err_h = norm(Δh) / norm(h0)
                 if (iter==0)
                     err_ϕ_ini = err_ϕ
                     err_h_ini = err_h

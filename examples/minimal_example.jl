@@ -5,10 +5,11 @@
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../"))
-using SheetModel, Parameters #, ProfileView # for ProfileView, gtk needs to be installed
+using SheetModel, Parameters, ProfileView, ParallelStencil # for ProfileView, gtk needs to be installed
 const S = SheetModel
 
 function run_example(;dt,
+                      Nx, Ny,
                       tsteps,               # number of timesteps
                       plotting=true)     # whether to produce plots from model output
     input_params = S.Para(
@@ -27,8 +28,8 @@ function run_example(;dt,
 
             xrange = (0.0, 1.0),  # domain length in x-direction
             yrange = (0.0, 1.5),  # domain length in y-direction
-            nx = 64,
-            ny = 64,
+            nx = Nx,
+            ny = Ny,
 
             calc_zs =  (x, y) -> 0.5 * sqrt(x+0.05),    # surface elevation (SHMIP)
             calc_zb = (x, y) -> 0.0,                    # bed elevation
@@ -49,11 +50,10 @@ function run_example(;dt,
             Λ   = 3e-3
         )
 
-        @unpack nx, ny = input_params
-        ϕ0 = 0.5 * ones(nx, ny)
-        h0 = 0.5 * ones(nx, ny)
+    ϕ0 = 0.5 * ones(Nx, Ny)
+    h0 = 0.5 * ones(Nx, Ny)
 
-    #ProfileView.@profview S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1) # for profiling
+    #ProfileView.@profview S.runthemodel_scaled(input_params, ϕ0, h0, S.CuParams(nx=Nx, ny=Ny), 1000) # for profiling
     # In VSCode, ProfileView.xx is necessary (https://github.com/timholy/ProfileView.jl/pull/172/commits/5ea809fe6409a41b96cfba0800b78d708f1ad604)
 
     output = S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1)
@@ -71,5 +71,5 @@ function run_example(;dt,
     #end
 end
 
-run_example(dt=1e8, tsteps=1, plotting=false)
+run_example(dt=1e8, tsteps=1, Nx=64, Ny=64, plotting=false)
 #run_example(dt=2e7, tsteps=5, plotting=true)

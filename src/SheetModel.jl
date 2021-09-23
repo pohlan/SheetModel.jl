@@ -3,7 +3,8 @@ module SheetModel
 
 # ParallelStencil, decide whether to use CPU or GPU
 const USE_GPU = true
-using ParallelStencil
+using ParallelStencil, CUDA
+#CUDA.allowscalar(false) # don't allow scalar indexing which is not GPU compatible
 #using ParallelStencil.FiniteDifferences2D
 @static if USE_GPU
     @init_parallel_stencil(CUDA, Float64, 2)
