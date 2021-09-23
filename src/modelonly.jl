@@ -122,7 +122,7 @@ Calculate residuals of ϕ and h and store them in arrays.
 Used for error calculation and only to be carried out every xx iterations, e.g. every thousand.
 """
 @parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
-                    dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
+                                              dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
         # residual of ϕ
@@ -142,8 +142,8 @@ end
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
 @parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
-                        dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ,
-                        dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
+                                                  dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
+                                                  dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
         # update ϕ
@@ -209,7 +209,7 @@ end
 Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for plotting.
 """
 @parallel_indices (ix,iy) function output_params!(N, qx, qy, ϕ, h,
-                                                  ρi, ρw, g, H, zb, k, α, β, dx, dy)
+                                                  ρi, ρw, g, H, zb, k, α, β, dx, dy, small)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
         N[ix, iy]  = @N(ix, iy)
@@ -272,13 +272,13 @@ Run the model with scaled parameters.
         iter = 0
         err_ϕ_tol, err_h_tol = 2*tol, 2*tol
 
-        m .= calc_m_t(t+dt)
+        m .= Data.Array(calc_m_t(t+dt))
         # Pseudo-transient iteration
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 
             # update ϕ and h
             @parallel cublocks cuthreads update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
-                                                        dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ,
+                                                        dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
                                                         dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 
             # apply dirichlet boundary conditions
@@ -295,7 +295,7 @@ Run the model with scaled parameters.
             if iter % 1000 == 0
                 # update the residual arrays
                 @parallel cublocks cuthreads residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
-                                                        dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ)
+                                                        dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
 
                 # residual error
                 err_ϕ_res = norm(Res_ϕ[H .> 0.]) / sum(H .> 0.) # or length(Res_ϕ) instead of sum(H .> 0.) ??
@@ -357,7 +357,7 @@ Run the model with scaled parameters.
 
     # calculate N, qx and qy as output parameters
     @parallel cublocks cuthreads output_params!(N, qx, qy, ϕ, h,
-                                                ρi, ρw, g, H, zb, k, α, β, dx, dy)
+                                                ρi, ρw, g, H, zb, k, α, β, dx, dy, small)
 
     return model_output(;   N, ϕ, h, qx, qy,
                             Err_ϕ=Δϕ, Err_h=Δh, Res_ϕ, Res_h,

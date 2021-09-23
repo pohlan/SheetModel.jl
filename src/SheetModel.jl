@@ -2,7 +2,7 @@ __precompile__(false)
 module SheetModel
 
 # ParallelStencil, decide whether to use CPU or GPU
-const USE_GPU = false
+const USE_GPU = true
 using ParallelStencil
 #using ParallelStencil.FiniteDifferences2D
 @static if USE_GPU

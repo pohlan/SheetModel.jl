@@ -64,8 +64,8 @@ Create struct including all model parameters, physical and numerical
     calc_zb::Function
     calc_m_xyt::F1 # f(x, y, t)
 
-    H::Matrix{Float64} = (ghostp(nx) * ghostp(ny)') .* ( pos.(calc_zs.(xc, yc') .- calc_zb.(xc, yc')) )  # ice thickness, m
-    zb::Matrix{Float64} = calc_zb.(xc, yc')                    # bed elevation, m
+    H::Data.Array = Data.Array((ghostp(nx) * ghostp(ny)') .* ( pos.(calc_zs.(xc, yc') .- calc_zb.(xc, yc')) ))  # ice thickness, m
+    zb::Data.Array = Data.Array(calc_zb.(xc, yc'))                    # bed elevation, m
     calc_m_t::F2 = t -> calc_m_xyt.(xc, yc', t)                # source term, m/s, f(t)
 
     # Physical time stepping
@@ -179,8 +179,8 @@ function scaling(p::Para, ϕ0, h0)
         ub = ub / ub_,
 
         # Field parameters (defined on every grid point)
-        H = H ./ H_,
-        zb = zb ./ zb_,
+        H = Data.Array(H ./ H_),
+        zb = Data.Array(zb ./ zb_),
         calc_m_t = t -> calc_m_t(t) ./ m_,
 
         # Numerical domain
@@ -198,8 +198,8 @@ function scaling(p::Para, ϕ0, h0)
         )::Para
 
     # variables
-    ϕ0 = ϕ0 ./ ϕ_
-    h0 = h0 ./ h_
+    ϕ0 = Data.Array(ϕ0 ./ ϕ_)
+    h0 = Data.Array(h0 ./ h_)
 
     return scaled_params, ϕ0, h0, ϕ_, N_, h_, q_
 end
