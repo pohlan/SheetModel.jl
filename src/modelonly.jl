@@ -287,7 +287,7 @@ Run the model with scaled parameters.
             # apply dirichlet boundary conditions
             @parallel cublocks cuthreads apply_bc!(ϕ2, h2, H, ρw, g, zb)
 
-            # switch pointer
+            # pointer swap
             ϕ, ϕ2 = ϕ2, ϕ
             h, h2 = h2, h
 
@@ -295,7 +295,7 @@ Run the model with scaled parameters.
 
             # determine the errors (only consider points where the ice thickness is > 0)
 
-            if iter % 500 == 0
+            #if iter % 500 == 0
             #    # update the residual arrays
             #    @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
             #                                            dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
@@ -311,9 +311,9 @@ Run the model with scaled parameters.
             #    err_h_resrel = err_h_res / err_h_ini
 
                 # update error
-               @parallel update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
-               err_ϕ = norm(Δϕ) / length(Δϕ)
-               err_h = norm(Δh) / norm(h0)
+            #   @parallel update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
+            #   err_ϕ = norm(Δϕ) / length(Δϕ)
+            #   err_h = norm(Δh) / norm(h0)
             #   if (iter==0)
             #       err_ϕ_ini = err_ϕ
             #       err_h_ini = err_h
@@ -322,7 +322,7 @@ Run the model with scaled parameters.
             #   err_h_rel = err_h / err_h_ini
 
                 # decide which errors should be below the tolerance and be printed out
-               err_ϕ_tol, err_h_tol = err_ϕ, err_h
+            #   err_ϕ_tol, err_h_tol = err_ϕ, err_h
 
                 # save error evolution in vector
             #   append!(iters, iter)
@@ -337,7 +337,7 @@ Run the model with scaled parameters.
 
             #   @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
 
-            end
+            #end
 
 
         end
@@ -352,8 +352,8 @@ Run the model with scaled parameters.
 
     # Perfomance measures
     t_toc = Base.time() - t_tic                # execution time, s
-    A_eff = (2*5+2)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
-                                               # 5 read+write arrays (ϕ, dϕ_dτ, h, dh_dτ, m), 2 read arrays (ϕ_old, h_old) --> check!
+    A_eff = (2*5+4)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
+                                               # 5 read+write arrays (ϕ, dϕ_dτ, h, dh_dτ, m), 4 read arrays (ϕ_old, h_old, ϕ2, h2) --> check!
     t_it  = t_toc/(ittot-10)                        # execution time per iteration, s
     T_eff = A_eff/t_it                         # effective memory throughput, GB/s
     @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
