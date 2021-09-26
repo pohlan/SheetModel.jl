@@ -104,12 +104,6 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
         water_input = make_runoff_fct(topo.surf, DT[test_case])
     end
 
-    # CUDA parameters
-    cuda_params = S.CuParams(
-        nx = Nx,
-        ny = Ny,
-    )
-
     # Define numerical domain and input parameters
     input_params = S.Para(
         xrange = topo.xrange,  # domain length in x-direction, m
@@ -145,7 +139,7 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
     )
 
 
-    model_output = S.runthemodel(input_params, ϕ0, h0, cuda_params, printtime=printtime);
+    model_output = S.runthemodel(input_params, ϕ0, h0, printtime=printtime);
     @unpack N, ϕ, h, qx, qy,
             ittot, iters, Err_ϕ, Err_h, Res_ϕ, Res_h,
             errs_ϕ, errs_h,

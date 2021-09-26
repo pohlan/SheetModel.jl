@@ -224,17 +224,16 @@ end
 """
 Run the model with scaled parameters.
 """
-@views function runthemodel_scaled(params::Para, ϕ0, h0, cuda_params, printtime)
+@views function runthemodel_scaled(params::Para, ϕ0, h0, printtime)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
-    @unpack cublocks, cuthreads = cuda_params
 
     # Array allocation
     Δϕ, Δh, qx, qy, d_eff, m, N,
     dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
 
     # Apply boundary conditions
-    @parallel cublocks cuthreads apply_bc!(ϕ0, h0, H, ρw, g, zb)
+    @parallel apply_bc!(ϕ0, h0, H, ρw, g, zb)
 
     ϕ_old   = copy(ϕ0)
     ϕ       = copy(ϕ0)
@@ -280,12 +279,12 @@ Run the model with scaled parameters.
             if (iter >= 10) t_tic = Base.time() end
 
             # update ϕ and h
-            @parallel cublocks cuthreads update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
+            @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
                                                         dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
                                                         dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 
             # apply dirichlet boundary conditions
-            @parallel cublocks cuthreads apply_bc!(ϕ2, h2, H, ρw, g, zb)
+            @parallel apply_bc!(ϕ2, h2, H, ρw, g, zb)
 
             # pointer swap
             ϕ, ϕ2 = ϕ2, ϕ
@@ -347,7 +346,7 @@ Run the model with scaled parameters.
         #    @printf("time step = %d, number of iterations = %d \n", tstep, iter)
         #end
 
-        @parallel cublocks cuthreads old2new!(ϕ, ϕ_old, h, h_old)
+        @parallel old2new!(ϕ, ϕ_old, h, h_old)
     end
 
     # Perfomance measures
@@ -359,7 +358,7 @@ Run the model with scaled parameters.
     @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
 
     # calculate N, qx and qy as output parameters
-    @parallel cublocks cuthreads output_params!(N, qx, qy, ϕ, h,
+    @parallel output_params!(N, qx, qy, ϕ, h,
                                                 ρi, ρw, g, H, zb, k, α, β, dx, dy, small)
 
     return model_output(;   N, ϕ, h, qx, qy,
@@ -372,11 +371,10 @@ end
 """
 Scale the parameters and call the model run function.
 """
-@views function runthemodel(input::Para, ϕ0, h0,
-                    cuda_params;
+@views function runthemodel(input::Para, ϕ0, h0;
                     printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
     params, ϕ0, h0, ϕ_, N_, h_, q_ = scaling(input, ϕ0, h0)
-    output = runthemodel_scaled(params::Para, ϕ0, h0, cuda_params, printtime)
+    output = runthemodel_scaled(params::Para, ϕ0, h0, printtime)
     output_descaled = descaling(output, N_, ϕ_, h_, q_)
     return output_descaled
 end
