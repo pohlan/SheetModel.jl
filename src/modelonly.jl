@@ -265,7 +265,7 @@ Run the model with scaled parameters.
     err_h_ini = 0.0
 
     # initiate time loop parameters
-    t = 0.0; tstep=0; ittot = 0; t_tic = Base.time()
+    t = 0.0; tstep=0; ittot = 0; t_tic = 0.
 
     # Physical time loop
     while t<ttot
@@ -275,6 +275,9 @@ Run the model with scaled parameters.
         m .= Data.Array(calc_m_t(t+dt))
         # Pseudo-transient iteration
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
+
+            # don't consider first ten iterations for performance measure
+            if (iter >= 10) t_tic = Base.time() end
 
             # update ϕ and h
             @parallel cublocks cuthreads update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
@@ -292,53 +295,53 @@ Run the model with scaled parameters.
 
             # determine the errors (only consider points where the ice thickness is > 0)
 
-            if iter % 1000 == 0
-                # update the residual arrays
-                @parallel cublocks cuthreads residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
-                                                        dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
+            if iter % 500 == 0
+            #    # update the residual arrays
+            #    @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
+            #                                            dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
 
                 # residual error
-                err_ϕ_res = norm(Res_ϕ) / length(Res_ϕ) # or length(Res_ϕ) instead of sum(H .> 0.) ??
-                err_h_res = norm(Res_h) / norm(h0)
-                if (iter==0)
-                    err_ϕ_ini = err_ϕ_res
-                    err_h_ini = err_h_res
-                end
-                err_ϕ_resrel = err_ϕ_res / err_ϕ_ini
-                err_h_resrel = err_h_res / err_h_ini
+            #    err_ϕ_res = norm(Res_ϕ) / length(Res_ϕ) # or length(Res_ϕ) instead of sum(H .> 0.) ??
+            #    err_h_res = norm(Res_h) / norm(h0)
+            #    if (iter==0)
+            #        err_ϕ_ini = err_ϕ_res
+            #        err_h_ini = err_h_res
+            #    end
+            #    err_ϕ_resrel = err_ϕ_res / err_ϕ_ini
+            #    err_h_resrel = err_h_res / err_h_ini
 
                 # update error
-                @parallel cublocks cuthreads update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
-                err_ϕ = norm(Δϕ) / length(Δϕ)
-                err_h = norm(Δh) / norm(h0)
-                if (iter==0)
-                    err_ϕ_ini = err_ϕ
-                    err_h_ini = err_h
-                end
-                err_ϕ_rel = err_ϕ / err_ϕ_ini
-                err_h_rel = err_h / err_h_ini
+               @parallel update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
+               err_ϕ = norm(Δϕ) / length(Δϕ)
+               err_h = norm(Δh) / norm(h0)
+            #   if (iter==0)
+            #       err_ϕ_ini = err_ϕ
+            #       err_h_ini = err_h
+            #   end
+            #   err_ϕ_rel = err_ϕ / err_ϕ_ini
+            #   err_h_rel = err_h / err_h_ini
 
                 # decide which errors should be below the tolerance and be printed out
-                err_ϕ_tol, err_h_tol = err_ϕ, err_h
+               err_ϕ_tol, err_h_tol = err_ϕ, err_h
 
                 # save error evolution in vector
-                append!(iters, iter)
-                append!(errs_ϕ, err_ϕ)
-                append!(errs_h, err_h)
-                append!(errs_ϕ_rel, err_ϕ_rel)
-                append!(errs_h_rel, err_h_rel)
-                append!(errs_ϕ_res, err_ϕ_res)
-                append!(errs_h_res, err_h_res)
-                append!(errs_ϕ_resrel, err_ϕ_resrel)
-                append!(errs_h_resrel, err_h_resrel)
+            #   append!(iters, iter)
+            #   append!(errs_ϕ, err_ϕ)
+            #   append!(errs_h, err_h)
+            #   append!(errs_ϕ_rel, err_ϕ_rel)
+            #   append!(errs_h_rel, err_h_rel)
+            #   append!(errs_ϕ_res, err_ϕ_res)
+            #   append!(errs_h_res, err_h_res)
+            #   append!(errs_ϕ_resrel, err_ϕ_resrel)
+            #   append!(errs_h_resrel, err_h_resrel)
 
-                @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
+            #   @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
 
             end
 
 
         end
-        ittot += iter-1; tstep += 1; t += dt
+        ittot += iter; tstep += 1; t += dt
 
         #if mod(tstep, printtime) == 0
         #    @printf("time step = %d, number of iterations = %d \n", tstep, iter)
@@ -351,7 +354,7 @@ Run the model with scaled parameters.
     t_toc = Base.time() - t_tic                # execution time, s
     A_eff = (2*5+2)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
                                                # 5 read+write arrays (ϕ, dϕ_dτ, h, dh_dτ, m), 2 read arrays (ϕ_old, h_old) --> check!
-    t_it  = t_toc/ittot                        # execution time per iteration, s
+    t_it  = t_toc/(ittot-10)                        # execution time per iteration, s
     T_eff = A_eff/t_it                         # effective memory throughput, GB/s
     @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
 
