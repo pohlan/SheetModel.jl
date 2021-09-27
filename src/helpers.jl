@@ -18,7 +18,7 @@ ghostp(nx) = [0.0; ones(nx-2); 0.0]
 """
 Create struct including all model parameters, physical and numerical
 """
-@with_kw struct Para{F1, F2} @deftype Float64
+@with_kw struct Para{T, F1, F2} @deftype Float64
     # Scalars (one global value)
     g     = 9.81              # gravitational acceleration, m/s^2
     ρw    = 1000.0            # water density, kg/m^3
@@ -49,8 +49,8 @@ Create struct including all model parameters, physical and numerical
     calc_zb::Function
     calc_m_xyt::F1 # f(x, y, t)
 
-    H::Data.Array = Data.Array((ghostp(nx) * ghostp(ny)') .* ( pos.(calc_zs.(xc, yc') .- calc_zb.(xc, yc')) ))  # ice thickness, m
-    zb::Data.Array = Data.Array(calc_zb.(xc, yc'))                    # bed elevation, m
+    H::T = (ghostp(nx) * ghostp(ny)') .* ( pos.(calc_zs.(xc, yc') .- calc_zb.(xc, yc')) )  # ice thickness, m
+    zb::T = calc_zb.(xc, yc')                                  # bed elevation, m
     calc_m_t::F2 = t -> calc_m_xyt.(xc, yc', t)                # source term, m/s, f(t)
 
     # Physical time stepping
@@ -73,16 +73,19 @@ Create struct including all model parameters, physical and numerical
 end
 Broadcast.broadcastable(p::Para) = Ref(p)
 
-@with_kw struct model_output
-    N::Matrix{Float64}
-    ϕ::Matrix{Float64}
-    h::Matrix{Float64}
-    qx::Matrix{Float64}
-    qy::Matrix{Float64}
-    Err_ϕ::Matrix{Float64}
-    Err_h::Matrix{Float64}
-    Res_ϕ::Matrix{Float64}
-    Res_h::Matrix{Float64}
+"""
+Create struct containing output parameters of the model: N, ϕ, h, qx, qy and different errors
+"""
+@with_kw struct model_output{T}
+    N::T
+    ϕ::T
+    h::T
+    qx::T
+    qy::T
+    Err_ϕ::T
+    Err_h::T
+    Res_ϕ::T
+    Res_h::T
     ittot::Int64
     iters::Vector{Int64}
     errs_ϕ::Vector{Float64}
@@ -116,7 +119,8 @@ function array_allocation(nu::Para)
 end
 
 """
-Convert input parameters to non-dimensional quantities
+Convert input parameters to non-dimensional quantities.
+Convert arrays of H and zb to correct types depending on whether CPU or GPU is used.
 """
 function scaling(p::Para, ϕ0, h0)
     @unpack g, ρw, k, A, lr, hr,
@@ -189,19 +193,25 @@ function scaling(p::Para, ϕ0, h0)
     return scaled_params, ϕ0, h0, ϕ_, N_, h_, q_
 end
 
+mat(x) = Matrix{Float64}(x) # shorter notation for use in descaling() function
+
+"""
+Convert unitless output parameters back to dimensional quantities.
+Convert all arrays to Matrix{Float64} type.
+"""
 function descaling(output::model_output, N_, ϕ_, h_, q_)
     @unpack N, ϕ, h, qx, qy,
             Err_ϕ, Err_h , Res_ϕ, Res_h = output
-    output_descaled = model_output(output,
-        N = N .* N_,
-        ϕ = ϕ .* ϕ_,
-        h = h .* h_,
-        qx = qx .* q_,
-        qy = qy .* q_,
-        Err_ϕ = Err_ϕ .* ϕ_,
-        Err_h = Err_h .* h_,
-        Res_ϕ = Res_ϕ .* ϕ_,
-        Res_h = Res_h .* h_,
+    output_descaled = reconstruct(model_output{Matrix{Float64}}, output,
+        N  = mat(N .* N_),
+        ϕ  = mat(ϕ .* ϕ_),
+        h  = mat(h .* h_),
+        qx = mat(qx .* q_),
+        qy = mat(qy .* q_),
+        Err_ϕ = mat(Err_ϕ .* ϕ_),
+        Err_h = mat(Err_h .* h_),
+        Res_ϕ = mat(Res_ϕ .* ϕ_),
+        Res_h = mat(Res_h .* h_),
         )::model_output
     return output_descaled
 end
@@ -264,29 +274,29 @@ function plot_output(xc, yc, H, N, h, qx, qy, Err_ϕ, Err_h,
     colorbar()
     title("qy (m/s)")
 
-    Err_ϕ[H .== 0.0] .= NaN
-    Err_h[H .== 0.0] .= NaN
-    figure()
-    subplot(1, 2, 1)
-    pcolormesh(Err_h')
-    colorbar()
-    title("err_h")
-    subplot(1, 2, 2)
-    pcolormesh(Err_ϕ')
-    colorbar()
-    title("err_ϕ")
-
-    figure()
-    semilogy(iters, errs_ϕ, label="err_ϕ", color="darkorange")
-    semilogy(iters, errs_h, label="err_h", color="darkblue")
-    semilogy(iters, errs_ϕ_rel, label="relative err_ϕ", color="darkorange", linestyle=":")
-    semilogy(iters, errs_h_rel, label="relative err_h", color="darkblue", linestyle=":")
-    semilogy(iters, errs_ϕ_res, label="err_ϕ_res", color="gold")
-    semilogy(iters, errs_h_res, label="err_h_res", color="deepskyblue")
-    semilogy(iters, errs_ϕ_resrel, label="relative err_ϕ_res", color="gold", linestyle=":")
-    semilogy(iters, errs_h_resrel, label="relative err_h_res", color="deepskyblue", linestyle=":")
-
-    xlabel("# iterations")
-    ylabel("error")
-    legend()
+    #Err_ϕ[H .== 0.0] .= NaN
+    #Err_h[H .== 0.0] .= NaN
+    #figure()
+    #subplot(1, 2, 1)
+    #pcolormesh(Err_h')
+    #colorbar()
+    #title("err_h")
+    #subplot(1, 2, 2)
+    #pcolormesh(Err_ϕ')
+    #colorbar()
+    #title("err_ϕ")
+#
+    #figure()
+    #semilogy(iters, errs_ϕ, label="err_ϕ", color="darkorange")
+    #semilogy(iters, errs_h, label="err_h", color="darkblue")
+    #semilogy(iters, errs_ϕ_rel, label="relative err_ϕ", color="darkorange", linestyle=":")
+    #semilogy(iters, errs_h_rel, label="relative err_h", color="darkblue", linestyle=":")
+    #semilogy(iters, errs_ϕ_res, label="err_ϕ_res", color="gold")
+    #semilogy(iters, errs_h_res, label="err_h_res", color="deepskyblue")
+    #semilogy(iters, errs_ϕ_resrel, label="relative err_ϕ_res", color="gold", linestyle=":")
+    #semilogy(iters, errs_h_resrel, label="relative err_h_res", color="deepskyblue", linestyle=":")
+#
+    #xlabel("# iterations")
+    #ylabel("error")
+    #legend()
 end
