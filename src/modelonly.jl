@@ -276,7 +276,7 @@ Run the model with scaled parameters.
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 
             # don't consider first ten iterations for performance measure
-            if (iter >= 10) t_tic = Base.time() end
+            if (iter == 10) t_tic = Base.time() end
 
             # update ϕ and h
             @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
@@ -294,7 +294,7 @@ Run the model with scaled parameters.
 
             # determine the errors (only consider points where the ice thickness is > 0)
 
-            #if iter % 500 == 0
+            if iter % 1000 == 0
             #    # update the residual arrays
             #    @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
             #                                            dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
@@ -334,9 +334,9 @@ Run the model with scaled parameters.
             #   append!(errs_ϕ_resrel, err_ϕ_resrel)
             #   append!(errs_h_resrel, err_h_resrel)
 
-            #   @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
+               @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
 
-            #end
+            end
 
 
         end
@@ -361,7 +361,7 @@ Run the model with scaled parameters.
     @parallel output_params!(N, qx, qy, ϕ, h,
                                                 ρi, ρw, g, H, zb, k, α, β, dx, dy, small)
 
-    return model_output(;   N, ϕ, h, qx, qy,
+    return model_output{Data.Array}(;   N, ϕ, h, qx, qy,
                             Err_ϕ=Δϕ, Err_h=Δh, Res_ϕ, Res_h,
                             ittot, iters,
                             errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
