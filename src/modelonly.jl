@@ -351,9 +351,10 @@ Run the model with scaled parameters.
 
     # Perfomance measures
     t_toc = Base.time() - t_tic                # execution time, s
-    A_eff = (2*5+4)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
-                                               # 5 read+write arrays (ϕ, dϕ_dτ, h, dh_dτ, m), 4 read arrays (ϕ_old, h_old, ϕ2, h2) --> check!
-    t_it  = t_toc/(ittot-10)                        # execution time per iteration, s
+    A_eff = (2*5+2)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
+                                               # 5 read+write arrays (ϕ, dϕ_dτ, h, dh_dτ, m), 2 read arrays (ϕ_old, h_old)
+                                               # (ϕ is actually only read, the write part is to ϕ2, same for h)
+    t_it  = t_toc/(ittot-10)                   # execution time per iteration, s
     T_eff = A_eff/t_it                         # effective memory throughput, GB/s
     @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
 
