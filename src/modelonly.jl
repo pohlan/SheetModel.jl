@@ -276,7 +276,7 @@ Run the model with scaled parameters.
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 
             # don't consider first ten iterations for performance measure
-            if (iter >= 10) t_tic = Base.time() end
+            if (iter == 10) t_tic = Base.time() end
 
             # update ϕ and h
             @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
