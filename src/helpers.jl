@@ -1,10 +1,24 @@
 using Base: Float64, Int64
 using LinearAlgebra, Parameters, Statistics, PyPlot
 
+# misc fudge factors to avoid dividing by zero
+small = eps(Float64)
+
+"""
+Turn all negative numbers into 0.0
+"""
+pos(x) = x > 0.0 ? x : 0.0
+
+"""
+Create a vector of lenght nx where boundary points are zeros and interior points ones.
+Used to achieve zero ice thickness (H=0) at ghost points
+"""
+ghostp(nx) = [0.0; ones(nx-2); 0.0]
+
 """
 Create struct including all model parameters, physical and numerical
 """
-@with_kw struct Para @deftype Float64
+@with_kw struct Para{F1, F2} @deftype Float64
     # Scalars (one global value)
     g     = 9.81              # gravitational acceleration, m/s^2
     ρw    = 1000.0            # water density, kg/m^3
@@ -22,39 +36,31 @@ Create struct including all model parameters, physical and numerical
     # Numerical domain
     xrange::Tuple{Float64, Float64}   # domain size
     yrange::Tuple{Float64, Float64}
-    x1   = xrange[1]
-    xend = xrange[2]
-    y1   = yrange[1]
-    yend = yrange[2]
-    nx::Int64                        # number of grid points, including ghost points where ice thickness = 0
+    nx::Int64                         # number of grid points, including ghost points where ice thickness = 0
     ny::Int64
-    dx = (xend-x1) / (nx-3)          # grid size
-    dy = (yend-y1) / (ny-3)
-    xc::LinRange{Float64} = LinRange(x1-dx, xend+dx, nx) # vector of x-coordinates
-    yc::LinRange{Float64} = LinRange(y1-dy, yend+dy, ny) # vector of y-coordinates
+    @assert nx % 16 == 0 && ny % 16 == 0 "nx and ny must be multiples of 16"
+    dx = (xrange[2]-xrange[1]) / (nx-3)          # grid size
+    dy = (yrange[2]-yrange[1]) / (ny-3)
+    xc::LinRange{Float64} = LinRange(xrange[1]-dx, xrange[2]+dx, nx) # vector of x-coordinates
+    yc::LinRange{Float64} = LinRange(yrange[1]-dy, yrange[2]+dy, ny) # vector of y-coordinates
 
     # Field parameters (defined on every grid point)
     calc_zs::Function
     calc_zb::Function
-    calc_m_xyt::Function # fct(x, y, t)
-    fct_pos::Function = x -> x > 0.0 ? x : 0.0 # turn all negative numbers into 0.0
-    gp_x::Array{Float64, 1} = [0.0; ones(length(xc)-2); 0.0] # to achieve H = 0 at ghost points
-    gp_y::Array{Float64, 1} = [0.0; ones(length(yc)-2); 0.0]
-    H::Matrix{Float64} = (gp_x * gp_y') .* ( fct_pos.(calc_zs.(xc, yc') .- calc_zb.(xc, yc')) )  # ice thickness, m
-    zb::Matrix{Float64} = calc_zb.(xc, yc')                      # bed elevation, m
-    calc_m_t::Function = t -> calc_m_xyt.(xc, yc', t)                # source term, m/s, fct(t)
+    calc_m_xyt::F1 # f(x, y, t)
+
+    H::Data.Array = Data.Array((ghostp(nx) * ghostp(ny)') .* ( pos.(calc_zs.(xc, yc') .- calc_zb.(xc, yc')) ))  # ice thickness, m
+    zb::Data.Array = Data.Array(calc_zb.(xc, yc'))                    # bed elevation, m
+    calc_m_t::F2 = t -> calc_m_xyt.(xc, yc', t)                # source term, m/s, f(t)
 
     # Physical time stepping
     ttot        # total simulation time
     dt          # physical time step
 
-    # misc fudge factors
-    small = eps(Float32) # maybe a Float64 is needed here
-
     # Pseudo-time iteration
     tol    = 1e-6       # tolerance
-    itMax  = 5*10^3       # max number of iterations
-    γ_ϕ    = 1e-3        # damping parameter for ϕ update
+    itMax  = 5*10^3     # max number of iterations
+    γ_ϕ    = 1e-3       # damping parameter for ϕ update
     γ_h    = 0.8        # damping parameter for h update
     dτ_ϕ_   = 1e6       # scaling factor for dτ_ϕ
     dτ_h_   = 50.0      # scaling factor for dτ_h
@@ -73,22 +79,20 @@ Broadcast.broadcastable(p::Para) = Ref(p)
     h::Matrix{Float64}
     qx::Matrix{Float64}
     qy::Matrix{Float64}
-    qx_ice::Matrix{Int64}
-    qy_ice::Matrix{Int64}
     Err_ϕ::Matrix{Float64}
     Err_h::Matrix{Float64}
     Res_ϕ::Matrix{Float64}
     Res_h::Matrix{Float64}
     ittot::Int64
-    iters::Array{Float64, 1}
-    errs_ϕ::Array{Float64, 1}
-    errs_h::Array{Float64, 1}
-    errs_ϕ_rel::Array{Float64, 1}
-    errs_h_rel::Array{Float64, 1}
-    errs_ϕ_res::Array{Float64, 1}
-    errs_h_res::Array{Float64, 1}
-    errs_ϕ_resrel::Array{Float64, 1}
-    errs_h_resrel::Array{Float64, 1}
+    iters::Vector{Int64}
+    errs_ϕ::Vector{Float64}
+    errs_h::Vector{Float64}
+    errs_ϕ_rel::Vector{Float64}
+    errs_h_rel::Vector{Float64}
+    errs_ϕ_res::Vector{Float64}
+    errs_h_res::Vector{Float64}
+    errs_ϕ_resrel::Vector{Float64}
+    errs_h_resrel::Vector{Float64}
 end
 Broadcast.broadcastable(out::model_output) = Ref(out)
 
@@ -97,27 +101,18 @@ Pre-allocate arrays
 """
 function array_allocation(nu::Para)
     @unpack nx, ny = nu
-    vo     = zeros(nx, ny)
-    vc     = zeros(nx, ny)
-    dϕ_dx  = zeros(nx-1, ny)
-    dϕ_dy  = zeros(nx, ny-1)
-    qx     = zeros(nx-1, ny)
-    qy     = zeros(nx, ny-1)
-    gp_ice  = zeros(Int, nx+2, ny+2)
-    ix     = zeros(Int, nx-1, ny)
-    iy     = zeros(Int, nx, ny-1)
-    m      = zeros(nx, ny)
-    div_q  = zeros(nx, ny)
-    div_ϕ  = zeros(nx, ny)
-    dϕ_dτ  = zeros(nx, ny)
-    dh_dτ  = zeros(nx, ny)
-    Res_ϕ  = zeros(nx, ny)
-    Res_h  = zeros(nx, ny)
-    Err_ϕ  = zeros(nx, ny)
-    Err_h  = zeros(nx, ny)
-    d_eff  = zeros(nx-2, ny-2)
-    dτ_ϕ   = zeros(nx, ny)
-    return vo, vc, dϕ_dx, dϕ_dy, qx, qy, gp_ice, ix, iy, m, div_q, div_ϕ, dϕ_dτ, dh_dτ, Res_ϕ, Res_h, Err_ϕ, Err_h, d_eff, dτ_ϕ
+    Δϕ     = @zeros(nx, ny)
+    Δh     = @zeros(nx, ny)
+    qx     = @zeros(nx-1, ny)
+    qy     = @zeros(nx, ny-1)
+    d_eff  = @zeros(nx-2, ny-2)
+    m      = @zeros(nx, ny)
+    N      = @zeros(nx, ny)
+    dϕ_dτ  = @zeros(nx, ny)
+    dh_dτ  = @zeros(nx, ny)
+    Res_ϕ  = @zeros(nx, ny)
+    Res_h  = @zeros(nx, ny)
+    return Δϕ, Δh, qx, qy, d_eff, m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h
 end
 
 """
@@ -157,7 +152,7 @@ function scaling(p::Para, ϕ0, h0)
     end
 
     # Dimensionless parameters
-    scaled_params = Para(p,
+    scaled_params = reconstruct(Para, p,
         # Scalars (one global value)
         g = g / g_,
         ρw = ρw / ρ_,
@@ -169,8 +164,8 @@ function scaling(p::Para, ϕ0, h0)
         ub = ub / ub_,
 
         # Field parameters (defined on every grid point)
-        H = H ./ H_,
-        zb = zb ./ zb_,
+        H = Data.Array(H ./ H_),
+        zb = Data.Array(zb ./ zb_),
         calc_m_t = t -> calc_m_t(t) ./ m_,
 
         # Numerical domain
@@ -188,57 +183,29 @@ function scaling(p::Para, ϕ0, h0)
         )::Para
 
     # variables
-    ϕ0 = ϕ0 ./ ϕ_
-    h0 = h0 ./ h_
+    ϕ0 = Data.Array(ϕ0 ./ ϕ_)
+    h0 = Data.Array(h0 ./ h_)
 
     return scaled_params, ϕ0, h0, ϕ_, N_, h_, q_
 end
 
 function descaling(output::model_output, N_, ϕ_, h_, q_)
-    @unpack N, ϕ, h, qx, qy, qx_ice, qy_ice,
-            Err_ϕ, Err_h , Res_ϕ, Res_h,
-            ittot, iters,
-            errs_ϕ, errs_h,
-            errs_ϕ_rel, errs_h_rel,
-            errs_ϕ_res, errs_h_res,
-            errs_ϕ_resrel, errs_h_resrel = output
-    output_descaled = model_output(
+    @unpack N, ϕ, h, qx, qy,
+            Err_ϕ, Err_h , Res_ϕ, Res_h = output
+    output_descaled = model_output(output,
         N = N .* N_,
         ϕ = ϕ .* ϕ_,
         h = h .* h_,
         qx = qx .* q_,
         qy = qy .* q_,
-        qx_ice = qx_ice,
-        qy_ice = qy_ice,
         Err_ϕ = Err_ϕ .* ϕ_,
         Err_h = Err_h .* h_,
         Res_ϕ = Res_ϕ .* ϕ_,
         Res_h = Res_h .* h_,
-        ittot = ittot,
-        iters = iters,
-        errs_ϕ = errs_ϕ,
-        errs_h = errs_h,
-        errs_ϕ_rel = errs_ϕ_rel,
-        errs_h_rel = errs_h_rel,
-        errs_ϕ_res = errs_ϕ_res,
-        errs_h_res = errs_h_res,
-        errs_ϕ_resrel = errs_ϕ_resrel,
-        errs_h_resrel = errs_h_resrel
         )::model_output
     return output_descaled
 end
 
-"""
-Scale the parameters and call the model run function
-"""
-function runthemodel(input::Para, ϕ0, h0;
-                    printit=10^5,         # error is printed after `printit` iterations of pseudo-transient time
-                    printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
-    params, ϕ0, h0, ϕ_, N_, h_, q_ = scaling(input, ϕ0, h0)
-    output = runthemodel_scaled(params::Para, ϕ0, h0, printit, printtime)
-    output_descaled = descaling(output, N_, ϕ_, h_, q_)
-    return output_descaled
-end
 
 #----------------------------------#
 # Functions used in SHMIP_cases.jl #
@@ -252,7 +219,7 @@ function initial_conditions(xc, yc, H; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) ->
     return ϕ0, h0
 end
 
-function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
+function plot_output(xc, yc, H, N, h, qx, qy, Err_ϕ, Err_h,
                      iters, errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
                      errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
     x_plt = [xc[1]; xc .+ (xc[2]-xc[1])]
@@ -279,10 +246,14 @@ function plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
     plot(xc, N[:, ind])
     title(join(["N at y = ", string(round(yc[ind], digits=1))]))
 
+    # don't show any value outside of glacier domain
     qx_plot = copy(qx)
     qy_plot = copy(qy)
-    qx_plot[qx_ice .== 0] .= NaN
-    qy_plot[qy_ice .== 0] .= NaN
+    qx_plot[H[1:end-1, :] .== 0.] .= NaN
+    qx_plot[H[2:end, :]   .== 0.] .= NaN
+    qy_plot[H[:, 1:end-1] .== 0.] .= NaN
+    qy_plot[H[:, 2:end]   .== 0.] .= NaN
+
     figure()
     subplot(1, 2, 1)
     pcolor(qx_plot')

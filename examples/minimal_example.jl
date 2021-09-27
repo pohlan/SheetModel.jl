@@ -5,10 +5,11 @@
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../"))
-using SheetModel, Parameters
+using SheetModel, Parameters, ProfileView, ParallelStencil # for ProfileView, gtk needs to be installed
 const S = SheetModel
 
 function run_example(;dt,
+                      Nx, Ny,
                       tsteps,               # number of timesteps
                       plotting=true)     # whether to produce plots from model output
     input_params = S.Para(
@@ -27,8 +28,8 @@ function run_example(;dt,
 
             xrange = (0.0, 1.0),  # domain length in x-direction
             yrange = (0.0, 1.5),  # domain length in y-direction
-            nx = 64,
-            ny = 64,
+            nx = Nx,
+            ny = Ny,
 
             calc_zs =  (x, y) -> 0.5 * sqrt(x+0.05),    # surface elevation (SHMIP)
             calc_zb = (x, y) -> 0.0,                    # bed elevation
@@ -37,7 +38,7 @@ function run_example(;dt,
             dt   = dt,                  # time step
             ttot = dt * tsteps,         # total time
 
-            itMax = 5*10^4,
+            itMax = 1,
             γ_ϕ  = 0.6,     # damping parameter for ϕ
             γ_h  = 0.8,     # damping parameter for h
             dτ_ϕ_ = 1.0,    # scaling factor for dτ_ϕ
@@ -49,24 +50,26 @@ function run_example(;dt,
             Λ   = 3e-3
         )
 
-        @unpack nx, ny = input_params
-        ϕ0 = 0.5 * ones(nx, ny)
-        h0 = 0.5 * ones(nx, ny)
+    ϕ0 = 0.5 * ones(Nx, Ny)
+    h0 = 0.5 * ones(Nx, Ny)
 
-    output = S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1) # output is a struct (see model_output in SheetModel.jl) containing all the variable and error fields as well as number of iterations
+    #ProfileView.@profview S.runthemodel_scaled(input_params, ϕ0, h0, S.CuParams(nx=Nx, ny=Ny), 1000) # for profiling
+    # In VSCode, ProfileView.xx is necessary (https://github.com/timholy/ProfileView.jl/pull/172/commits/5ea809fe6409a41b96cfba0800b78d708f1ad604)
+
+    output = S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1)
 
     # plot output
-    @unpack xc, yc, H = input_params
-    @unpack N, ϕ, h, qx, qy, qx_ice, qy_ice,
-            ittot, Err_ϕ, Err_h, Res_ϕ, Res_h,
-            errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
-            errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel = output
-    if plotting
-        S.plot_output(xc, yc, H, N, h, qx, qy, qx_ice, qy_ice, Err_ϕ, Err_h,
-                      errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
-                      errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
-    end
+    #@unpack xc, yc, H = input_params
+    #@unpack N, ϕ, h, qx, qy,
+    #        ittot, iters, Err_ϕ, Err_h, Res_ϕ, Res_h,
+    #        errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
+    #        errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel = output
+    #if plotting
+    #    S.plot_output(xc, yc, H, N, h, qx, qy, Err_ϕ, Err_h,
+    #                  iters, errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
+    #                  errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
+    #end
 end
 
-run_example(dt=1e8, tsteps=1, plotting=true)
+run_example(dt=1e8, tsteps=1, Nx=64, Ny=64, plotting=false)
 #run_example(dt=2e7, tsteps=5, plotting=true)
