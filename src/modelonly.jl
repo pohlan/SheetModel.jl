@@ -72,7 +72,7 @@ macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^
 Calculate pseudo-time step of ϕ, input coordinates on d_eff grid (inner points of ϕ/h grid).
 Needs access to dτ_ϕ_, dx, dy, dt, k, h, α, β, small, ϕ, H
 """
-macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / @d_eff($ix, $iy) / 4.1, dt))) end
+macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / d_eff[$ix, $iy] / 4.1, dt))) end
 #macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ @d_eff($ix, $iy) / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
 
 """
@@ -80,16 +80,16 @@ Calculate flux in x-direction using an upstream scheme; input coordinates on qx 
 Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
 macro flux_x(ix, iy) esc(:( 1 < $ix < nx-1 ? @dϕ_dx($ix, $iy) * (
-    - @d_eff($ix,   $iy-1) * (@dϕ_dx($ix, $iy) >= 0) +   # flux in negative x-direction
-    - @d_eff($ix-1, $iy-1) * (@dϕ_dx($ix, $iy) <  0) )   # flux in positive x-direction
+    - d_eff[$ix,   $iy-1] * (@dϕ_dx($ix, $iy) >= 0) +   # flux in negative x-direction
+    - d_eff[$ix-1, $iy-1] * (@dϕ_dx($ix, $iy) <  0) )   # flux in positive x-direction
     : 0.0)) end
 """
 Calculate flux in y-direction using an upstream scheme; input coordinates on qy grid.
 Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
 macro flux_y(ix, iy) esc(:( 1 < $iy < ny-1 ? @dϕ_dy($ix, $iy) * (
-    - @d_eff($ix-1, $iy  ) * (@dϕ_dy($ix, $iy) >= 0) +   # flux in negative y-direction
-    - @d_eff($ix-1, $iy-1) * (@dϕ_dy($ix, $iy) <  0) )   # flux in positive y-direction
+    - d_eff[$ix-1, $iy  ] * (@dϕ_dy($ix, $iy) >= 0) +   # flux in negative y-direction
+    - d_eff[$ix-1, $iy-1] * (@dϕ_dy($ix, $iy) <  0) )   # flux in positive y-direction
     : 0.0)) end
 
 
@@ -117,6 +117,14 @@ macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
 
 ### KERNEL FUNCTIONS ###
 
+@parallel_indices (ix, iy) function update_deff!(d_eff, ϕ, h, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, small)
+    nx, ny = size(ϕ)
+    if (1 < ix < nx && 1 < iy < ny)
+        d_eff[ix-1, iy-1] = @d_eff(ix-1, ix-1)
+    end
+    return
+end
+
 """
 Calculate residuals of ϕ and h and store them in arrays.
 Used for error calculation and only to be carried out every xx iterations, e.g. every thousand.
@@ -141,7 +149,7 @@ end
 """
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
-@parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
+@parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m, d_eff,
                                                   dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
                                                   dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     nx, ny = size(ϕ)
@@ -208,7 +216,7 @@ end
 """
 Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for plotting.
 """
-@parallel_indices (ix,iy) function output_params!(N, qx, qy, ϕ, h,
+@parallel_indices (ix,iy) function output_params!(N, qx, qy, ϕ, h, d_eff,
                                                   ρi, ρw, g, H, zb, k, α, β, dx, dy, small)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
@@ -279,7 +287,8 @@ Run the model with scaled parameters.
             if (iter == 10) t_tic = Base.time() end
 
             # update ϕ and h
-            @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
+            @parallel update_deff!(d_eff, ϕ, h, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, small)
+            @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m, d_eff,
                                                         dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
                                                         dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 
@@ -359,7 +368,7 @@ Run the model with scaled parameters.
     @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
 
     # calculate N, qx and qy as output parameters
-    @parallel output_params!(N, qx, qy, ϕ, h,
+    @parallel output_params!(N, qx, qy, ϕ, h, d_eff,
                                                 ρi, ρw, g, H, zb, k, α, β, dx, dy, small)
 
     return model_output{Data.Array}(;   N, ϕ, h, qx, qy,
