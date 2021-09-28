@@ -72,7 +72,7 @@ macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^
 Calculate pseudo-time step of ϕ, input coordinates on d_eff grid (inner points of ϕ/h grid).
 Needs access to dτ_ϕ_, dx, dy, dt, k, h, α, β, small, ϕ, H
 """
-macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / @d_eff($ix, $iy) / 4.1, dt))) end
+macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / deff_ϕ / 4.1, dt))) end
 #macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ @d_eff($ix, $iy) / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
 
 """
@@ -83,6 +83,13 @@ macro flux_x(ix, iy) esc(:( 1 < $ix < nx-1 ? @dϕ_dx($ix, $iy) * (
     - @d_eff($ix,   $iy-1) * (@dϕ_dx($ix, $iy) >= 0) +   # flux in negative x-direction
     - @d_eff($ix-1, $iy-1) * (@dϕ_dx($ix, $iy) <  0) )   # flux in positive x-direction
     : 0.0)) end
+macro flux_x1(ix, iy) esc(:(1 < $ix ? @dϕ_dx($ix, $iy) * (
+                                      @dϕ_dx($ix, $iy) >= 0 ? - deff_ϕ : - @d_eff($ix-1, $iy-1))
+                            : 0.0)) end
+macro flux_x2(ix, iy) esc(:($ix < nx-1 ? @dϕ_dx($ix, $iy) * (
+                                         @dϕ_dx($ix, $iy) >= 0 ? - @d_eff($ix, $iy-1) : - deff_ϕ)
+                            : 0.0)) end
+
 """
 Calculate flux in y-direction using an upstream scheme; input coordinates on qy grid.
 Needs access to k, h, α, β, small, ϕ, dx, dy, H
@@ -92,6 +99,12 @@ macro flux_y(ix, iy) esc(:( 1 < $iy < ny-1 ? @dϕ_dy($ix, $iy) * (
     - @d_eff($ix-1, $iy-1) * (@dϕ_dy($ix, $iy) <  0) )   # flux in positive y-direction
     : 0.0)) end
 
+macro flux_y1(ix, iy) esc(:(1 < $iy ? @dϕ_dy($ix, $iy) * (
+                                      @dϕ_dy($ix, $iy) >= 0 ? - deff_ϕ : - @d_eff($ix-1, $iy-1))
+                            : 0.0)) end
+macro flux_y2(ix, iy) esc(:($iy < ny-1 ? @dϕ_dy($ix, $iy) * (
+                                         @dϕ_dy($ix, $iy) >= 0 ? - @d_eff($ix-1, $iy) : - deff_ϕ)
+                            : 0.0)) end
 
 """
 Calculate residual of ϕ; input coordinates on ϕ/h grid (but only defined on inner grid points 2:nx-1, 2:ny-1, due to d_eff).
@@ -99,7 +112,7 @@ Needs access to ϕ, ϕ_old, h, H, ev, ρw, ρi, g, k, α, β, small, dx, dy, dt,
 """
 macro Res_ϕ(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (                                                      # only calculate at points with non-zero ice thickness
                                                   - ev/(ρw*g) * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) / dt                                                   # dhe/dt
-                                                  - ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) / dx + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) / dy )    # divergence
+                                                  - ( (@flux_x2($ix, $iy) - @flux_x1($ix-1, $iy)) / dx + (@flux_y2($ix, $iy) - @flux_y1($ix, $iy-1)) / dy )    # divergence
                                                   - (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))                                                            # dh/dt
                                                   + Λ * m[$ix, $iy]                                                                                  # source term
                                                  )
@@ -146,8 +159,9 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
                                                   dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
-        # update ϕ
         if (1 < ix < nx && 1 < iy < ny)
+            # update ϕ
+            deff_ϕ  = @d_eff(ix-1, iy-1)
             dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
             ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
         end
@@ -214,8 +228,9 @@ Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for 
     if (ix <= nx && iy <= ny)
         N[ix, iy]  = @N(ix, iy)
         if (1 < ix < nx && 1 < iy < ny)
-            qx[ix, iy] = @flux_x(ix, iy)
-            qy[ix, iy] = @flux_y(ix, iy)
+            deff_ϕ = @d_eff(ix-1, iy-1)
+            qx[ix, iy] = @flux_x2(ix, iy)
+            qy[ix, iy] = @flux_y2(ix, iy)
         end
     end
     return
