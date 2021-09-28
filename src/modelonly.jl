@@ -360,7 +360,7 @@ Run the model with scaled parameters.
 
     # Perfomance measures
     t_toc = Base.time() - t_tic                # execution time, s
-    A_eff = (2*5+2)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
+    A_eff = (2*6+2)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
                                                # 5 read+write arrays (ϕ, dϕ_dτ, h, dh_dτ, m), 2 read arrays (ϕ_old, h_old)
                                                # (ϕ is actually only read, the write part is to ϕ2, same for h)
     t_it  = t_toc/(ittot-10)                   # execution time per iteration, s
