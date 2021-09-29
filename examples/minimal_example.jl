@@ -5,13 +5,13 @@
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../"))
-using SheetModel, Parameters, ProfileView, ParallelStencil # for ProfileView, gtk needs to be installed
+using SheetModel, CUDA, Parameters, ParallelStencil # for ProfileView, gtk needs to be installed; doesn't work together with PyPlot
 const S = SheetModel
 
 function run_example(;dt,
                       Nx, Ny,
-                      tsteps,               # number of timesteps
-                      plotting=true)     # whether to produce plots from model output
+                      tsteps=1,               # number of timesteps
+                      plotting=false)     # whether to produce plots from model output
     input_params = S.Para(
             g     = 1.0,              # gravitational acceleration
             ρw    = 1.0,              # water density
@@ -38,7 +38,7 @@ function run_example(;dt,
             dt   = dt,                  # time step
             ttot = dt * tsteps,         # total time
 
-            itMax = 1,
+            itMax = 10^3,
             γ_ϕ  = 0.6,     # damping parameter for ϕ
             γ_h  = 0.8,     # damping parameter for h
             dτ_ϕ_ = 1.0,    # scaling factor for dτ_ϕ
@@ -49,27 +49,17 @@ function run_example(;dt,
             Γ   = 6e3,
             Λ   = 3e-3
         )
-
-    ϕ0 = 0.5 * ones(Nx, Ny)
-    h0 = 0.5 * ones(Nx, Ny)
+    input_typed = reconstruct(S.Para, input_params,
+                        H = Data.Array(input_params.H),
+                        zb = Data.Array(input_params.zb))
+    ϕ0 = 0.5 * @ones(Nx, Ny)
+    h0 = 0.5 * @ones(Nx, Ny)
 
     #ProfileView.@profview S.runthemodel_scaled(input_params, ϕ0, h0, S.CuParams(nx=Nx, ny=Ny), 1000) # for profiling
     # In VSCode, ProfileView.xx is necessary (https://github.com/timholy/ProfileView.jl/pull/172/commits/5ea809fe6409a41b96cfba0800b78d708f1ad604)
 
-    output = S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1)
-
-    # plot output
-    #@unpack xc, yc, H = input_params
-    #@unpack N, ϕ, h, qx, qy,
-    #        ittot, iters, Err_ϕ, Err_h, Res_ϕ, Res_h,
-    #        errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
-    #        errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel = output
-    #if plotting
-    #    S.plot_output(xc, yc, H, N, h, qx, qy, Err_ϕ, Err_h,
-    #                  iters, errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
-    #                  errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
-    #end
+    S.runthemodel_scaled(input_typed, ϕ0, h0, 1)
 end
 
-run_example(dt=1e8, tsteps=1, Nx=64, Ny=64, plotting=false)
+run_example(dt=1e8, Nx=1024, Ny=1024)
 #run_example(dt=2e7, tsteps=5, plotting=true)

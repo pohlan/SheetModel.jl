@@ -13,7 +13,7 @@ else
 end
 
 
-export Para
+export Para, Data
 
 include("helpers.jl")
 include("modelonly.jl")

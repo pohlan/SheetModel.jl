@@ -242,38 +242,14 @@ Run the model with scaled parameters.
     h       = copy(h0)
     h2      = copy(h0)
 
-    # for iterations vs. error plot
-    iters      = Int64[]
-    errs_ϕ     = Float64[]
-    errs_h     = Float64[]
-    errs_ϕ_rel = Float64[]
-    errs_h_rel = Float64[]
-    errs_ϕ_res = Float64[]
-    errs_h_res = Float64[]
-    errs_ϕ_resrel = Float64[]
-    errs_h_resrel = Float64[]
-    err_ϕ = 0.
-    err_h = 0.
-    err_ϕ_rel = 0.
-    err_h_rel = 0.
-    err_ϕ_res = 0.
-    err_h_res = 0.
-    err_ϕ_resrel = 0.
-    err_h_resrel = 0.
-    err_ϕ_ini = 0.0
-    err_h_ini = 0.0
-
     # initiate time loop parameters
     t = 0.0; tstep=0; ittot = 0; t_tic = 0.
 
-    # Physical time loop
-    while t<ttot
         iter = 0
-        err_ϕ_tol, err_h_tol = 2*tol, 2*tol
 
         m .= Data.Array(calc_m_t(t+dt))
         # Pseudo-transient iteration
-        while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
+        while iter<itMax # with the ! the loop also continues for NaN values of err
 
             # don't consider first ten iterations for performance measure
             if (iter == 10) t_tic = Base.time() end
@@ -292,81 +268,25 @@ Run the model with scaled parameters.
 
             iter += 1
 
-            # determine the errors (only consider points where the ice thickness is > 0)
-
             if iter % 1000 == 0
-            #    # update the residual arrays
-            #    @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
-            #                                            dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
-
-                # residual error
-            #    err_ϕ_res = norm(Res_ϕ) / length(Res_ϕ) # or length(Res_ϕ) instead of sum(H .> 0.) ??
-            #    err_h_res = norm(Res_h) / norm(h0)
-            #    if (iter==0)
-            #        err_ϕ_ini = err_ϕ_res
-            #        err_h_ini = err_h_res
-            #    end
-            #    err_ϕ_resrel = err_ϕ_res / err_ϕ_ini
-            #    err_h_resrel = err_h_res / err_h_ini
-
-                # update error
-            #   @parallel update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
-            #   err_ϕ = norm(Δϕ) / length(Δϕ)
-            #   err_h = norm(Δh) / norm(h0)
-            #   if (iter==0)
-            #       err_ϕ_ini = err_ϕ
-            #       err_h_ini = err_h
-            #   end
-            #   err_ϕ_rel = err_ϕ / err_ϕ_ini
-            #   err_h_rel = err_h / err_h_ini
-
-                # decide which errors should be below the tolerance and be printed out
-            #   err_ϕ_tol, err_h_tol = err_ϕ, err_h
-
-                # save error evolution in vector
-            #   append!(iters, iter)
-            #   append!(errs_ϕ, err_ϕ)
-            #   append!(errs_h, err_h)
-            #   append!(errs_ϕ_rel, err_ϕ_rel)
-            #   append!(errs_h_rel, err_h_rel)
-            #   append!(errs_ϕ_res, err_ϕ_res)
-            #   append!(errs_h_res, err_h_res)
-            #   append!(errs_ϕ_resrel, err_ϕ_resrel)
-            #   append!(errs_h_resrel, err_h_resrel)
-
-               @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
-
+               @printf("iterations = %d", iter)
             end
-
-
         end
-        ittot += iter; tstep += 1; t += dt
-
-        #if mod(tstep, printtime) == 0
-        #    @printf("time step = %d, number of iterations = %d \n", tstep, iter)
-        #end
-
-        @parallel old2new!(ϕ, ϕ_old, h, h_old)
-    end
 
     # Perfomance measures
     t_toc = Base.time() - t_tic                # execution time, s
     A_eff = (2*5+2)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
                                                # 5 read+write arrays (ϕ, dϕ_dτ, h, dh_dτ, m), 2 read arrays (ϕ_old, h_old)
                                                # (ϕ is actually only read, the write part is to ϕ2, same for h)
-    t_it  = t_toc/(ittot-10)                   # execution time per iteration, s
+    t_it  = t_toc/(iter-10)                   # execution time per iteration, s
     T_eff = A_eff/t_it                         # effective memory throughput, GB/s
-    @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
+    @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), iter)
 
     # calculate N, qx and qy as output parameters
     @parallel output_params!(N, qx, qy, ϕ, h,
                                                 ρi, ρw, g, H, zb, k, α, β, dx, dy, small)
 
-    return model_output{Data.Array}(;   N, ϕ, h, qx, qy,
-                            Err_ϕ=Δϕ, Err_h=Δh, Res_ϕ, Res_h,
-                            ittot, iters,
-                            errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
-                            errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
+    return
 end
 
 """
@@ -375,7 +295,6 @@ Scale the parameters and call the model run function.
 @views function runthemodel(input::Para, ϕ0, h0;
                     printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
     params, ϕ0, h0, ϕ_, N_, h_, q_ = scaling(input, ϕ0, h0)
-    output = runthemodel_scaled(params::Para, ϕ0, h0, printtime)
-    output_descaled = descaling(output, N_, ϕ_, h_, q_)
-    return output_descaled
+    runthemodel_scaled(params::Para, ϕ0, h0, printtime)
+    return
 end
