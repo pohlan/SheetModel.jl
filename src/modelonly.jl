@@ -148,13 +148,13 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
     if (ix <= nx && iy <= ny)
         # update ϕ
         if (1 < ix < nx && 1 < iy < ny)
-            dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
-            ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
+            #dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
+            ϕ2[ix, iy] = ϕ[ix, iy] + 3.2 # @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
         end
 
         # update h
-        dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
-        h2[ix, iy] = h[ix, iy] + dτ_h_ * dh_dτ[ix, iy]
+        #dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
+        h2[ix, iy] = h[ix, iy] + 3.2 # dτ_h_ * dh_dτ[ix, iy]
     end
     return
 end
