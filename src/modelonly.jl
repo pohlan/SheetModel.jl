@@ -112,7 +112,7 @@ Calculate residual of h; input coordinates on ϕ/h grid.
 Needs access to ϕ, h, h_old, H, dt, Σ, Γ, hr, ub, lr, zb, n, A, ρw, ρi, g
 """
 macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
-                                                  - (h[$ix, $iy] - h_old[$ix, $iy]) / dt
+                                                  - (h[$ix, $iy] - h_old[$ix, $iy]) * 2e-8
                                                   + (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))
                                                  )
 )) end
