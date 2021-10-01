@@ -28,7 +28,9 @@ macro N(ix, iy) esc(:(ρi * g * H[$ix, $iy] - @pw($ix, $iy))) end
 Calculate closure rate; input coordinates on ϕ/h grid.
 Needs access to ϕ, H, ρw, ρi, g, zb, n, A, h
 """
-macro vc(ix, iy) esc(:(2 / n^n * A * h[$ix, $iy] * abs(@N($ix, $iy))^(n-1) * @N($ix, $iy))) end
+macro vc(ix, iy) esc(:(2. * 0.37 * A * h[$ix, $iy]
+                       * abs(@N($ix, $iy)) * abs(@N($ix, $iy)) * @N($ix, $iy)
+                       )) end
 
 """
 Calculate opening rate; input coordinates on ϕ/h grid.
@@ -145,17 +147,17 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
                                                   dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
                                                   dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     nx, ny = size(ϕ)
-    #if (ix <= nx && iy <= ny)
+    if (ix <= nx && iy <= ny)
         # update ϕ
-        if (1 < ix < nx && 1 < iy < ny)
-            dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
-            ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
-        end
+        #if (1 < ix < nx && 1 < iy < ny)
+        #    dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
+        #    ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
+        #end
 
         # update h
-        #dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
-        #h2[ix, iy] = h[ix, iy] + dτ_h_ * dh_dτ[ix, iy]
-    #end
+        dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
+        h2[ix, iy] = h[ix, iy] + dτ_h_ * dh_dτ[ix, iy]
+    end
     return
 end
 
@@ -260,7 +262,7 @@ Run the model with scaled parameters.
                                                         dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 
             # apply dirichlet boundary conditions
-            @parallel apply_bc!(ϕ2, h2, H, ρw, g, zb)
+            #@parallel apply_bc!(ϕ2, h2, H, ρw, g, zb)
 
             # pointer swap
             ϕ, ϕ2 = ϕ2, ϕ
