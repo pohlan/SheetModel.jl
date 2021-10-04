@@ -100,10 +100,10 @@ Calculate residual of ϕ; input coordinates on ϕ/h grid (but only defined on in
 Needs access to ϕ, ϕ_old, h, H, ev, ρw, ρi, g, k, α, β, small, dx, dy, dt, Σ, Γ, Λ, m, hr, ub, lr, zb, n, A
 """
 macro Res_ϕ(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (                                                      # only calculate at points with non-zero ice thickness
-                                                  - ev/(ρw*g) * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) / dt                                                   # dhe/dt
-                                                  - ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) / dx + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) / dy )    # divergence
-                                                  - (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))                                                            # dh/dt
-                                                  + Λ * m[$ix, $iy]                                                                                  # source term
+                                                  - 1.5 * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy])                                                    # dhe/dt
+                                                  #- ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) * 0.2 + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) * 0.2 )    # divergence
+                                                  #- (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))                                                            # dh/dt
+                                                  #+ Λ * m[$ix, $iy]                                                                                  # source term
                                                  )
 )) end
 
@@ -149,14 +149,14 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
         # update ϕ
-        #if (1 < ix < nx && 1 < iy < ny)
-        #    dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
-        #    ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
-        #end
+        if (1 < ix < nx && 1 < iy < ny)
+            dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
+            #ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
+        end
 
         # update h
-        dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
-        h2[ix, iy] = h[ix, iy] + dτ_h_ * dh_dτ[ix, iy]
+        #dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
+        #h2[ix, iy] = h[ix, iy] + dτ_h_ * dh_dτ[ix, iy]
     end
     return
 end
@@ -269,20 +269,16 @@ Run the model with scaled parameters.
             h, h2 = h2, h
 
             iter += 1
-
-            if iter % 1000 == 0
-               @printf("iterations = %d", iter)
-            end
         end
 
     # Perfomance measures
     t_toc = Base.time() - t_tic                # execution time, s
-    A_eff = (2*5+2)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
+    A_eff = 5/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
                                                # 5 read+write arrays (ϕ, dϕ_dτ, h, dh_dτ, m), 2 read arrays (ϕ_old, h_old)
                                                # (ϕ is actually only read, the write part is to ϕ2, same for h)
     t_it  = t_toc/(iter-10)                   # execution time per iteration, s
     T_eff = A_eff/t_it                         # effective memory throughput, GB/s
-    @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), iter)
+    @printf("Time = %1.3f sec, T_eff = %1.f GB/s, iterations total = %d, (nx, ny) = (%d, %d)\n", t_toc, round(T_eff, sigdigits=3), iter, nx, ny)
 
     # calculate N, qx and qy as output parameters
     @parallel output_params!(N, qx, qy, ϕ, h,

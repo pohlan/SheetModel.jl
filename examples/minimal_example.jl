@@ -61,5 +61,5 @@ function run_example(;dt,
     S.runthemodel_scaled(input_typed, ϕ0, h0, 1)
 end
 
-run_example(dt=1e8, Nx=1024, Ny=1024)
+run_example(dt=1e8, Nx=8192, Ny=4096)
 #run_example(dt=2e7, tsteps=5, plotting=true)
