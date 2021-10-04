@@ -16,19 +16,19 @@ using Printf, Infiltrator
 Calculate water pressure; input coordinates on ϕ/h grid.
 Needs access to ϕ, ρw, g, zb.
 """
-macro pw(ix, iy) esc(:(ϕ[$ix, $iy] - ρw * g * zb[$ix, $iy])) end
+macro pw(ix, iy) esc(:(ϕ[$ix, $iy] - zb[$ix, $iy])) end
 
 """
 Calculate effective pressure; input coordinates on ϕ/h grid.
 Needs access to ϕ, H, ρw, ρi, g, zb
 """
-macro N(ix, iy) esc(:(ρi * g * H[$ix, $iy] - @pw($ix, $iy))) end
+macro N(ix, iy) esc(:(ρi * H[$ix, $iy] - @pw($ix, $iy))) end
 
 """
 Calculate closure rate; input coordinates on ϕ/h grid.
 Needs access to ϕ, H, ρw, ρi, g, zb, n, A, h
 """
-macro vc(ix, iy) esc(:(2. * 0.37 * A * h[$ix, $iy]
+macro vc(ix, iy) esc(:(1.74 * h[$ix, $iy]
                        * abs(@N($ix, $iy)) * abs(@N($ix, $iy)) * @N($ix, $iy)
                        )) end
 
@@ -36,7 +36,7 @@ macro vc(ix, iy) esc(:(2. * 0.37 * A * h[$ix, $iy]
 Calculate opening rate; input coordinates on ϕ/h grid.
 Needs access to h, hr, ub, lr
 """
-macro vo(ix, iy) esc(:(h[$ix, $iy] < hr ? ub * (hr - h[$ix, $iy]) / lr : 0.0)) end
+macro vo(ix, iy) esc(:(h[$ix, $iy] < hr ? ub * (hr - h[$ix, $iy]) : 0.0)) end
 
 """
 Calculate hydraulic gradient in x-direction; input coordinates on qx grid.
@@ -102,8 +102,8 @@ Needs access to ϕ, ϕ_old, h, H, ev, ρw, ρi, g, k, α, β, small, dx, dy, dt,
 macro Res_ϕ(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (                                                      # only calculate at points with non-zero ice thickness
                                                   - 1.5 * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy])                                                    # dhe/dt
                                                   #- ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) * 0.2 + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) * 0.2 )    # divergence
-                                                  #- (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))                                                            # dh/dt
-                                                  #+ Λ * m[$ix, $iy]                                                                                  # source term
+                                                  - (@vo($ix, $iy) - @vc($ix, $iy))                                                            # dh/dt
+                                                  + m[$ix, $iy]                                                                                  # source term
                                                  )
 )) end
 
@@ -113,7 +113,7 @@ Needs access to ϕ, h, h_old, H, dt, Σ, Γ, hr, ub, lr, zb, n, A, ρw, ρi, g
 """
 macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
                                                   - (h[$ix, $iy] - h_old[$ix, $iy]) * 2e-8
-                                                  + (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))
+                                                  + (@vo($ix, $iy) - @vc($ix, $iy))
                                                  )
 )) end
 
@@ -249,7 +249,7 @@ Run the model with scaled parameters.
 
         iter = 0
 
-        m .= Data.Array(calc_m_t(t+dt))
+        m .= Λ * Data.Array(calc_m_t(t+dt))
         # Pseudo-transient iteration
         while iter<itMax # with the ! the loop also continues for NaN values of err
 
@@ -273,7 +273,7 @@ Run the model with scaled parameters.
 
     # Perfomance measures
     t_toc = Base.time() - t_tic                # execution time, s
-    A_eff = 5/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
+    A_eff = 8/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
                                                # 5 read+write arrays (ϕ, dϕ_dτ, h, dh_dτ, m), 2 read arrays (ϕ_old, h_old)
                                                # (ϕ is actually only read, the write part is to ϕ2, same for h)
     t_it  = t_toc/(iter-10)                   # execution time per iteration, s
