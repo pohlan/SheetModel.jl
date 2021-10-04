@@ -68,7 +68,7 @@ macro gradϕ(ix, iy) esc(:( sqrt(
 Calculate effective diffusivity, input coordinates on d_eff grid (inner points of ϕ/h grid).
 Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
-macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end
+macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (small)^(β-2) )) end
 
 """
 Calculate pseudo-time step of ϕ, input coordinates on d_eff grid (inner points of ϕ/h grid).
@@ -81,18 +81,20 @@ macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / @d_eff($ix, $iy) / 4.1
 Calculate flux in x-direction using an upstream scheme; input coordinates on qx grid.
 Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
-macro flux_x(ix, iy) esc(:( 1 < $ix < nx-1 ? @dϕ_dx($ix, $iy) * (
-    - @d_eff($ix,   $iy-1) * (@dϕ_dx($ix, $iy) >= 0) +   # flux in negative x-direction
-    - @d_eff($ix-1, $iy-1) * (@dϕ_dx($ix, $iy) <  0) )   # flux in positive x-direction
-    : 0.0)) end
+macro flux_x(ix, iy) esc(:(- @d_eff($ix-1, $iy-1) # 1 < $ix < nx-1 ? @dϕ_dx($ix, $iy) * (
+    #- @d_eff($ix,   $iy-1) * (@dϕ_dx($ix, $iy) >= 0) +   # flux in negative x-direction
+    #- @d_eff($ix-1, $iy-1) * (@dϕ_dx($ix, $iy) <  0) )   # flux in positive x-direction
+    #: 0.0
+    )) end
 """
 Calculate flux in y-direction using an upstream scheme; input coordinates on qy grid.
 Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
-macro flux_y(ix, iy) esc(:( 1 < $iy < ny-1 ? @dϕ_dy($ix, $iy) * (
-    - @d_eff($ix-1, $iy  ) * (@dϕ_dy($ix, $iy) >= 0) +   # flux in negative y-direction
-    - @d_eff($ix-1, $iy-1) * (@dϕ_dy($ix, $iy) <  0) )   # flux in positive y-direction
-    : 0.0)) end
+macro flux_y(ix, iy) esc(:(- @d_eff($ix-1, $iy-1) # 1 < $iy < ny-1 ? @dϕ_dy($ix, $iy) * (
+    #- @d_eff($ix-1, $iy  ) * (@dϕ_dy($ix, $iy) >= 0) +   # flux in negative y-direction
+    #- @d_eff($ix-1, $iy-1) * (@dϕ_dy($ix, $iy) <  0) )   # flux in positive y-direction
+    #: 0.0
+    )) end
 
 
 """
@@ -101,7 +103,7 @@ Needs access to ϕ, ϕ_old, h, H, ev, ρw, ρi, g, k, α, β, small, dx, dy, dt,
 """
 macro Res_ϕ(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (                                                      # only calculate at points with non-zero ice thickness
                                                   - 1.5 * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy])                                                    # dhe/dt
-                                                  #- ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) * 0.2 + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) * 0.2 )    # divergence
+                                                  - ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) * 0.2 + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) * 0.2 )    # divergence
                                                   - (@vo($ix, $iy) - @vc($ix, $iy))                                                            # dh/dt
                                                   + m[$ix, $iy]                                                                                  # source term
                                                  )
