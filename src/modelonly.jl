@@ -81,7 +81,7 @@ macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / @d_eff($ix, $iy) / 4.1
 Calculate flux in x-direction using an upstream scheme; input coordinates on qx grid.
 Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
-macro flux_x(ix, iy) esc(:(- @d_eff($ix-1, $iy-1) # 1 < $ix < nx-1 ? @dϕ_dx($ix, $iy) * (
+macro flux_x(ix, iy) esc(:(- d_eff[$ix-1, $iy-1] # 1 < $ix < nx-1 ? @dϕ_dx($ix, $iy) * (
     #- @d_eff($ix,   $iy-1) * (@dϕ_dx($ix, $iy) >= 0) +   # flux in negative x-direction
     #- @d_eff($ix-1, $iy-1) * (@dϕ_dx($ix, $iy) <  0) )   # flux in positive x-direction
     #: 0.0
@@ -90,7 +90,7 @@ macro flux_x(ix, iy) esc(:(- @d_eff($ix-1, $iy-1) # 1 < $ix < nx-1 ? @dϕ_dx($ix
 Calculate flux in y-direction using an upstream scheme; input coordinates on qy grid.
 Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
-macro flux_y(ix, iy) esc(:(- @d_eff($ix-1, $iy-1) # 1 < $iy < ny-1 ? @dϕ_dy($ix, $iy) * (
+macro flux_y(ix, iy) esc(:(- d_eff[$ix-1, $iy-1] # 1 < $iy < ny-1 ? @dϕ_dy($ix, $iy) * (
     #- @d_eff($ix-1, $iy  ) * (@dϕ_dy($ix, $iy) >= 0) +   # flux in negative y-direction
     #- @d_eff($ix-1, $iy-1) * (@dϕ_dy($ix, $iy) <  0) )   # flux in positive y-direction
     #: 0.0
@@ -119,6 +119,14 @@ macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
                                                  )
 )) end
 
+@parallel_indices (ix, iy) function update_deff!(d_eff, ϕ, dx, dy, k, h, H, α, β, small)
+    nx, ny = size(ϕ)
+    if (1 < ix < nx && 1 < iy < ny)
+        d_eff[ix-1, iy-1] = @d_eff(ix-1, iy-1)
+    end
+    return
+end
+
 ### KERNEL FUNCTIONS ###
 
 """
@@ -145,7 +153,7 @@ end
 """
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
-@parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
+@parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m, d_eff,
                                                   dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
                                                   dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     nx, ny = size(ϕ)
@@ -154,6 +162,8 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
         if (1 < ix < nx && 1 < iy < ny)
             dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
             #ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
+
+            d_eff[ix-1, iy-1] = @d_eff(ix-1, iy-1)
         end
 
         # update h
@@ -212,7 +222,7 @@ end
 """
 Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for plotting.
 """
-@parallel_indices (ix,iy) function output_params!(N, qx, qy, ϕ, h,
+@parallel_indices (ix,iy) function output_params!(N, qx, qy, ϕ, h, d_eff,
                                                   ρi, ρw, g, H, zb, k, α, β, dx, dy, small)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
@@ -246,6 +256,8 @@ Run the model with scaled parameters.
     h       = copy(h0)
     h2      = copy(h0)
 
+    @parallel update_deff!(d_eff, ϕ, dx, dy, k, h, H, α, β, small)
+
     # initiate time loop parameters
     t = 0.0; tstep=0; ittot = 0; t_tic = 0.
 
@@ -259,7 +271,7 @@ Run the model with scaled parameters.
             if (iter == 10) t_tic = Base.time() end
 
             # update ϕ and h
-            @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m,
+            @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m, d_eff,
                                                         dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
                                                         dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 
@@ -275,7 +287,7 @@ Run the model with scaled parameters.
 
     # Perfomance measures
     t_toc = Base.time() - t_tic                # execution time, s
-    A_eff = 8/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
+    A_eff = 10/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
                                                # 5 read+write arrays (ϕ, dϕ_dτ, h, dh_dτ, m), 2 read arrays (ϕ_old, h_old)
                                                # (ϕ is actually only read, the write part is to ϕ2, same for h)
     t_it  = t_toc/(iter-10)                   # execution time per iteration, s
@@ -283,7 +295,7 @@ Run the model with scaled parameters.
     @printf("Time = %1.3f sec, T_eff = %1.f GB/s, iterations total = %d, (nx, ny) = (%d, %d)\n", t_toc, round(T_eff, sigdigits=3), iter, nx, ny)
 
     # calculate N, qx and qy as output parameters
-    @parallel output_params!(N, qx, qy, ϕ, h,
+    @parallel output_params!(N, qx, qy, ϕ, h, d_eff,
                                                 ρi, ρw, g, H, zb, k, α, β, dx, dy, small)
 
     return
