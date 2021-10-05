@@ -366,14 +366,15 @@ Run the model with scaled parameters.
                             Err_ϕ=Δϕ, Err_h=Δh, Res_ϕ, Res_h,
                             ittot, iters,
                             errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
-                            errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
+                            errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel,
+                            time_tot=t_toc, T_eff)
 end
 
 """
 Scale the parameters and call the model run function.
 """
 @views function runthemodel(input::Para, ϕ0, h0;
-                    printtime=10^5)       # time step and number of PT iterations is printed after `printtime` number of physical time steps
+                    printtime=10^5)       # time step is printed after `printtime` number of physical time steps
     params, ϕ0, h0, ϕ_, N_, h_, q_ = scaling(input, ϕ0, h0)
     output = runthemodel_scaled(params::Para, ϕ0, h0, printtime)
     output_descaled = descaling(output, N_, ϕ_, h_, q_)

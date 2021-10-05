@@ -13,7 +13,7 @@ else
 end
 
 
-export Para
+export Para, USE_GPU
 
 include("helpers.jl")
 include("modelonly.jl")
