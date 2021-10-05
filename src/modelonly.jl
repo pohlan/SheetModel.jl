@@ -1,5 +1,5 @@
 using LazyArrays: Diff
-using Printf, Infiltrator
+using Printf, Infiltrator, ChangePrecision
 
 # used grids:
 # - normal grid (i,j), size (nx, ny)
@@ -239,6 +239,7 @@ end
 Run the model with scaled parameters.
 """
 @views function runthemodel_scaled(params::Para, ϕ0, h0, printtime)
+    @changeprecision Float32 begin
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
 
@@ -287,7 +288,7 @@ Run the model with scaled parameters.
 
     # Perfomance measures
     t_toc = Base.time() - t_tic                # execution time, s
-    A_eff = 10/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
+    A_eff = 10/1e9*nx*ny*sizeof(Float32)  # effective main memory access per iteration [GB];
                                                # 5 read+write arrays (ϕ, dϕ_dτ, h, dh_dτ, m), 2 read arrays (ϕ_old, h_old)
                                                # (ϕ is actually only read, the write part is to ϕ2, same for h)
     t_it  = t_toc/(iter-10)                   # execution time per iteration, s
@@ -299,6 +300,7 @@ Run the model with scaled parameters.
                                                 ρi, ρw, g, H, zb, k, α, β, dx, dy, small)
 
     return
+    end
 end
 
 """

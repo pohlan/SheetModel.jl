@@ -1,8 +1,8 @@
-using Base: Float64, Int64
+using Base: Float32, Int32
 using LinearAlgebra, Parameters, Statistics, PyPlot
 
 # misc fudge factors to avoid dividing by zero
-small = eps(Float64)
+small = eps(Float32)
 
 """
 Turn all negative numbers into 0.0
@@ -18,7 +18,7 @@ ghostp(nx) = [0.0; ones(nx-2); 0.0]
 """
 Create struct including all model parameters, physical and numerical
 """
-@with_kw struct Para{T, F1, F2} @deftype Float64
+@with_kw struct Para{T, F1, F2} @deftype Float32
     # Scalars (one global value)
     g     = 9.81              # gravitational acceleration, m/s^2
     ρw    = 1000.0            # water density, kg/m^3
@@ -34,15 +34,15 @@ Create struct including all model parameters, physical and numerical
     ub    = 1e-6              # basal sliding speed, m/s
 
     # Numerical domain
-    xrange::Tuple{Float64, Float64}   # domain size
-    yrange::Tuple{Float64, Float64}
-    nx::Int64                         # number of grid points, including ghost points where ice thickness = 0
-    ny::Int64
+    xrange::Tuple{Float32, Float32}   # domain size
+    yrange::Tuple{Float32, Float32}
+    nx::Int32                         # number of grid points, including ghost points where ice thickness = 0
+    ny::Int32
     @assert nx % 16 == 0 && ny % 16 == 0 "nx and ny must be multiples of 16"
     dx = (xrange[2]-xrange[1]) / (nx-3)          # grid size
     dy = (yrange[2]-yrange[1]) / (ny-3)
-    xc::LinRange{Float64} = LinRange(xrange[1]-dx, xrange[2]+dx, nx) # vector of x-coordinates
-    yc::LinRange{Float64} = LinRange(yrange[1]-dy, yrange[2]+dy, ny) # vector of y-coordinates
+    xc::LinRange{Float32} = LinRange(xrange[1]-dx, xrange[2]+dx, nx) # vector of x-coordinates
+    yc::LinRange{Float32} = LinRange(yrange[1]-dy, yrange[2]+dy, ny) # vector of y-coordinates
 
     # Field parameters (defined on every grid point)
     calc_zs::Function
@@ -86,16 +86,16 @@ Create struct containing output parameters of the model: N, ϕ, h, qx, qy and di
     Err_h::T
     Res_ϕ::T
     Res_h::T
-    ittot::Int64
-    iters::Vector{Int64}
-    errs_ϕ::Vector{Float64}
-    errs_h::Vector{Float64}
-    errs_ϕ_rel::Vector{Float64}
-    errs_h_rel::Vector{Float64}
-    errs_ϕ_res::Vector{Float64}
-    errs_h_res::Vector{Float64}
-    errs_ϕ_resrel::Vector{Float64}
-    errs_h_resrel::Vector{Float64}
+    ittot::Int32
+    iters::Vector{Int32}
+    errs_ϕ::Vector{Float32}
+    errs_h::Vector{Float32}
+    errs_ϕ_rel::Vector{Float32}
+    errs_h_rel::Vector{Float32}
+    errs_ϕ_res::Vector{Float32}
+    errs_h_res::Vector{Float32}
+    errs_ϕ_resrel::Vector{Float32}
+    errs_h_resrel::Vector{Float32}
 end
 Broadcast.broadcastable(out::model_output) = Ref(out)
 
@@ -193,16 +193,16 @@ function scaling(p::Para, ϕ0, h0)
     return scaled_params, ϕ0, h0, ϕ_, N_, h_, q_
 end
 
-mat(x) = Matrix{Float64}(x) # shorter notation for use in descaling() function
+mat(x) = Matrix{Float32}(x) # shorter notation for use in descaling() function
 
 """
 Convert unitless output parameters back to dimensional quantities.
-Convert all arrays to Matrix{Float64} type.
+Convert all arrays to Matrix{Float32} type.
 """
 function descaling(output::model_output, N_, ϕ_, h_, q_)
     @unpack N, ϕ, h, qx, qy,
             Err_ϕ, Err_h , Res_ϕ, Res_h = output
-    output_descaled = reconstruct(model_output{Matrix{Float64}}, output,
+    output_descaled = reconstruct(model_output{Matrix{Float32}}, output,
         N  = mat(N .* N_),
         ϕ  = mat(ϕ .* ϕ_),
         h  = mat(h .* h_),
