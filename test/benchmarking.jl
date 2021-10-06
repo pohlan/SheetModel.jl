@@ -1,44 +1,60 @@
+using Base: AbstractVecOrTuple
 using DrWatson, JLD2
 using SheetModel
 
 # get current commit hash
 gitcommit = gitdescribe()
+if gitcommit[end-4:end] == "dirty"
+    print("Press enter to continue with dirty repo or ^C to abort.")
+    readline() # will stop the execution and only continue when pressing enter
+    print("_dirty suffix was removed.")
+    gitcommit = split(gitcommit, "_")[1]
+end
 
-# load the correct file with previous benchmarks; there is one file for the GPU and one for the CPU
+# get the name of the server where the model was run
+hostname = read(`hostname`, String)[1:end-1] # the last character is always "\n"
+
+# get the type of processing unit and merge strings with hostname
 if USE_GPU
-    file = joinpath(@__DIR__, "benchmarks_GPU.jld2")
+    unitname = join([hostname "_GPU"])
 else
-    file = joinpath(@__DIR__, "benchmarks_CPU.jld2")
+    unitname = join([hostname, "_CPU-", string(Threads.nthreads()), "threads"])
 end
-if isfile(file)
-    benchmarks = load(file)
-else
-    benchmarks = Dict()
-end
-
-# only continue if the current version hasn't been benchmarked yet
-@assert !haskey(benchmarks, gitcommit) "The current version has already been benchmarked for the chosen processing unit."
 
 # run the model
 scriptname = "examples/run_SHMIP.jl"
 include(joinpath(@__DIR__, "../" * scriptname))
 
-# get the name of the device where the model was run
-hostname = read(`hostname`, String)
-
 # save output in dictionary
 d = Dict(
-    :hostname => hostname,
-    :which => scriptname,
-    :total_time => outputs.time_tot,            # in s
+    :SHMIP_case => inputs.SHMIP_case,
+    :total_time => outputs.time_tot,         # in s
     :T_eff => outputs.T_eff,                 # effective memory throuhput in GB/s
     :nx => inputs.input_params.nx,
     :ny => inputs.input_params.ny,
     :iterations => outputs.ittot,
 )
 
-# make a new entry to the loaded dictionary
-benchmarks[gitcommit] = d
+# load file with previous benchmarks
+file = joinpath(@__DIR__, "benchmarks.jld2")
+if isfile(file)
+    benchmarks = load(file)
+else
+    benchmarks = Dict()
+end
+
+# check if unitname and gitcommit entries in the dictionaries already exist
+if !haskey(benchmarks, unitname)
+    benchmarks[unitname] = Dict()
+end
+if !haskey(benchmarks[unitname], gitcommit)
+    benchmarks[unitname][gitcommit] = Dict(k=>[] for k in keys(d) )
+end
+
+# push to each entry of the dictionary
+for key in keys(benchmarks[unitname][gitcommit])
+    push!(benchmarks[unitname][gitcommit][key], d[key])
+end
 
 # write updated dictionary back to file
 save(file, benchmarks)

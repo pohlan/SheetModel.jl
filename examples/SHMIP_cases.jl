@@ -153,5 +153,5 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
                       errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
     end
 
-    return (;input_params, ϕ0, h0), model_output
+    return (;input_params, SHMIP_case=test_case, ϕ0, h0), model_output
 end
