@@ -1,15 +1,27 @@
-using Base: AbstractVecOrTuple
-using DrWatson, JLD2
-using SheetModel
+# ------------------------------------------------------------------------------------------------------------------#
+# This script runs the model over run_SHMIP.jl and saves the parameters                                             #
+# in a nested dictionary, which is then saved in the "benchmarks.jld2" file.                                        #
+# Structure:                                                                                                        #
+#                                                                                                                   #
+# :Achtzack01_GPU => :commit1 => :SHMIP_case   = ["A1", "A1", "A2", ...]                                            #
+#                                :steady_state = [true, true, true, ...]                                            #
+#                                :run_time     = [28.1, 34.5, 38.1, ...]  # absolute time, in s                     #
+#                                :T_eff        = [20, 19, 18, ...]        # effective memory throughput, GB/s       #
+#                                :nx           = [1024, 4096, 4096, ...]                                            #
+#                                :ny           = [512, 1024, 4096, ...]                                             #
+#                                :iterations   = [10^3, 28200, 10^3, ...]                                           #
+#                    :commit2  => ...                                                                               #
+#                                                                                                                   #
+# :Achtzack01_CPU-1threads      => :commit1  => ...                                                                 #
+# :Achtzack01_CPU-16threads     => ...                                                                              #
+# :Achtzack01_CPU-32threads     => ...                                                                              #
+# :annegret-laptop_CPU-1threads => ...                                                                              #
+# :Octopus_GPU                  => ...                                                                              #
+# ------------------------------------------------------------------------------------------------------------------#
 
-# get current commit hash
-gitcommit = gitdescribe()
-if gitcommit[end-4:end] == "dirty"
-    print("Press enter to continue with dirty repo or ^C to abort.")
-    readline() # will stop the execution and only continue when pressing enter
-    print("_dirty suffix was removed.")
-    gitcommit = split(gitcommit, "_")[1]
-end
+using Base: AbstractVecOrTuple
+using DrWatson, JLD2, Printf
+using SheetModel
 
 # get the name of the server where the model was run
 hostname = read(`hostname`, String)[1:end-1] # the last character is always "\n"
@@ -21,20 +33,6 @@ else
     unitname = join([hostname, "_CPU-", string(Threads.nthreads()), "threads"])
 end
 
-# run the model
-scriptname = "examples/run_SHMIP.jl"
-include(joinpath(@__DIR__, "../" * scriptname))
-
-# save output in dictionary
-d = Dict(
-    :SHMIP_case => inputs.SHMIP_case,
-    :total_time => outputs.time_tot,         # in s
-    :T_eff => outputs.T_eff,                 # effective memory throuhput in GB/s
-    :nx => inputs.input_params.nx,
-    :ny => inputs.input_params.ny,
-    :iterations => outputs.ittot,
-)
-
 # load file with previous benchmarks
 file = joinpath(@__DIR__, "benchmarks.jld2")
 if isfile(file)
@@ -43,18 +41,61 @@ else
     benchmarks = Dict()
 end
 
+# get current commit hash
+gitcommit = gitdescribe()
+
 # check if unitname and gitcommit entries in the dictionaries already exist
 if !haskey(benchmarks, unitname)
     benchmarks[unitname] = Dict()
 end
-if !haskey(benchmarks[unitname], gitcommit)
-    benchmarks[unitname][gitcommit] = Dict(k=>[] for k in keys(d) )
+if haskey(benchmarks[unitname], gitcommit)
+    @printf("This commit has already been benchmarked by %s. Press enter to continue or ^C to abort.", unitname)
+    readline() # will stop the execution and only continue when pressing enter
+else
+    benchmarks[unitname][gitcommit] = Dict()
 end
 
-# push to each entry of the dictionary
-for key in keys(benchmarks[unitname][gitcommit])
-    push!(benchmarks[unitname][gitcommit][key], d[key])
+# check if repo is dirty
+if isdirty()
+    print("Press enter to continue with dirty repo or ^C to abort.")
+    readline() # will stop the execution and only continue when pressing enter
+    # save the diff to HEAD
+    benchmarks[unitname][gitcommit][:gitpatch] = DrWatson.gitpatch()
+end
+
+# define the test sets
+include(joinpath(@__DIR__, "../examples/SHMIP_cases.jl"))
+test_sets = [(test_case="A1", nx=32, ny=32, itMax=10^3),
+             (test_case="A1", nx=128, ny=128, itMax=10^3),
+             #(test_case="E1", nx=64, ny=64, itMax=10^5)
+             ]
+
+## run the benchmarking for each test set
+for test_set in test_sets
+    # run the model
+    inputs, outputs = run_SHMIP(;test_set...);
+
+    # save output in dictionary
+    d = Dict(
+        :SHMIP_case => inputs.SHMIP_case,
+        :steady_state => outputs.steady_state,
+        :run_time => outputs.time_tot,
+        :T_eff => outputs.T_eff,
+        :nx => inputs.input_params.nx,
+        :ny => inputs.input_params.ny,
+        :iterations => outputs.ittot,
+    )
+
+    # push to each entry of the dictionary
+    if !haskey(benchmarks[unitname][gitcommit], :SHMIP_case)
+        [benchmarks[unitname][gitcommit][k] = typeof(d[k])[] for k in keys(d)]
+    end
+    for key in filter(x->x!=:gitpatch, keys(benchmarks[unitname][gitcommit]))
+        push!(benchmarks[unitname][gitcommit][key], d[key])
+    end
 end
 
 # write updated dictionary back to file
 save(file, benchmarks)
+
+include("plot_benchmarks.jl")

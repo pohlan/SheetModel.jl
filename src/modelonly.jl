@@ -265,6 +265,7 @@ Run the model with scaled parameters.
 
     # initiate time loop parameters
     t = 0.0; tstep=0; ittot = 0; t_tic = 0.
+    steady_state = false;
 
     # Physical time loop
     while t<ttot
@@ -294,45 +295,46 @@ Run the model with scaled parameters.
 
             # determine the errors (only consider points where the ice thickness is > 0)
 
-            if iter % 1000 == 0
-            #    # update the residual arrays
-            #    @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
-            #                                            dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
+            if iter % 1000 == 0 && itMax > 10^4     # only calculate errors every 1000 time steps
+                                                    # and if itMax is high, i.e. if convergence is the goal
+                # update the residual arrays
+                @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
+                                                        dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
 
                 # residual error
-            #    err_ϕ_res = norm(Res_ϕ) / length(Res_ϕ) # or length(Res_ϕ) instead of sum(H .> 0.) ??
-            #    err_h_res = norm(Res_h) / norm(h0)
-            #    if (iter==0)
-            #        err_ϕ_ini = err_ϕ_res
-            #        err_h_ini = err_h_res
-            #    end
-            #    err_ϕ_resrel = err_ϕ_res / err_ϕ_ini
-            #    err_h_resrel = err_h_res / err_h_ini
+                err_ϕ_res = norm(Res_ϕ) / length(Res_ϕ) # or length(Res_ϕ) instead of sum(H .> 0.) ??
+                err_h_res = norm(Res_h) / norm(h0)
+                if (iter==0)
+                    err_ϕ_ini = err_ϕ_res
+                    err_h_ini = err_h_res
+                end
+                err_ϕ_resrel = err_ϕ_res / err_ϕ_ini
+                err_h_resrel = err_h_res / err_h_ini
 
                 # update error
-            #   @parallel update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
-            #   err_ϕ = norm(Δϕ) / length(Δϕ)
-            #   err_h = norm(Δh) / norm(h0)
-            #   if (iter==0)
-            #       err_ϕ_ini = err_ϕ
-            #       err_h_ini = err_h
-            #   end
-            #   err_ϕ_rel = err_ϕ / err_ϕ_ini
-            #   err_h_rel = err_h / err_h_ini
+               @parallel update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
+               err_ϕ = norm(Δϕ) / length(Δϕ)
+               err_h = norm(Δh) / norm(h0)
+               if (iter==0)
+                   err_ϕ_ini = err_ϕ
+                   err_h_ini = err_h
+               end
+               err_ϕ_rel = err_ϕ / err_ϕ_ini
+               err_h_rel = err_h / err_h_ini
 
                 # decide which errors should be below the tolerance and be printed out
-            #   err_ϕ_tol, err_h_tol = err_ϕ, err_h
+               err_ϕ_tol, err_h_tol = err_ϕ, err_h
 
                 # save error evolution in vector
-            #   append!(iters, iter)
-            #   append!(errs_ϕ, err_ϕ)
-            #   append!(errs_h, err_h)
-            #   append!(errs_ϕ_rel, err_ϕ_rel)
-            #   append!(errs_h_rel, err_h_rel)
-            #   append!(errs_ϕ_res, err_ϕ_res)
-            #   append!(errs_h_res, err_h_res)
-            #   append!(errs_ϕ_resrel, err_ϕ_resrel)
-            #   append!(errs_h_resrel, err_h_resrel)
+               append!(iters, iter)
+               append!(errs_ϕ, err_ϕ)
+               append!(errs_h, err_h)
+               append!(errs_ϕ_rel, err_ϕ_rel)
+               append!(errs_h_rel, err_h_rel)
+               append!(errs_ϕ_res, err_ϕ_res)
+               append!(errs_h_res, err_h_res)
+               append!(errs_ϕ_resrel, err_ϕ_resrel)
+               append!(errs_h_resrel, err_h_resrel)
 
                @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
 
@@ -347,6 +349,9 @@ Run the model with scaled parameters.
         #end
 
         @parallel old2new!(ϕ, ϕ_old, h, h_old)
+        if max(err_ϕ_tol, err_h_tol) < tol && t > 1e7
+            steady_state = true
+        end
     end
 
     # Perfomance measures
@@ -367,7 +372,7 @@ Run the model with scaled parameters.
                             ittot, iters,
                             errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
                             errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel,
-                            time_tot=t_toc, T_eff)
+                            time_tot=t_toc, T_eff, steady_state)
 end
 
 """
