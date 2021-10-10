@@ -1,6 +1,10 @@
 # SheetModel.jl
 
-**To run the model**, execute the script `examples/run_SHMIP.jl`.
+- **Run the model** by executing the script `examples/run_SHMIP.jl`.
+
+- **Benchmark** the current version by running `test/benchmarking.jl`
+
+- **Plot benchmarking results** with `test/plot_benchmarks.jl`
 
 The most relevant stuff is in `src/modelonly.jl`
 
