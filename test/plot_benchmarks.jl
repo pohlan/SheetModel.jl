@@ -25,15 +25,16 @@ symbols = Dict("achtzack01"      => :xcross,
                "annegret-laptop" => :hexagon)
 for (n, unit) in enumerate(keys(benchmarks))
     (host, PU) = split(unit, "_")
+    steadyst = benchmarks[unit][gitcommit][:steady_state] .== true
     res = benchmarks[unit][gitcommit][:nx] .* benchmarks[unit][gitcommit][:ny]
-    t_tot = Float64.(benchmarks[unit][gitcommit][:run_time])
-    T_eff = Float64.(benchmarks[unit][gitcommit][:T_eff])
+    t_tot = benchmarks[unit][gitcommit][:run_time]
+    T_eff = benchmarks[unit][gitcommit][:T_eff]
     if n == 1
-        global plt_ttot = scatterplot(res, t_tot, marker=symbols[host], color=colors[PU], name=unit, xlabel="Grid size (nx*ny)", ylabel="Run time (s)")
-        global plt_Teff = scatterplot(res, T_eff, marker=symbols[host], color=colors[PU], name=unit, xlabel="Grid size (nx*ny)", ylabel="T_eff (GB/s)")
+        global plt_ttot = scatterplot(res[steadyst], t_tot[steadyst], marker=symbols[host], color=colors[PU], name=unit, xlabel="Grid size (nx*ny)", ylabel="Run time (s)")
+        global plt_Teff = scatterplot(res[.!steadyst], T_eff[.!steadyst], marker=symbols[host], color=colors[PU], name=unit, xlabel="Grid size (nx*ny)", ylabel="T_eff (GB/s)")
     else
-        scatterplot!(plt_ttot, res, t_tot, marker=symbols[host], color=colors[PU], name=unit)
-        scatterplot!(plt_Teff, res, T_eff, marker=symbols[host], color=colors[PU], name=unit)
+        scatterplot!(plt_ttot, res[steadyst], t_tot[steadyst], marker=symbols[host], color=colors[PU], name=unit)
+        scatterplot!(plt_Teff, res[.!steadyst], T_eff[.!steadyst], marker=symbols[host], color=colors[PU], name=unit)
     end
 end
 
