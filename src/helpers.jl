@@ -96,6 +96,9 @@ Create struct containing output parameters of the model: N, ϕ, h, qx, qy and di
     errs_h_res::Vector{Float64}
     errs_ϕ_resrel::Vector{Float64}
     errs_h_resrel::Vector{Float64}
+    time_tot::Float64
+    T_eff::Float64
+    steady_state::Bool
 end
 Broadcast.broadcastable(out::model_output) = Ref(out)
 

@@ -30,9 +30,9 @@ r(x, para) = (-4.5*x/6e3 + 5) * (surface_val(x, 0) - f(x, para)) /
 bed_val(x,y, para) = f(x,para) + g(y) * r(x, para)
 
 
-function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
-                   dt, tsteps=1,
-                   γ_ϕ=0.8, γ_h=0.9, dτ_ϕ_=1.0, dτ_h_=7e-6)      # parameters for pseudo-transient time stepping
+function run_SHMIP(;test_case, nx, ny, itMax=10^5, make_plot=false, printtime=10^5,
+                   dt=5e7, tsteps=1,
+                   γ_ϕ=0.2, γ_h=0.2, dτ_ϕ_=1.0, dτ_h_=7e-6)      # parameters for pseudo-transient time stepping
 
     # suite A: use different steady and spatially uniform water inputs
     runoff = Dict("A1" => (x, y, t) -> 7.93e-11,
@@ -108,8 +108,8 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
     input_params = S.Para(
         xrange = topo.xrange,  # domain length in x-direction, m
         yrange = topo.yrange,  # domain length in y-direction, m
-        nx = Nx,
-        ny = Ny,
+        nx = nx,
+        ny = ny,
 
         calc_zs = topo.surf,    # surface elevation, m
         calc_zb = topo.bed,     # bed elevation, m
@@ -118,7 +118,7 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
         dt   = dt,  #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
         ttot = tsteps * dt,
 
-        itMax = 10^3,
+        itMax = itMax,
         γ_ϕ  = γ_ϕ,  # damping parameter for ϕ
         γ_h  = γ_h,  # damping parameter for h
         dτ_ϕ_ = dτ_ϕ_, # scaling factor for dτ_ϕ
@@ -153,5 +153,5 @@ function run_SHMIP(test_case; Nx, Ny, make_plot=false, printtime=10^5,
                       errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
     end
 
-    return (;input_params, ϕ0, h0), model_output
+    return (;input_params, SHMIP_case=test_case, ϕ0, h0), model_output
 end
