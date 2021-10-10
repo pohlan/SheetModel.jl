@@ -70,18 +70,18 @@ test_sets = [# 10^3 iterations without reaching steady state (and without calcul
             (test_case="A1", nx=256,   ny=256,  itMax=10^3),
             (test_case="A1", nx=512,   ny=512,  itMax=10^3),
             (test_case="A1", nx=1024,  ny=1024, itMax=10^3),
-            (test_case="A1", nx=2048,  ny=2048, itMax=10^3),
-            (test_case="A1", nx=4096,  ny=4096, itMax=10^3),
-            (test_case="A1", nx=8192,  ny=8192, itMax=10^3),
-            (test_case="A1", nx=16384, ny=8192, itMax=10^3),
+            #(test_case="A1", nx=2048,  ny=2048, itMax=10^3),
+            #(test_case="A1", nx=4096,  ny=4096, itMax=10^3),
+            #(test_case="A1", nx=8192,  ny=8192, itMax=10^3),
+            #(test_case="A1", nx=16384, ny=8192, itMax=10^3),
 
              # going into steady state
-            (test_case="A1", nx=1024, ny=512, itMax=10^5),
-            (test_case="A1", nx=4096, ny=2048, itMax=10^5),
-            (test_case="A3", nx=1024, ny=512, itMax=10^5),
-            (test_case="A3", nx=4096, ny=1024, itMax=10^5),
-            (test_case="F1", nx=1024, ny=512, itMax=10^5),
-            (test_case="F1", nx=4096, ny=2048, itMax=10^5),
+            #(test_case="A1", nx=1024, ny=512, itMax=10^5),
+            #(test_case="A1", nx=4096, ny=2048, itMax=10^5),
+            #(test_case="A3", nx=1024, ny=512, itMax=10^5),
+            #(test_case="A3", nx=4096, ny=1024, itMax=10^5),
+            #(test_case="F1", nx=1024, ny=512, itMax=10^5),
+            #(test_case="F1", nx=4096, ny=2048, itMax=10^5),
              ]
 
 ## run the benchmarking for each test set

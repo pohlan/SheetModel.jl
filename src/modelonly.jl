@@ -361,7 +361,7 @@ Run the model with scaled parameters.
                                                # (ϕ is actually only read, the write part is to ϕ2, same for h)
     t_it  = t_toc/(ittot-10)                   # execution time per iteration, s
     T_eff = A_eff/t_it                         # effective memory throughput, GB/s
-    @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
+    @printf("Time = %1.3f sec, T_eff = %1.1f GB/s, iterations total = %d, (nx, ny) = (%d, %d)\n", t_toc, round(T_eff, sigdigits=3), ittot, nx, ny)
 
     # calculate N, qx and qy as output parameters
     @parallel output_params!(N, qx, qy, ϕ, h,
