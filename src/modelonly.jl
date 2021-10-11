@@ -120,7 +120,7 @@ macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
 @parallel_indices (ix, iy) function update_deff!(d_eff, ϕ, h, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, small)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
-        d_eff[ix-1, iy-1] = @d_eff(ix-1, ix-1)
+        d_eff[ix-1, iy-1] = @d_eff(ix-1, iy-1)
     end
     return
 end
@@ -164,7 +164,7 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
 
         # update d_eff (the bottleneck in performance, only do it every 10 iterations)
         if iter % 10 == 0.
-            d_eff[ix-1, iy-1] = @d_eff(ix-1, ix-1)
+            d_eff[ix-1, iy-1] = @d_eff(ix-1, iy-1)
         end
     end
     return
@@ -225,8 +225,8 @@ Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for 
     if (ix <= nx && iy <= ny)
         N[ix, iy]  = @N(ix, iy)
         if (1 < ix < nx && 1 < iy < ny)
-            qx[ix, iy] = @flux_x(ix, iy)
-            qy[ix, iy] = @flux_y(ix, iy)
+            qx[ix-1, iy] = @flux_x(ix, iy)
+            qy[ix, iy-1] = @flux_y(ix, iy)
         end
     end
     return
@@ -289,7 +289,7 @@ Run the model with scaled parameters.
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 
             # don't consider first ten iterations for performance measure
-            if (iter == 10) global t_tic = Base.time() end
+            if (iter == 10) t_tic = Base.time() end
 
             # update ϕ and h
             @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m, d_eff, iter,
