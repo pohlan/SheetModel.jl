@@ -129,7 +129,7 @@ end
 Calculate residuals of ϕ and h and store them in arrays.
 Used for error calculation and only to be carried out every xx iterations, e.g. every thousand.
 """
-@parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
+@parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m, d_eff,
                                               dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
@@ -149,20 +149,23 @@ end
 """
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
-@parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m, d_eff,
+@parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m, d_eff, iter,
                                                   dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
                                                   dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     nx, ny = size(ϕ)
-    if (ix <= nx && iy <= ny)
+    if (1 < ix < nx && 1 < iy < ny)
         # update ϕ
-        if (1 < ix < nx && 1 < iy < ny)
-            dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
-            ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
-        end
+        dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
+        ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
 
         # update h
         dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
         h2[ix, iy] = h[ix, iy] + dτ_h_ * dh_dτ[ix, iy]
+
+        # update d_eff (the bottleneck in performance, only do it every 10 iterations)
+        if iter % 10 == 0.
+            d_eff[ix-1, iy-1] = @d_eff(ix-1, ix-1)
+        end
     end
     return
 end
@@ -242,6 +245,7 @@ Run the model with scaled parameters.
 
     # Apply boundary conditions
     @parallel apply_bc!(ϕ0, h0, H, ρw, g, zb)
+    @parallel update_deff!(d_eff, ϕ0, h0, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, small)
 
     ϕ_old   = copy(ϕ0)
     ϕ       = copy(ϕ0)
@@ -272,7 +276,7 @@ Run the model with scaled parameters.
     err_h_ini = 0.0
 
     # initiate time loop parameters
-    t = 0.0; tstep=0; ittot = 0; t_tic = 0.
+    t = 0.0; tstep=0; ittot = 0;
 
     # Physical time loop
     while t<ttot
@@ -284,11 +288,10 @@ Run the model with scaled parameters.
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 
             # don't consider first ten iterations for performance measure
-            if (iter == 10) t_tic = Base.time() end
+            if (iter == 10) global t_tic = Base.time() end
 
             # update ϕ and h
-            @parallel update_deff!(d_eff, ϕ, h, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, small)
-            @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m, d_eff,
+            @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m, d_eff, iter,
                                                         dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
                                                         dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 
@@ -303,47 +306,48 @@ Run the model with scaled parameters.
 
             # determine the errors (only consider points where the ice thickness is > 0)
 
-            if iter % 1000 == 0
-            #    # update the residual arrays
-            #    @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m,
-            #                                            dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
+            if iter % 1000 == 0 && itMax > 10^4     # only calculate errors every 1000 time steps
+                                                    # and if itMax is high, i.e. if convergence is the goal
+                # update the residual arrays
+                @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m, d_eff,
+                                                        dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
 
                 # residual error
-            #    err_ϕ_res = norm(Res_ϕ) / length(Res_ϕ) # or length(Res_ϕ) instead of sum(H .> 0.) ??
-            #    err_h_res = norm(Res_h) / norm(h0)
-            #    if (iter==0)
-            #        err_ϕ_ini = err_ϕ_res
-            #        err_h_ini = err_h_res
-            #    end
-            #    err_ϕ_resrel = err_ϕ_res / err_ϕ_ini
-            #    err_h_resrel = err_h_res / err_h_ini
+                err_ϕ_res = norm(Res_ϕ) / length(Res_ϕ) # or length(Res_ϕ) instead of sum(H .> 0.) ??
+                err_h_res = norm(Res_h) / norm(h0)
+                if (iter==0)
+                    err_ϕ_ini = err_ϕ_res
+                    err_h_ini = err_h_res
+                end
+                err_ϕ_resrel = err_ϕ_res / err_ϕ_ini
+                err_h_resrel = err_h_res / err_h_ini
 
                 # update error
-            #   @parallel update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
-            #   err_ϕ = norm(Δϕ) / length(Δϕ)
-            #   err_h = norm(Δh) / norm(h0)
-            #   if (iter==0)
-            #       err_ϕ_ini = err_ϕ
-            #       err_h_ini = err_h
-            #   end
-            #   err_ϕ_rel = err_ϕ / err_ϕ_ini
-            #   err_h_rel = err_h / err_h_ini
+                @parallel update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
+                err_ϕ = norm(Δϕ) / length(Δϕ)
+                err_h = norm(Δh) / norm(h0)
+                if (iter==0)
+                    err_ϕ_ini = err_ϕ
+                    err_h_ini = err_h
+                end
+                err_ϕ_rel = err_ϕ / err_ϕ_ini
+                err_h_rel = err_h / err_h_ini
 
                 # decide which errors should be below the tolerance and be printed out
-            #   err_ϕ_tol, err_h_tol = err_ϕ, err_h
+                err_ϕ_tol, err_h_tol = err_ϕ, err_h
 
                 # save error evolution in vector
-            #   append!(iters, iter)
-            #   append!(errs_ϕ, err_ϕ)
-            #   append!(errs_h, err_h)
-            #   append!(errs_ϕ_rel, err_ϕ_rel)
-            #   append!(errs_h_rel, err_h_rel)
-            #   append!(errs_ϕ_res, err_ϕ_res)
-            #   append!(errs_h_res, err_h_res)
-            #   append!(errs_ϕ_resrel, err_ϕ_resrel)
-            #   append!(errs_h_resrel, err_h_resrel)
+                append!(iters, iter)
+                append!(errs_ϕ, err_ϕ)
+                append!(errs_h, err_h)
+                append!(errs_ϕ_rel, err_ϕ_rel)
+                append!(errs_h_rel, err_h_rel)
+                append!(errs_ϕ_res, err_ϕ_res)
+                append!(errs_h_res, err_h_res)
+                append!(errs_ϕ_resrel, err_ϕ_resrel)
+                append!(errs_h_resrel, err_h_resrel)
 
-               @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
+                @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
 
             end
 
@@ -360,9 +364,9 @@ Run the model with scaled parameters.
 
     # Perfomance measures
     t_toc = Base.time() - t_tic                # execution time, s
-    A_eff = (2*6+2)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
-                                               # 5 read+write arrays (ϕ, dϕ_dτ, h, dh_dτ, m), 2 read arrays (ϕ_old, h_old)
-                                               # (ϕ is actually only read, the write part is to ϕ2, same for h)
+    A_eff = (5+10)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
+                                               # 5 write arrays (dϕ_dτ, ϕ2, dh_dτ, h2, d_eff)
+                                               # 2 read arrays (ϕ, ϕ_old, dϕ_dτ, h, h_old, dh_dτ, H, zb, m, d_eff)
     t_it  = t_toc/(ittot-10)                   # execution time per iteration, s
     T_eff = A_eff/t_it                         # effective memory throughput, GB/s
     @printf("Time = %1.3f sec, T_eff = %1.2f GB/s (iterations total = %d)\n", t_toc, round(T_eff, sigdigits=2), ittot)
