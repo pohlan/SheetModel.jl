@@ -6,7 +6,7 @@
 # :Achtzack01_GPU => :commit1 => :SHMIP_case   = ["A1", "A1", "A2", ...]                                            #
 #                                :steady_state = [true, true, true, ...]                                            #
 #                                :run_time     = [28.1, 34.5, 38.1, ...]  # absolute time, in s                     #
-#                                :T_eff        = [20, 19, 18, ...]        # effective memory throughput, GB/s       #
+#                                :T_eff        = [20.3, 19.1, 18.7, ...]        # effective memory throughput, GB/s       #
 #                                :nx           = [1024, 4096, 4096, ...]                                            #
 #                                :ny           = [512, 1024, 4096, ...]                                             #
 #                                :iterations   = [10^3, 28200, 10^3, ...]                                           #
@@ -41,8 +41,9 @@ else
     benchmarks = Dict()
 end
 
-# get current commit hash
+# get current commit hash and check that repo is clean
 gitcommit = gitdescribe()
+@assert !isdirty() "Make sure the repo is clean before benchmarking."
 
 # check if unitname and gitcommit entries in the dictionaries already exist
 if !haskey(benchmarks, unitname)
@@ -53,14 +54,6 @@ if haskey(benchmarks[unitname], gitcommit)
     readline() # will stop the execution and only continue when pressing enter
 else
     benchmarks[unitname][gitcommit] = Dict()
-end
-
-# check if repo is dirty
-if isdirty()
-    print("Press enter to continue with dirty repo or ^C to abort.")
-    readline() # will stop the execution and only continue when pressing enter
-    # save the diff to HEAD
-    benchmarks[unitname][gitcommit][:gitpatch] = DrWatson.gitpatch()
 end
 
 # define the test sets
