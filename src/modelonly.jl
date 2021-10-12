@@ -161,11 +161,6 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
         # update h
         dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
         h2[ix, iy] = h[ix, iy] + dτ_h_ * dh_dτ[ix, iy]
-
-        # update d_eff (the bottleneck in performance, only do it every 10 iterations)
-        if iter % 10 == 0.
-            d_eff[ix-1, iy-1] = @d_eff(ix-1, iy-1)
-        end
     end
     return
 end
@@ -225,8 +220,8 @@ Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for 
     if (ix <= nx && iy <= ny)
         N[ix, iy]  = @N(ix, iy)
         if (1 < ix < nx && 1 < iy < ny)
-            qx[ix-1, iy] = @flux_x(ix, iy)
-            qy[ix, iy-1] = @flux_y(ix, iy)
+            qx[ix, iy] = @flux_x(ix, iy)
+            qy[ix, iy] = @flux_y(ix, iy)
         end
     end
     return
@@ -245,7 +240,6 @@ Run the model with scaled parameters.
 
     # Apply boundary conditions
     @parallel apply_bc!(ϕ0, h0, H, ρw, g, zb)
-    @parallel update_deff!(d_eff, ϕ0, h0, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, small)
 
     ϕ_old   = copy(ϕ0)
     ϕ       = copy(ϕ0)
@@ -291,6 +285,11 @@ Run the model with scaled parameters.
             # don't consider first ten iterations for performance measure
             if (iter == 10) t_tic = Base.time() end
 
+            # update d_eff (the bottleneck in performance, only do it every 10 iterations)
+            # but it has to be done in a seperate kernel to ensure every grid point is accessing the same version of ϕ
+            #if iter % 1000 == 0.
+                @parallel update_deff!(d_eff, ϕ, h, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, small)
+            #end
             # update ϕ and h
             @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m, d_eff, iter,
                                                         dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
