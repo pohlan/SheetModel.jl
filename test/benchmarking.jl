@@ -43,7 +43,7 @@ end
 
 # get current commit hash and check that repo is clean
 gitcommit = gitdescribe()
-#@assert !isdirty() "Make sure the repo is clean before benchmarking."
+@assert !isdirty() "Make sure the repo is clean before benchmarking."
 
 # check if unitname and gitcommit entries in the dictionaries already exist
 if !haskey(benchmarks, unitname)
