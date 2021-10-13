@@ -1,21 +1,6 @@
 using SheetModel, Test
 const S = SheetModel
 
-# -------------------------#
-# Test the small functions #
-# -------------------------#
-
-@testset "Helper functions" begin
-    @test S.calc_q(0.5, 0.0, 0.0, 1.0, 1.25, 1.5, eps()) == 0.0 # shouldn't produce NaNs
-    @test S.calc_q(0.5, 1.0, 1.0, 1.0, 1.25, 1.5, eps()) == -0.35355339059327373
-    @test S.calc_pw(1.0, 1.0, 1.0, 0.5) == 0.5
-    @test S.calc_N(0.2, 0.9, 1.0, 1.0, 0.5, 0.1) == 0.35
-    @test S.calc_vc(0.2, 0.5, 0.9, 1.0, 1.0, 0.5, 0.1, 3.0, 1.0) == 0.0015879629629629627
-    @test S.calc_vo(1.2, 1.0, 1.0, 1.0) == 0.0
-    @test S.calc_vo(0.6, 1.0, 1.0, 1.0) == 0.4
-end
-
-
 # ----------------------#
 # Test the model output #
 # ----------------------#
@@ -25,21 +10,26 @@ include("test_references.jl")
 
 # run the cases
 include(joinpath(@__DIR__, "../examples/SHMIP_cases.jl"))
-nx, ny = 64, 32
+
 ϕ_test = Dict()
 h_test = Dict()
-nit_test = Dict()
-
 for test_case in keys(ϕ_ref)
-    inputs, outputs = run_SHMIP(test_case, Nx=nx, Ny=ny, dt = 5e7)
-    ϕ_test[test_case] = outputs.ϕ
-    h_test[test_case] = outputs.h
+    # A1 test case: sqrt geometry
+    inputs, outputs = run_SHMIP(test_case="A1", nx=64, ny=32, dt = 1e9,
+                                γ_ϕ= 0.8, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_= 7e-6)
+    ϕ_test["A1"] = outputs.ϕ
+    h_test["A1"] = outputs.h
+    # E1 test case: valley geometry
+    inputs, outputs = run_SHMIP(test_case="E1", nx=256, ny=256, dt = 1e9,
+                                γ_ϕ= 0.7, γ_h=0.5, dτ_ϕ_= 1.0, dτ_h_= 7e-4)
+    ϕ_test["E1"] = outputs.ϕ
+    h_test["E1"] = outputs.h
 end
 
 # test whether the runs agree with the references
 @testset "Model runs" begin
     for test_case in keys(ϕ_ref)
-        @test ϕ_test[test_case][1:20:end, 1:10:end] ≈ ϕ_ref[test_case]
-        @test h_test[test_case][1:20:end, 1:10:end] ≈ h_ref[test_case]
+        @test ϕ_test[test_case][2:20:end-1, 2:10:end-1] ≈ ϕ_ref[test_case]
+        @test h_test[test_case][2:20:end-1, 2:10:end-1] ≈ h_ref[test_case]
     end
 end
