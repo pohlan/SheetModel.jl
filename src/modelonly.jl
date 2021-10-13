@@ -157,6 +157,10 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
         # update ϕ
         dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
         ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
+        # dirichlet boundary conditions to pw = 0
+        if ix == 2
+            ϕ2[ix, iy] = ρw * g * zb[ix, iy]
+        end
 
         # update h
         dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
@@ -238,15 +242,15 @@ Run the model with scaled parameters.
     Δϕ, Δh, qx, qy, d_eff, m, N,
     dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
 
-    # Apply boundary conditions
-    @parallel apply_bc!(ϕ0, h0, H, ρw, g, zb)
-
     ϕ_old   = copy(ϕ0)
     ϕ       = copy(ϕ0)
     ϕ2      = copy(ϕ0)
     h_old   = copy(h0)
     h       = copy(h0)
     h2      = copy(h0)
+
+    # Apply boundary conditions
+    @parallel apply_bc!(ϕ0, h0, H, ρw, g, zb)
 
     # for iterations vs. error plot
     iters      = Int64[]
@@ -294,9 +298,6 @@ Run the model with scaled parameters.
             @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m, d_eff, iter,
                                                         dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
                                                         dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
-
-            # apply dirichlet boundary conditions
-            @parallel apply_bc!(ϕ2, h2, H, ρw, g, zb)
 
             # pointer swap
             ϕ, ϕ2 = ϕ2, ϕ
