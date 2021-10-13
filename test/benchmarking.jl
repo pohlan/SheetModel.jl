@@ -20,7 +20,7 @@
 # ------------------------------------------------------------------------------------------------------------------#
 
 using Base: AbstractVecOrTuple
-using DrWatson, JLD2, Printf
+using DrWatson, JLD2, Printf, CUDA
 using SheetModel
 
 # get the name of the server where the model was run
@@ -43,7 +43,7 @@ end
 
 # get current commit hash and check that repo is clean
 gitcommit = gitdescribe()
-@assert !isdirty() "Make sure the repo is clean before benchmarking."
+#@assert !isdirty() "Make sure the repo is clean before benchmarking."
 
 # check if unitname and gitcommit entries in the dictionaries already exist
 if !haskey(benchmarks, unitname)
@@ -65,8 +65,8 @@ test_sets = [# 10^3 iterations without reaching steady state (and without calcul
             (test_case="A1", nx=1024,  ny=1024, itMax=10^3),
             (test_case="A1", nx=2048,  ny=2048, itMax=10^3),
             (test_case="A1", nx=4096,  ny=4096, itMax=10^3),
-            (test_case="A1", nx=8192,  ny=8192, itMax=10^3),
-            (test_case="A1", nx=16384, ny=8192, itMax=10^3),
+            #(test_case="A1", nx=8192,  ny=8192, itMax=10^3),
+            #(test_case="A1", nx=16384, ny=8192, itMax=10^3),
 
              # going into steady state
             #(test_case="A1", nx=1024, ny=512, itMax=10^5),
@@ -80,7 +80,14 @@ test_sets = [# 10^3 iterations without reaching steady state (and without calcul
 ## run the benchmarking for each test set
 for test_set in test_sets
     # run the model
-    inputs, outputs = run_SHMIP(;test_set...);
+    inputs, outputs = try
+        run_SHMIP(;test_set...);
+    catch e
+        if isa(e, CUDA.OutOfGPUMemoryError)
+            @printf("nx =%d, ny=%d could not be run, not enough memory. \n", test_set.nx, test_set.ny)
+            continue
+        end
+    end
 
     # save output in dictionary
     d = Dict(
