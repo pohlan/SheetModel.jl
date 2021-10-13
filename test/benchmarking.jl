@@ -6,7 +6,7 @@
 # :Achtzack01_GPU => :commit1 => :SHMIP_case   = ["A1", "A1", "A2", ...]                                            #
 #                                :steady_state = [true, true, true, ...]                                            #
 #                                :run_time     = [28.1, 34.5, 38.1, ...]  # absolute time, in s                     #
-#                                :T_eff        = [20.3, 19.1, 18.7, ...]        # effective memory throughput, GB/s       #
+#                                :T_eff        = [20.3, 19.1, 18.7, ...]  # effective memory throughput, GB/s       #
 #                                :nx           = [1024, 4096, 4096, ...]                                            #
 #                                :ny           = [512, 1024, 4096, ...]                                             #
 #                                :iterations   = [10^3, 28200, 10^3, ...]                                           #
@@ -63,10 +63,10 @@ test_sets = [# 10^3 iterations without reaching steady state (and without calcul
             (test_case="A1", nx=256,   ny=256,  itMax=10^3),
             (test_case="A1", nx=512,   ny=512,  itMax=10^3),
             (test_case="A1", nx=1024,  ny=1024, itMax=10^3),
-            #(test_case="A1", nx=2048,  ny=2048, itMax=10^3),
-            #(test_case="A1", nx=4096,  ny=4096, itMax=10^3),
-            #(test_case="A1", nx=8192,  ny=8192, itMax=10^3),
-            #(test_case="A1", nx=16384, ny=8192, itMax=10^3),
+            (test_case="A1", nx=2048,  ny=2048, itMax=10^3),
+            (test_case="A1", nx=4096,  ny=4096, itMax=10^3),
+            (test_case="A1", nx=8192,  ny=8192, itMax=10^3),
+            (test_case="A1", nx=16384, ny=8192, itMax=10^3),
 
              # going into steady state
             #(test_case="A1", nx=1024, ny=512, itMax=10^5),
