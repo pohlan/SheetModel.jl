@@ -79,17 +79,17 @@ macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / d_eff[$ix, $iy] / 4.1,
 Calculate flux in x-direction using an upstream scheme; input coordinates on qx grid.
 Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
-macro flux_x(ix, iy) esc(:( 1 < $ix < nx-1 ? @dϕ_dx($ix, $iy) * (
-    - d_eff[$ix,   $iy-1] * (@dϕ_dx($ix, $iy) >= 0) +   # flux in negative x-direction
-    - d_eff[$ix-1, $iy-1] * (@dϕ_dx($ix, $iy) <  0) )   # flux in positive x-direction
+macro flux_x(ix, iy) esc(:( 1 < $ix < nx-1 ?
+    - d_eff[$ix,   $iy-1] * max(@dϕ_dx($ix, $iy), 0) +   # flux in negative x-direction
+    - d_eff[$ix-1, $iy-1] * min(@dϕ_dx($ix, $iy), 0.)    # flux in positive x-direction
     : 0.0)) end
 """
 Calculate flux in y-direction using an upstream scheme; input coordinates on qy grid.
 Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
-macro flux_y(ix, iy) esc(:( 1 < $iy < ny-1 ? @dϕ_dy($ix, $iy) * (
-    - d_eff[$ix-1, $iy  ] * (@dϕ_dy($ix, $iy) >= 0) +   # flux in negative y-direction
-    - d_eff[$ix-1, $iy-1] * (@dϕ_dy($ix, $iy) <  0) )   # flux in positive y-direction
+macro flux_y(ix, iy) esc(:( 1 < $iy < ny-1 ?
+    - d_eff[$ix-1, $iy  ] * max(@dϕ_dy($ix, $iy), 0.) +   # flux in negative y-direction
+    - d_eff[$ix-1, $iy-1] * min(@dϕ_dy($ix, $iy), 0.)    # flux in positive y-direction
     : 0.0)) end
 
 
