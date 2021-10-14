@@ -242,15 +242,15 @@ Run the model with scaled parameters.
     Δϕ, Δh, qx, qy, d_eff, m, N,
     dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
 
+    # Apply boundary conditions
+    @parallel apply_bc!(ϕ0, h0, H, ρw, g, zb)
+
     ϕ_old   = copy(ϕ0)
     ϕ       = copy(ϕ0)
     ϕ2      = copy(ϕ0)
     h_old   = copy(h0)
     h       = copy(h0)
     h2      = copy(h0)
-
-    # Apply boundary conditions
-    @parallel apply_bc!(ϕ0, h0, H, ρw, g, zb)
 
     # for iterations vs. error plot
     iters      = Int64[]
