@@ -55,42 +55,45 @@ macro dϕ_dy(ix, iy) esc(:( (H[$ix, $iy] > 0. && H[$ix, $iy+1] > 0.) # only cons
                          )) end
 
 """
-Calculate absolute hydraulic gradient, |∇ϕ|; input coordinates on d_eff grid (1:nx-2, 1:ny-2) -> inner points of ϕ/h grid.
+Calculate absolute hydraulic gradient, |∇ϕ|;
+input coordinates on ϕ/h grid (nx, ny), but only possible to calculate on inner points.
 Needs access to ϕ, dx, dy, H
 """
 macro gradϕ(ix, iy) esc(:( sqrt(
-                                  (0.5 * (@dϕ_dx($ix+1, $iy+1) + @dϕ_dx($ix, $iy+1)))^2
-                                + (0.5 * (@dϕ_dy($ix+1, $iy+1) + @dϕ_dy($ix+1, $iy)))^2
+                                  (0.5 * (@dϕ_dx($ix, $iy) + @dϕ_dx($ix-1, $iy)))^2
+                                + (0.5 * (@dϕ_dy($ix, $iy) + @dϕ_dy($ix, $iy-1)))^2
                                   ))) end
 """
-Calculate effective diffusivity, input coordinates on d_eff grid (inner points of ϕ/h grid).
+Calculate effective diffusivity;
+input coordinates on ϕ/h grid (nx, ny), but only possible to calculate on inner points.
 Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
-macro d_eff(ix, iy) esc(:( k * h[$ix+1, $iy+1]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end
+macro d_eff(ix, iy) esc(:( k * h[$ix, $iy]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end
 
 """
-Calculate pseudo-time step of ϕ, input coordinates on d_eff grid (inner points of ϕ/h grid).
+Calculate pseudo-time step of ϕ,
+input coordinates on ϕ/h grid (nx, ny), but only possible to calculate on inner points.
 Needs access to dτ_ϕ_, dx, dy, dt, k, h, α, β, small, ϕ, H
 """
 macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / d_eff[$ix, $iy] / 4.1, dt))) end
-#macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ @d_eff($ix, $iy) / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
+#macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ d_eff[$ix, $iy] / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
 
 """
 Calculate flux in x-direction using an upstream scheme; input coordinates on qx grid.
 Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
-macro flux_x(ix, iy) esc(:( 1 < $ix < nx-1 ?
-    - d_eff[$ix,   $iy-1] * max(@dϕ_dx($ix, $iy), 0) +   # flux in negative x-direction
-    - d_eff[$ix-1, $iy-1] * min(@dϕ_dx($ix, $iy), 0.)    # flux in positive x-direction
-    : 0.0)) end
+macro flux_x(ix, iy) esc(:(
+    - d_eff[$ix+1, $iy] * max(@dϕ_dx($ix, $iy), 0) +   # flux in negative x-direction
+    - d_eff[$ix,   $iy] * min(@dϕ_dx($ix, $iy), 0.)    # flux in positive x-direction
+    )) end
 """
 Calculate flux in y-direction using an upstream scheme; input coordinates on qy grid.
 Needs access to k, h, α, β, small, ϕ, dx, dy, H
 """
-macro flux_y(ix, iy) esc(:( 1 < $iy < ny-1 ?
-    - d_eff[$ix-1, $iy  ] * max(@dϕ_dy($ix, $iy), 0.) +   # flux in negative y-direction
-    - d_eff[$ix-1, $iy-1] * min(@dϕ_dy($ix, $iy), 0.)    # flux in positive y-direction
-    : 0.0)) end
+macro flux_y(ix, iy) esc(:(
+    - d_eff[$ix, $iy+1] * max(@dϕ_dy($ix, $iy), 0.) +   # flux in negative y-direction
+    - d_eff[$ix, $iy  ] * min(@dϕ_dy($ix, $iy), 0.)    # flux in positive y-direction
+    )) end
 
 
 """
@@ -120,7 +123,7 @@ macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
 @parallel_indices (ix, iy) function update_deff!(d_eff, ϕ, h, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, small)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
-        d_eff[ix-1, iy-1] = @d_eff(ix-1, iy-1)
+        d_eff[ix, iy] = @d_eff(ix, iy)
     end
     return
 end
@@ -156,7 +159,7 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
     if (1 < ix < nx && 1 < iy < ny)
         # update ϕ
         dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
-        ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix-1, iy-1) * dϕ_dτ[ix, iy]
+        ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix, iy) * dϕ_dτ[ix, iy]
         # dirichlet boundary conditions to pw = 0
         if ix == 2
             ϕ2[ix, iy] = ρw * g * zb[ix, iy]
