@@ -20,10 +20,10 @@ for test_case in keys(ϕ_ref)
     ϕ_test["A1"] = outputs.ϕ
     h_test["A1"] = outputs.h
     # E1 test case: valley geometry
-    inputs, outputs = run_SHMIP(test_case="E1", nx=256, ny=256, dt = 1e9,
-                                γ_ϕ= 0.7, γ_h=0.5, dτ_ϕ_= 1.0, dτ_h_= 7e-4)
-    ϕ_test["E1"] = outputs.ϕ
-    h_test["E1"] = outputs.h
+    #inputs, outputs = run_SHMIP(test_case="E1", nx=256, ny=256, dt = 1e9,
+    #                            γ_ϕ= 0.7, γ_h=0.5, dτ_ϕ_= 1.0, dτ_h_= 7e-4)
+    #ϕ_test["E1"] = outputs.ϕ
+    #h_test["E1"] = outputs.h
 end
 
 # test whether the runs agree with the references
