@@ -38,7 +38,7 @@ Create struct including all model parameters, physical and numerical
     yrange::Tuple{Float64, Float64}
     nx::Int64                         # number of grid points, including ghost points where ice thickness = 0
     ny::Int64
-    @assert nx % 16 == 0 && ny % 16 == 0 "nx and ny must be multiples of 16"
+    @assert nx % 32 == 0 && ny % 8 == 0 "nx and ny must be multiples of 16"
     dx = (xrange[2]-xrange[1]) / (nx-3)          # grid size
     dy = (yrange[2]-yrange[1]) / (ny-3)
     xc::LinRange{Float64} = LinRange(xrange[1]-dx, xrange[2]+dx, nx) # vector of x-coordinates
