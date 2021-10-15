@@ -128,7 +128,7 @@ Convert arrays of H and zb to correct types depending on whether CPU or GPU is u
 function scaling(p::Para, ϕ0, h0)
     @unpack g, ρw, k, A, lr, hr,
             H, zb, calc_m_t, ub,
-            dx, dy, xc, yc,
+            dx, dy, xc, yc, xrange, yrange,
             ttot, dt,
             r_ρ, α, β, n,
             Σ, Γ, Λ = p
@@ -140,7 +140,7 @@ function scaling(p::Para, ϕ0, h0)
     A_ = A
     lr_ = lr
     h_ = hr
-    xy_ = max(xc[end]-xc[1], yc[end]-yc[1])
+    xy_ = max(xrange[2]-xrange[1], yrange[2]-yrange[1])
 
     H_ = mean(H)
     zb_ = H_ / r_ρ
