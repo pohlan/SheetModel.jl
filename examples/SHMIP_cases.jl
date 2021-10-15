@@ -127,7 +127,7 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^5, make_plot=false, printtime=10
 
     # Initial condition
     @unpack xc, yc, H = input_params
-    ϕ0, h0 = S.initial_conditions(
+    ϕ_init, h_init = S.initial_conditions(
         xc,
         yc,
         H,
@@ -139,7 +139,7 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^5, make_plot=false, printtime=10
     )
 
 
-    model_output = S.runthemodel(input_params, ϕ0, h0, printtime=printtime);
+    model_output = S.runthemodel(input_params, ϕ_init, h_init, printtime=printtime);
     @unpack N, ϕ, h, qx, qy,
             ittot, iters, Err_ϕ, Err_h, Res_ϕ, Res_h,
             errs_ϕ, errs_h,
@@ -153,5 +153,5 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^5, make_plot=false, printtime=10
                       errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
     end
 
-    return (;input_params, SHMIP_case=test_case, ϕ0, h0), model_output
+    return (;input_params, SHMIP_case=test_case, ϕ_init, h_init), model_output
 end

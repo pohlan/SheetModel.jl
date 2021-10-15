@@ -112,20 +112,20 @@ function array_allocation(nu::Para)
     qx     = @zeros(nx-1, ny)
     qy     = @zeros(nx, ny-1)
     d_eff  = @zeros(nx, ny)
-    m      = @zeros(nx, ny)
+    Λ_m    = @zeros(nx, ny)
     N      = @zeros(nx, ny)
     dϕ_dτ  = @zeros(nx, ny)
     dh_dτ  = @zeros(nx, ny)
     Res_ϕ  = @zeros(nx, ny)
     Res_h  = @zeros(nx, ny)
-    return Δϕ, Δh, qx, qy, d_eff, m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h
+    return Δϕ, Δh, qx, qy, d_eff, Λ_m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h
 end
 
 """
 Convert input parameters to non-dimensional quantities.
 Convert arrays of H and zb to correct types depending on whether CPU or GPU is used.
 """
-function scaling(p::Para, ϕ0, h0)
+function scaling(p::Para, ϕ_init, h_init)
     @unpack g, ρw, k, A, lr, hr,
             H, zb, calc_m_t, ub,
             dx, dy, xc, yc, xrange, yrange,
@@ -190,10 +190,10 @@ function scaling(p::Para, ϕ0, h0)
         )::Para
 
     # variables
-    ϕ0 = Data.Array(ϕ0 ./ ϕ_)
-    h0 = Data.Array(h0 ./ h_)
+    ϕ_init = Data.Array(ϕ_init ./ ϕ_)
+    h_init = Data.Array(h_init ./ h_)
 
-    return scaled_params, ϕ0, h0, ϕ_, N_, h_, q_
+    return scaled_params, ϕ_init, h_init, ϕ_, N_, h_, q_
 end
 
 mat(x) = Matrix{Float64}(x) # shorter notation for use in descaling() function
@@ -227,9 +227,9 @@ end
 Return arrays of initial conditions for ϕ and h
 """
 function initial_conditions(xc, yc, H; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) -> 0.01)
-    ϕ0 = calc_ϕ.(xc, yc')
-    h0 = calc_h.(xc, yc')
-    return ϕ0, h0
+    ϕ_init = calc_ϕ.(xc, yc')
+    h_init = calc_h.(xc, yc')
+    return ϕ_init, h_init
 end
 
 function plot_output(xc, yc, H, N, h, qx, qy, Err_ϕ, Err_h,

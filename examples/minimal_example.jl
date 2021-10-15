@@ -50,13 +50,13 @@ function run_example(;dt,
             Λ   = 3e-3
         )
 
-    ϕ0 = 0.5 * ones(Nx, Ny)
-    h0 = 0.5 * ones(Nx, Ny)
+    ϕ_init = 0.5 * ones(Nx, Ny)
+    h_init = 0.5 * ones(Nx, Ny)
 
-    #ProfileView.@profview S.runthemodel_scaled(input_params, ϕ0, h0, S.CuParams(nx=Nx, ny=Ny), 1000) # for profiling
+    #ProfileView.@profview S.runthemodel_scaled(input_params, ϕ_init, h_init, S.CuParams(nx=Nx, ny=Ny), 1000) # for profiling
     # In VSCode, ProfileView.xx is necessary (https://github.com/timholy/ProfileView.jl/pull/172/commits/5ea809fe6409a41b96cfba0800b78d708f1ad604)
 
-    output = S.runthemodel_scaled(input_params, ϕ0, h0, 1000, 1)
+    output = S.runthemodel_scaled(input_params, ϕ_init, h_init, 1000, 1)
 
     # plot output
     #@unpack xc, yc, H = input_params
