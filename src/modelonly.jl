@@ -232,7 +232,7 @@ end
 Run the model with scaled parameters.
 """
 @views function runthemodel_scaled(params::Para, ϕ_init, h_init, printtime)
-    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β,
+    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_Λ_m!, dx, dy, nx, ny, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
 
     # Pre-calculate reciprocals for better performance
@@ -289,7 +289,7 @@ Run the model with scaled parameters.
         iter = 0
         err_ϕ_tol, err_h_tol = 2*tol, 2*tol
 
-        Λ_m .= Λ * Data.Array(calc_m_t(t+dt))
+        @parallel calc_Λ_m!(Λ_m, Λ, t)
         # Pseudo-transient iteration
         while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 

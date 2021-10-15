@@ -33,7 +33,7 @@ function run_example(;dt,
 
             calc_zs =  (x, y) -> 0.5 * sqrt(x+0.05),    # surface elevation (SHMIP)
             calc_zb = (x, y) -> 0.0,                    # bed elevation
-            calc_m_xyt  = (x, y, t) -> 1.0,             # source term
+            calc_m_phys  = (x, y, t) -> 1.0,             # source term
 
             dt   = dt,                  # time step
             ttot = dt * tsteps,         # total time

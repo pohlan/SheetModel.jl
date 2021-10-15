@@ -18,7 +18,7 @@ ghostp(nx) = [0.0; ones(nx-2); 0.0]
 """
 Create struct including all model parameters, physical and numerical
 """
-@with_kw struct Para{T, F1, F2} @deftype Float64
+@with_kw struct Para{T, F1, F2, F3} @deftype Float64
     # Scalars (one global value)
     g     = 9.81              # gravitational acceleration, m/s^2
     ρw    = 1000.0            # water density, kg/m^3
@@ -47,11 +47,18 @@ Create struct including all model parameters, physical and numerical
     # Field parameters (defined on every grid point)
     calc_zs::Function
     calc_zb::Function
-    calc_m_xyt::F1 # f(x, y, t)
+    calc_m_phys::F1 # calculate m on the physical domain, f(x, y, t)
 
     H::T = (ghostp(nx) * ghostp(ny)') .* ( pos.(calc_zs.(xc, yc') .- calc_zb.(xc, yc')) )  # ice thickness, m
-    zb::T = calc_zb.(xc, yc')                                  # bed elevation, m
-    calc_m_t::F2 = t -> calc_m_xyt.(xc, yc', t)                # source term, m/s, f(t)
+    zb::T = calc_zb.(xc, yc')                                                              # bed elevation, m
+    calc_m_num::F2 = (ix, iy, t) -> calc_m_phys(xc[ix], yc[iy], t)                         # source term, m/s, calculated from matrix indices f(ix, iy, t)
+    # directly create the kernel function as the function calc_m_num cannot be given to kernels at a later stage
+    calc_Λ_m!::F3 = @parallel_indices (ix,iy) function calc_Λ_m!(Λ_m, Λ, t)
+                        if (ix <= size(Λ_m, 1) && iy <= size(Λ_m, 2))
+                            Λ_m[ix, iy] = Λ * calc_m_num(ix, iy, t)
+                        end
+                        return
+                    end
 
     # Physical time stepping
     ttot        # total simulation time
@@ -127,7 +134,7 @@ Convert arrays of H and zb to correct types depending on whether CPU or GPU is u
 """
 function format(p::Para, ϕ_init, h_init)
     @unpack g, ρw, k, A, lr, hr,
-            H, zb, calc_m_t, ub,
+            H, zb, calc_m_phys, ub,
             dx, dy, xc, yc, xrange, yrange,
             ttot, dt,
             r_ρ, α, β, n,
@@ -144,7 +151,7 @@ function format(p::Para, ϕ_init, h_init)
 
     H_ = mean(H)
     zb_ = H_ / r_ρ
-    m_ = mean(calc_m_t(0.0)) # for time-dependent input: temporal peak
+    m_ = mean(calc_m_phys(xc, yc', 0.0)) # for time-dependent input: temporal peak
     ub_ = ub
 
     ϕ_ = g_ * H_ * ρ_ / r_ρ
@@ -173,7 +180,7 @@ function format(p::Para, ϕ_init, h_init)
         # Field parameters (defined on every grid point)
         H = Data.Array(H ./ H_),
         zb = Data.Array(zb ./ zb_),
-        calc_m_t = t -> calc_m_t(t) ./ m_,
+        calc_m_num = (ix, iy, t) -> calc_m_num(ix, iy, t) / m_,
 
         # Numerical domain
         dx = dx ./ xy_,

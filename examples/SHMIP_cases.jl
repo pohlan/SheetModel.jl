@@ -113,7 +113,7 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^5, make_plot=false, printtime=10
 
         calc_zs = topo.surf,    # surface elevation, m
         calc_zb = topo.bed,     # bed elevation, m
-        calc_m_xyt  = water_input,     # source term, m/s
+        calc_m_phys  = water_input,     # source term, m/s
 
         dt   = dt,  #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
         ttot = tsteps * dt,
