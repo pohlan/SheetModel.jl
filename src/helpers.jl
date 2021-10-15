@@ -38,7 +38,7 @@ Create struct including all model parameters, physical and numerical
     yrange::Tuple{Float64, Float64}
     nx::Int64                         # number of grid points, including ghost points where ice thickness = 0
     ny::Int64
-    @assert nx % 32 == 0 && ny % 8 == 0 "nx and ny must be multiples of 16"
+    @assert nx % 32 == 0 && ny % 8 == 0 "nx and ny must be multiples of 32 and 8, respectively."
     dx = (xrange[2]-xrange[1]) / (nx-3)          # grid size
     dy = (yrange[2]-yrange[1]) / (ny-3)
     xc::LinRange{Float64} = LinRange(xrange[1]-dx, xrange[2]+dx, nx) # vector of x-coordinates
@@ -125,7 +125,7 @@ end
 Convert input parameters to non-dimensional quantities.
 Convert arrays of H and zb to correct types depending on whether CPU or GPU is used.
 """
-function scaling(p::Para, ϕ_init, h_init)
+function format(p::Para, ϕ_init, h_init)
     @unpack g, ρw, k, A, lr, hr,
             H, zb, calc_m_t, ub,
             dx, dy, xc, yc, xrange, yrange,
@@ -196,13 +196,13 @@ function scaling(p::Para, ϕ_init, h_init)
     return scaled_params, ϕ_init, h_init, ϕ_, N_, h_, q_
 end
 
-mat(x) = Matrix{Float64}(x) # shorter notation for use in descaling() function
+mat(x) = Matrix{Float64}(x) # shorter notation for use in reformat() function
 
 """
 Convert unitless output parameters back to dimensional quantities.
 Convert all arrays to Matrix{Float64} type.
 """
-function descaling(output::model_output, N_, ϕ_, h_, q_)
+function reformat(output::model_output, N_, ϕ_, h_, q_)
     @unpack N, ϕ, h, qx, qy,
             Err_ϕ, Err_h , Res_ϕ, Res_h = output
     output_descaled = reconstruct(model_output{Matrix{Float64}}, output,

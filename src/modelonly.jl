@@ -12,32 +12,32 @@ using Printf, Infiltrator
 
 """
 Calculate water pressure; input coordinates on ϕ/h grid.
-Needs access to ϕ, ρw, g, zb.
+Needs access to ϕ, ϕ_0
 """
 macro pw(ix, iy) esc(:(ϕ[$ix, $iy] - ϕ_0[$ix, $iy])) end
 
 """
 Calculate effective pressure; input coordinates on ϕ/h grid.
-Needs access to ϕ, H, ρw, ρi, g, zb
+Needs access to ϕ, H, ρi, g, ϕ_0
 """
 macro N(ix, iy) esc(:(ρi * g * H[$ix, $iy] - @pw($ix, $iy))) end
 
 """
 Calculate closure rate; input coordinates on ϕ/h grid.
-Needs access to ϕ, H, ρw, ρi, g, zb, n, A, h
+Needs access to ϕ, H, ρi, g, ϕ_0, n, h, Θ_vc
 """
 macro vc(ix, iy) esc(:(Θ_vc * h[$ix, $iy] * abs(@N($ix, $iy))^(n-1) * @N($ix, $iy))) end
 
 """
 Calculate opening rate; input coordinates on ϕ/h grid.
-Needs access to h, hr, ub, lr
+Needs access to h, hr, Θ_vo
 """
 macro vo(ix, iy) esc(:(h[$ix, $iy] < hr ? Θ_vo * (hr - h[$ix, $iy]) : 0.0)) end
 
 """
 Calculate hydraulic gradient in x-direction; input coordinates on qx grid.
 Implicitly sets zero-flux boundary conditions.
-Needs access to H, ϕ, dx
+Needs access to H, ϕ, dx_
 """
 macro dϕ_dx(ix, iy) esc(:( (H[$ix, $iy] > 0. && H[$ix+1, $iy] > 0.) # only consider ice interior; gradients at boundary and outside are zero
                            * (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) * dx_
@@ -46,7 +46,7 @@ macro dϕ_dx(ix, iy) esc(:( (H[$ix, $iy] > 0. && H[$ix+1, $iy] > 0.) # only cons
 """
 Calculate hydraulic gradient in y-direction; input coordinates on qy grid.
 Implicitly sets zero-flux boundary conditions.
-Needs access to H, ϕ, dy
+Needs access to H, ϕ, dy_
 """
 macro dϕ_dy(ix, iy) esc(:( (H[$ix, $iy] > 0. && H[$ix, $iy+1] > 0.) # only consider ice interior; gradients at boundary and outside are zero
                             * (ϕ[$ix, $iy+1] - ϕ[$ix, $iy]) * dy_
@@ -55,7 +55,7 @@ macro dϕ_dy(ix, iy) esc(:( (H[$ix, $iy] > 0. && H[$ix, $iy+1] > 0.) # only cons
 """
 Calculate absolute hydraulic gradient, |∇ϕ|;
 input coordinates on ϕ/h grid (nx, ny), but only possible to calculate on inner points.
-Needs access to ϕ, dx, dy, H
+Needs access to ϕ, dx_, dy_, H
 """
 macro gradϕ(ix, iy) esc(:( sqrt(
                                   (0.5 * (@dϕ_dx($ix, $iy) + @dϕ_dx($ix-1, $iy)))^2
@@ -64,21 +64,21 @@ macro gradϕ(ix, iy) esc(:( sqrt(
 """
 Calculate effective diffusivity;
 input coordinates on ϕ/h grid (nx, ny), but only possible to calculate on inner points.
-Needs access to k, h, α, β, small, ϕ, dx, dy, H
+Needs access to k, h, α, β, small, ϕ, dx_, dy_, H
 """
 macro d_eff(ix, iy) esc(:( k * h[$ix, $iy]^α * (@gradϕ($ix, $iy) + small)^(β-2) )) end
 
 """
 Calculate pseudo-time step of ϕ,
 input coordinates on ϕ/h grid (nx, ny), but only possible to calculate on inner points.
-Needs access to dτ_ϕ_, dx, dy, dt, k, h, α, β, small, ϕ, H
+Needs access to dτ_ϕ_, dx_, dy_, min_dxy2, dt, k, h, α, β, small, ϕ, H
 """
 macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min_dxy2 / d_eff[$ix, $iy] / 4.1, dt))) end
 #macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (min_dxy2_ / d_eff[$ix, $iy] / 4.1) .+ 1.0 * dt_) .^(-1))) end # other definitions...
 
 """
 Calculate flux in x-direction using an upstream scheme; input coordinates on qx grid.
-Needs access to k, h, α, β, small, ϕ, dx, dy, H
+Needs access to k, h, α, β, small, ϕ, dx_, dy_, H
 """
 macro flux_x(ix, iy) esc(:(
     - d_eff[$ix+1, $iy] * max(@dϕ_dx($ix, $iy), 0) +   # flux in negative x-direction
@@ -86,7 +86,7 @@ macro flux_x(ix, iy) esc(:(
     )) end
 """
 Calculate flux in y-direction using an upstream scheme; input coordinates on qy grid.
-Needs access to k, h, α, β, small, ϕ, dx, dy, H
+Needs access to k, h, α, β, small, ϕ, dx_, dy_, H
 """
 macro flux_y(ix, iy) esc(:(
     - d_eff[$ix, $iy+1] * max(@dϕ_dy($ix, $iy), 0.) +   # flux in negative y-direction
@@ -96,7 +96,7 @@ macro flux_y(ix, iy) esc(:(
 
 """
 Calculate residual of ϕ; input coordinates on ϕ/h grid (but only defined on inner grid points 2:nx-1, 2:ny-1, due to d_eff).
-Needs access to ϕ, ϕ_old, h, H, ev, ρw, ρi, g, k, α, β, small, dx, dy, dt, Σ, Γ, Λ, m, hr, ub, lr, zb, n, A
+Needs access to ϕ, ϕ_old, h, H, ρi, g, k, α, β, small, dx_, dy_, min_dxy2, dt, dt_, Λ_m, hr, ϕ_0, n, Θ_PDE, Θ_vo, Θ_vo
 """
 macro Res_ϕ(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (                                                      # only calculate at points with non-zero ice thickness
                                                   - Θ_PDE * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) * dt_                                                            # dhe/dt = ev(ρw*g) * dϕ/dt
@@ -108,7 +108,7 @@ macro Res_ϕ(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (                              
 
 """
 Calculate residual of h; input coordinates on ϕ/h grid.
-Needs access to ϕ, h, h_old, H, dt, Σ, Γ, hr, ub, lr, zb, n, A, ρi, g
+Needs access to ϕ, h, h_old, H, dt_, hr, ϕ_0, n, ρi, g, Θ_vo, Θ_vc
 """
 macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
                                                   - (h[$ix, $iy] - h_old[$ix, $iy]) * dt_
@@ -398,8 +398,8 @@ Scale the parameters and call the model run function.
 """
 @views function runthemodel(input::Para, ϕ_init, h_init;
                     printtime=10^5)       # time step is printed after `printtime` number of physical time steps
-    params, ϕ_init, h_init, ϕ_, N_, h_, q_ = scaling(input, ϕ_init, h_init)
+    params, ϕ_init, h_init, ϕ_, N_, h_, q_ = format(input, ϕ_init, h_init)
     output = runthemodel_scaled(params::Para, ϕ_init, h_init, printtime)
-    output_descaled = descaling(output, N_, ϕ_, h_, q_)
+    output_descaled = reformat(output, N_, ϕ_, h_, q_)
     return output_descaled
 end
