@@ -1,3 +1,4 @@
+using Base: Float64
 using SheetModel, Test
 const S = SheetModel
 
@@ -28,7 +29,7 @@ h_test["E1"] = outputs.h
 # test whether the runs agree with the references
 @testset "Model runs" begin
     for test_case in keys(ϕ_ref)
-        @test ϕ_test[test_case][2:20:end-1, 2:10:end-1] ≈ ϕ_ref[test_case]
-        @test h_test[test_case][2:20:end-1, 2:10:end-1] ≈ h_ref[test_case]
+        @test all((ϕ_test[test_case][2:20:end-1, 2:10:end-1] .- ϕ_ref[test_case]) ./ (ϕ_ref[test_case] .+ eps(Float64)) .< 5e-3) # add an eps(Float64) in case ϕ_ref is zero
+        @test all((h_test[test_case][2:20:end-1, 2:10:end-1] .- h_ref[test_case]) ./ (h_ref[test_case] .+ eps(Float64)) .< 5e-3)
     end
 end

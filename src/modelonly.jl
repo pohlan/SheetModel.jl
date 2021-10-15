@@ -42,7 +42,7 @@ Implicitly sets zero-flux boundary conditions.
 Needs access to H, ϕ, dx
 """
 macro dϕ_dx(ix, iy) esc(:( (H[$ix, $iy] > 0. && H[$ix+1, $iy] > 0.) # only consider ice interior; gradients at boundary and outside are zero
-                           * (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) / dx
+                           * (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) * dx_
                         )) end
 
 """
@@ -51,7 +51,7 @@ Implicitly sets zero-flux boundary conditions.
 Needs access to H, ϕ, dy
 """
 macro dϕ_dy(ix, iy) esc(:( (H[$ix, $iy] > 0. && H[$ix, $iy+1] > 0.) # only consider ice interior; gradients at boundary and outside are zero
-                            * (ϕ[$ix, $iy+1] - ϕ[$ix, $iy]) / dy
+                            * (ϕ[$ix, $iy+1] - ϕ[$ix, $iy]) * dy_
                          )) end
 
 """
@@ -75,8 +75,8 @@ Calculate pseudo-time step of ϕ,
 input coordinates on ϕ/h grid (nx, ny), but only possible to calculate on inner points.
 Needs access to dτ_ϕ_, dx, dy, dt, k, h, α, β, small, ϕ, H
 """
-macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min(dx, dy)^2 / d_eff[$ix, $iy] / 4.1, dt))) end
-#macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (1.0 ./ (min(dx, dy)^2 ./ d_eff[$ix, $iy] / 4.1) .+ 1.0 / dt) .^(-1))) end # other definitions...
+macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ * min(min_dxy2 / d_eff[$ix, $iy] / 4.1, dt))) end
+#macro dτ_ϕ(ix, iy) esc(:( dτ_ϕ_ *  (min_dxy2_ / d_eff[$ix, $iy] / 4.1) .+ 1.0 * dt_) .^(-1))) end # other definitions...
 
 """
 Calculate flux in x-direction using an upstream scheme; input coordinates on qx grid.
@@ -101,8 +101,8 @@ Calculate residual of ϕ; input coordinates on ϕ/h grid (but only defined on in
 Needs access to ϕ, ϕ_old, h, H, ev, ρw, ρi, g, k, α, β, small, dx, dy, dt, Σ, Γ, Λ, m, hr, ub, lr, zb, n, A
 """
 macro Res_ϕ(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (                                                      # only calculate at points with non-zero ice thickness
-                                                  - ev/(ρw*g) * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) / dt                                                   # dhe/dt
-                                                  - ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) / dx + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) / dy )    # divergence
+                                                  - ev/(ρw*g) * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) * dt_                                                   # dhe/dt
+                                                  - ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) * dx_ + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) * dy_ )    # divergence
                                                   - (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))                                                            # dh/dt
                                                   + Λ * m[$ix, $iy]                                                                                  # source term
                                                  )
@@ -113,14 +113,14 @@ Calculate residual of h; input coordinates on ϕ/h grid.
 Needs access to ϕ, h, h_old, H, dt, Σ, Γ, hr, ub, lr, zb, n, A, ρw, ρi, g
 """
 macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
-                                                  - (h[$ix, $iy] - h_old[$ix, $iy]) / dt
+                                                  - (h[$ix, $iy] - h_old[$ix, $iy]) * dt_
                                                   + (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))
                                                  )
 )) end
 
 ### KERNEL FUNCTIONS ###
 
-@parallel_indices (ix, iy) function update_deff!(d_eff, ϕ, h, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, small)
+@parallel_indices (ix, iy) function update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, small)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
         d_eff[ix, iy] = @d_eff(ix, iy)
@@ -133,7 +133,7 @@ Calculate residuals of ϕ and h and store them in arrays.
 Used for error calculation and only to be carried out every xx iterations, e.g. every thousand.
 """
 @parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m, d_eff,
-                                              dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
+                                              dx_, dy_, min_dxy2, k, α, β, dt, dt_, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
         # residual of ϕ
@@ -153,7 +153,7 @@ end
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
 @parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m, d_eff, iter,
-                                                  dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
+                                                  dx_, dy_, min_dxy2, k, α, β, dt, dt_, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
                                                   dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
@@ -222,7 +222,7 @@ end
 Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for plotting.
 """
 @parallel_indices (ix,iy) function output_params!(N, qx, qy, ϕ, h, d_eff,
-                                                  ρi, ρw, g, H, zb, k, α, β, dx, dy, small)
+                                                  ρi, ρw, g, H, zb, k, α, β, dx_, dy_, small)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
         N[ix, iy]  = @N(ix, iy)
@@ -240,6 +240,10 @@ Run the model with scaled parameters.
 @views function runthemodel_scaled(params::Para, ϕ0, h0, printtime)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_m_t, dx, dy, nx, ny, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
+
+    # Pre-calculate reciprocals for better performance
+    min_dxy2 = min(dx, dy)^2
+    dx_, dy_, dt_, min_dxy2_ = (dx, dy, dt, min_dxy2).^(-1)
 
     # Array allocation
     Δϕ, Δh, qx, qy, d_eff, m, N,
@@ -295,12 +299,12 @@ Run the model with scaled parameters.
             # update d_eff (the bottleneck in performance, only do it every 10 iterations)
             # but it has to be done in a seperate kernel to ensure every grid point is accessing the same version of ϕ
             #if iter % 1000 == 0.
-                @parallel update_deff!(d_eff, ϕ, h, dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, small)
+                @parallel update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, small)
             #end
             # update ϕ and h
             @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, qx, qy, m, d_eff, iter,
-                                                        dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
-                                                        dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
+                                     dx_, dy_, min_dxy2, k, α, β, dt, dt_, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small,
+                                     dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
 
             # pointer swap
             ϕ, ϕ2 = ϕ2, ϕ
@@ -314,7 +318,7 @@ Run the model with scaled parameters.
                                                     # and if itMax is high, i.e. if convergence is the goal
                 # update the residual arrays
                 @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, qx, qy, m, d_eff,
-                                                        dx, dy, k, α, β, dt, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
+                                     dx_, dy_, min_dxy2, k, α, β, dt, dt_, ev, hr, lr, ub, g, ρw, ρi, A, n, H, zb, Σ, Γ, Λ, small)
 
                 # residual error
                 err_ϕ_res = norm(Res_ϕ) / length(Res_ϕ) # or length(Res_ϕ) instead of sum(H .> 0.) ??
@@ -379,8 +383,7 @@ Run the model with scaled parameters.
     @printf("Time = %1.3f sec, T_eff = %1.1f GB/s, iterations total = %d, (nx, ny) = (%d, %d)\n", t_toc, round(T_eff, sigdigits=3), ittot, nx, ny)
 
     # calculate N, qx and qy as output parameters
-    @parallel output_params!(N, qx, qy, ϕ, h, d_eff,
-                                                ρi, ρw, g, H, zb, k, α, β, dx, dy, small)
+    @parallel output_params!(N, qx, qy, ϕ, h, d_eff, ρi, ρw, g, H, zb, k, α, β, dx_, dy_, small)
 
     return model_output{Data.Array}(;   N, ϕ, h, qx, qy,
                             Err_ϕ=Δϕ, Err_h=Δh, Res_ϕ, Res_h,
