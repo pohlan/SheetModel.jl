@@ -3,7 +3,7 @@
 # ---------------------------------------------------#
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../"))
-using JLD2, UnicodePlots, DrWatson
+using JLD2, UnicodePlots, DrWatson, Printf
 
 # check if file exists and load
 file = joinpath(@__DIR__, "benchmarks.jld2")
@@ -35,6 +35,8 @@ for (n, unit) in enumerate(keys(benchmarks))
         if n == 1
             if any(steadyst)
                 global plt_ttot = scatterplot(res[steadyst], t_tot[steadyst], marker=symbols[host], color=colors[PU], name=unit, xlabel="Grid size (nx*ny)", ylabel="Run time (s)")
+                global nx = benchmarks[unit][gitcommit][:nx][steadyst]
+                global its = res = benchmarks[unit][gitcommit][:iterations][steadyst]
             end
             global plt_Teff = scatterplot(res[.!steadyst], T_eff[.!steadyst], xscale=:log10, marker=symbols[case[n]], color=colors[n], name=unit, xlabel="Grid size (nx*ny)", ylabel="T_eff (GB/s)")
         else
@@ -50,5 +52,6 @@ end
 print("Benchmarking results of the current commit: \n \n")
 display(plt_ttot)
 print("\n \n \n")
+@printf("nx = ny = %d  -->  Number of iterations: %d \n \n", nx[i], its[i]) for i in 1:length(nx)
 display(plt_Teff)
 print("\n")

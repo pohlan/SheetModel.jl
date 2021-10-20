@@ -71,7 +71,7 @@ test_sets = [# 10^3 iterations without reaching steady state (and without calcul
             (test_case="A1", nx=128, ny=128, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
             (test_case="A1", nx=256, ny=256, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
             (test_case="A1", nx=512, ny=512, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
-            #(test_case="A1", nx=1024, ny=1024, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),   # doesn't produce the correct result!
+            #(test_case="A1", nx=1024, ny=1024, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=8e-7),   # takes more than 30 min and the result is still a tiny bit off
             #(test_case="A1", nx=4096, ny=2048, itMax=10^6),
             #(test_case="A3", nx=1024, ny=512, itMax=10^5),
             #(test_case="A3", nx=4096, ny=1024, itMax=10^5),

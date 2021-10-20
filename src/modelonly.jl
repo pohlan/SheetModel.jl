@@ -298,7 +298,7 @@ Run the model with scaled parameters.
 
             # determine the errors (only consider points where the ice thickness is > 0)
 
-            if iter % 1000 == 0 && itMax > 10^4     # only calculate errors every 1000 time steps
+            if iter % 1000 == 0 && iter > 10^4 && itMax > 10^4     # only calculate errors every 1000 time steps
                                                     # and if itMax is high, i.e. if convergence is the goal
                 # update the residual arrays
                 @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff,
