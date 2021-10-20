@@ -1,5 +1,5 @@
 using Base: Float64, Int64
-using LinearAlgebra, Parameters, Statistics, PyPlot
+using LinearAlgebra, Parameters, Statistics, PyPlot, LaTeXStrings
 
 # misc fudge factors to avoid dividing by zero
 small = eps(Float64)
@@ -65,8 +65,8 @@ Create struct including all model parameters, physical and numerical
     dt          # physical time step
 
     # Pseudo-time iteration
-    tol    = 1e-6       # tolerance
-    itMax  = 5*10^3     # max number of iterations
+    tol    = 2e-6       # tolerance
+    itMax  = 10^6       # max number of iterations
     γ_ϕ    = 1e-3       # damping parameter for ϕ update
     γ_h    = 0.8        # damping parameter for h update
     dτ_ϕ_   = 1e6       # scaling factor for dτ_ϕ
@@ -89,23 +89,14 @@ Create struct containing output parameters of the model: N, ϕ, h, qx, qy and di
     h::T
     qx::T
     qy::T
-    Err_ϕ::T
-    Err_h::T
     Res_ϕ::T
     Res_h::T
     ittot::Int64
     iters::Vector{Int64}
     errs_ϕ::Vector{Float64}
     errs_h::Vector{Float64}
-    errs_ϕ_rel::Vector{Float64}
-    errs_h_rel::Vector{Float64}
-    errs_ϕ_res::Vector{Float64}
-    errs_h_res::Vector{Float64}
-    errs_ϕ_resrel::Vector{Float64}
-    errs_h_resrel::Vector{Float64}
     time_tot::Float64
     T_eff::Float64
-    steady_state::Bool
 end
 Broadcast.broadcastable(out::model_output) = Ref(out)
 
@@ -114,8 +105,6 @@ Pre-allocate arrays
 """
 function array_allocation(nu::Para)
     @unpack nx, ny = nu
-    Δϕ     = @zeros(nx, ny)
-    Δh     = @zeros(nx, ny)
     qx     = @zeros(nx-1, ny)
     qy     = @zeros(nx, ny-1)
     d_eff  = @zeros(nx, ny)
@@ -125,7 +114,7 @@ function array_allocation(nu::Para)
     dh_dτ  = @zeros(nx, ny)
     Res_ϕ  = @zeros(nx, ny)
     Res_h  = @zeros(nx, ny)
-    return Δϕ, Δh, qx, qy, d_eff, Λ_m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h
+    return qx, qy, d_eff, Λ_m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h
 end
 
 """
@@ -210,16 +199,13 @@ Convert unitless output parameters back to dimensional quantities.
 Convert all arrays to Matrix{Float64} type.
 """
 function reformat(output::model_output, N_, ϕ_, h_, q_)
-    @unpack N, ϕ, h, qx, qy,
-            Err_ϕ, Err_h , Res_ϕ, Res_h = output
+    @unpack N, ϕ, h, qx, qy, Res_ϕ, Res_h = output
     output_descaled = reconstruct(model_output{Matrix{Float64}}, output,
         N  = mat(N .* N_),
         ϕ  = mat(ϕ .* ϕ_),
         h  = mat(h .* h_),
         qx = mat(qx .* q_),
         qy = mat(qy .* q_),
-        Err_ϕ = mat(Err_ϕ .* ϕ_),
-        Err_h = mat(Err_h .* h_),
         Res_ϕ = mat(Res_ϕ .* ϕ_),
         Res_h = mat(Res_h .* h_),
         )::model_output
@@ -239,16 +225,17 @@ function initial_conditions(xc, yc, H; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) ->
     return ϕ_init, h_init
 end
 
-function plot_output(xc, yc, H, N, h, qx, qy, Err_ϕ, Err_h,
-                     iters, errs_h, errs_ϕ, errs_ϕ_rel, errs_h_rel,
-                     errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel)
+function plot_output(xc, yc, H, N, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
+    pygui(true)
+
+    # (I) ϕ and h
     x_plt = [xc[1]; xc .+ (xc[2]-xc[1])]
     y_plt = [yc[1]; yc .+ (yc[2]-yc[1])]
     N[H .== 0.0] .= NaN
     h[H .== 0.0] .= NaN
-    pygui(true)
-    # pcolor of ϕ and h fields
+
     figure()
+    # (Ia) pcolor of ϕ and h fields
     subplot(2, 2, 1)
     pcolor(x_plt, y_plt, h')#, edgecolors="black")
     colorbar()
@@ -257,7 +244,7 @@ function plot_output(xc, yc, H, N, h, qx, qy, Err_ϕ, Err_h,
     pcolor(x_plt, y_plt, N')#, edgecolors="black")
     colorbar()
     title("N")
-    # cross-sections of ϕ and h
+    # (Ib) cross-sections of ϕ and h
     subplot(2, 2, 3)
     ind = size(N,2)÷2
     plot(xc, h[:, ind])
@@ -266,47 +253,44 @@ function plot_output(xc, yc, H, N, h, qx, qy, Err_ϕ, Err_h,
     plot(xc, N[:, ind])
     title(join(["N at y = ", string(round(yc[ind], digits=1))]))
 
+    # (II) fluxes
     # don't show any value outside of glacier domain
-    qx_plot = copy(qx)
-    qy_plot = copy(qy)
-    qx_plot[H[1:end-1, :] .== 0.] .= NaN
-    qx_plot[H[2:end, :]   .== 0.] .= NaN
-    qy_plot[H[:, 1:end-1] .== 0.] .= NaN
-    qy_plot[H[:, 2:end]   .== 0.] .= NaN
+    qx[H[1:end-1, :] .== 0.] .= NaN
+    qx[H[2:end, :]   .== 0.] .= NaN
+    qy[H[:, 1:end-1] .== 0.] .= NaN
+    qy[H[:, 2:end]   .== 0.] .= NaN
 
     figure()
     subplot(1, 2, 1)
-    pcolor(qx_plot')
+    pcolor(qx')
     colorbar()
     title("qx (m/s)")
     subplot(1, 2, 2)
-    pcolor(qy_plot')
+    pcolor(qy')
     colorbar()
     title("qy (m/s)")
 
-    #Err_ϕ[H .== 0.0] .= NaN
-    #Err_h[H .== 0.0] .= NaN
-    #figure()
-    #subplot(1, 2, 1)
-    #pcolormesh(Err_h')
-    #colorbar()
-    #title("err_h")
-    #subplot(1, 2, 2)
-    #pcolormesh(Err_ϕ')
-    #colorbar()
-    #title("err_ϕ")
-#
-    #figure()
-    #semilogy(iters, errs_ϕ, label="err_ϕ", color="darkorange")
-    #semilogy(iters, errs_h, label="err_h", color="darkblue")
-    #semilogy(iters, errs_ϕ_rel, label="relative err_ϕ", color="darkorange", linestyle=":")
-    #semilogy(iters, errs_h_rel, label="relative err_h", color="darkblue", linestyle=":")
-    #semilogy(iters, errs_ϕ_res, label="err_ϕ_res", color="gold")
-    #semilogy(iters, errs_h_res, label="err_h_res", color="deepskyblue")
-    #semilogy(iters, errs_ϕ_resrel, label="relative err_ϕ_res", color="gold", linestyle=":")
-    #semilogy(iters, errs_h_resrel, label="relative err_h_res", color="deepskyblue", linestyle=":")
-#
-    #xlabel("# iterations")
-    #ylabel("error")
-    #legend()
+    # (III) residual fields
+    Res_ϕ[H .== 0.0] .= NaN
+    Res_h[H .== 0.0] .= NaN
+
+    figure()
+    subplot(1, 2, 1)
+    pcolormesh(Res_h')
+    colorbar()
+    title("err_h")
+    subplot(1, 2, 2)
+    pcolormesh(Res_ϕ')
+    colorbar()
+    title("err_ϕ")
+
+    # (IV) iteration vs. error
+    figure()
+    semilogy(iters, errs_ϕ, label=L"\mathrm{Res}_ϕ", color="gold")
+    semilogy(iters, errs_h, label=L"\mathrm{Res}_h", color="deepskyblue")
+    title("errors: norm(...) / length(..)")
+
+    xlabel(L"# iterations $i$")
+    ylabel("error")
+    legend()
 end

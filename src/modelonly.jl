@@ -246,8 +246,7 @@ Run the model with scaled parameters.
     ϕ_0   = ρw * g * zb     # elevation potential; zb is never used in another context
 
     # Array allocation
-    Δϕ, Δh, qx, qy, d_eff, Λ_m, N,
-    dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
+    qx, qy, d_eff, Λ_m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
 
     # Apply boundary conditions
     @parallel apply_bc!(ϕ_init, H, ϕ_0)
@@ -263,35 +262,20 @@ Run the model with scaled parameters.
     iters      = Int64[]
     errs_ϕ     = Float64[]
     errs_h     = Float64[]
-    errs_ϕ_rel = Float64[]
-    errs_h_rel = Float64[]
-    errs_ϕ_res = Float64[]
-    errs_h_res = Float64[]
-    errs_ϕ_resrel = Float64[]
-    errs_h_resrel = Float64[]
-    err_ϕ = 0.
-    err_h = 0.
-    err_ϕ_rel = 0.
-    err_h_rel = 0.
-    err_ϕ_res = 0.
-    err_h_res = 0.
-    err_ϕ_resrel = 0.
-    err_h_resrel = 0.
-    err_ϕ_ini = 0.0
-    err_h_ini = 0.0
+    err_ϕ      = 0.
+    err_h      = 0.
 
     # initiate time loop parameters
     t = 0.0; tstep=0; ittot = 0; t_tic = 0.
-    steady_state = false;
 
     # Physical time loop
     while t<ttot
         iter = 0
-        err_ϕ_tol, err_h_tol = 2*tol, 2*tol
+        err_ϕ, err_h = 2*tol, 2*tol
 
         @parallel calc_Λ_m!(Λ_m, Λ, t)
         # Pseudo-transient iteration
-        while !(max(err_ϕ_tol, err_h_tol) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
+        while !(max(err_ϕ, err_h) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 
             # don't consider first ten iterations for performance measure
             if (iter == 10) t_tic = Base.time() end
@@ -305,7 +289,7 @@ Run the model with scaled parameters.
             @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter,
                                      dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small,
                                      dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
-
+            #@infiltrate
             # pointer swap
             ϕ, ϕ2 = ϕ2, ϕ
             h, h2 = h2, h
@@ -321,41 +305,15 @@ Run the model with scaled parameters.
                                      dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small)
 
                 # residual error
-                err_ϕ_res = norm(Res_ϕ) / length(Res_ϕ) # or length(Res_ϕ) instead of sum(H .> 0.) ??
-                err_h_res = norm(Res_h) / norm(h_init)
-                if (iter==0)
-                    err_ϕ_ini = err_ϕ_res
-                    err_h_ini = err_h_res
-                end
-                err_ϕ_resrel = err_ϕ_res / err_ϕ_ini
-                err_h_resrel = err_h_res / err_h_ini
-
-                # update error
-                @parallel update_difference!(Δϕ, ϕ, ϕ2, Δh, h, h2)
-                err_ϕ = norm(Δϕ) / length(Δϕ)
-                err_h = norm(Δh) / norm(h_init)
-                if (iter==0)
-                    err_ϕ_ini = err_ϕ
-                    err_h_ini = err_h
-                end
-                err_ϕ_rel = err_ϕ / err_ϕ_ini
-                err_h_rel = err_h / err_h_ini
-
-                # decide which errors should be below the tolerance and be printed out
-                err_ϕ_tol, err_h_tol = err_ϕ, err_h
+                err_ϕ = norm(Res_ϕ) / length(Res_ϕ)
+                err_h = norm(Res_h) / length(Res_h)
 
                 # save error evolution in vector
                 append!(iters, iter)
                 append!(errs_ϕ, err_ϕ)
                 append!(errs_h, err_h)
-                append!(errs_ϕ_rel, err_ϕ_rel)
-                append!(errs_h_rel, err_h_rel)
-                append!(errs_ϕ_res, err_ϕ_res)
-                append!(errs_h_res, err_h_res)
-                append!(errs_ϕ_resrel, err_ϕ_resrel)
-                append!(errs_h_resrel, err_h_resrel)
 
-                @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ_tol, err_h_tol)
+                @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ, err_h)
 
             end
 
@@ -368,16 +326,13 @@ Run the model with scaled parameters.
         #end
 
         @parallel old2new!(ϕ, ϕ_old, h, h_old)
-        if max(err_ϕ_tol, err_h_tol) < tol && t > 1e7
-            steady_state = true
-        end
     end
 
     # Perfomance measures
     t_toc = Base.time() - t_tic                # execution time, s
     A_eff = (5+10)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
                                                # 5 write arrays (dϕ_dτ, ϕ2, dh_dτ, h2, d_eff)
-                                               # 2 read arrays (ϕ, ϕ_old, dϕ_dτ, h, h_old, dh_dτ, H, zb, m, d_eff)
+                                               # 10 read arrays (ϕ, ϕ_old, dϕ_dτ, h, h_old, dh_dτ, H, zb, m, d_eff)
     t_it  = t_toc/(ittot-10)                   # execution time per iteration, s
     T_eff = A_eff/t_it                         # effective memory throughput, GB/s
     @printf("Time = %1.3f sec, T_eff = %1.1f GB/s, iterations total = %d, (nx, ny) = (%d, %d)\n", t_toc, round(T_eff, sigdigits=3), ittot, nx, ny)
@@ -386,11 +341,8 @@ Run the model with scaled parameters.
     @parallel output_params!(N, qx, qy, ϕ, h, d_eff, ρi, g, H, ϕ_0, k, α, β, dx_, dy_, small)
 
     return model_output{Data.Array}(;   N, ϕ, h, qx, qy,
-                            Err_ϕ=Δϕ, Err_h=Δh, Res_ϕ, Res_h,
-                            ittot, iters,
-                            errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
-                            errs_ϕ_res, errs_h_res, errs_ϕ_resrel, errs_h_resrel,
-                            time_tot=t_toc, T_eff, steady_state)
+                            Res_ϕ, Res_h, errs_ϕ, errs_h, ittot, iters,
+                            time_tot=t_toc, T_eff)
 end
 
 """

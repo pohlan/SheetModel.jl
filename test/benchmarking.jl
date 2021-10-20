@@ -4,7 +4,6 @@
 # Structure:                                                                                                        #
 #                                                                                                                   #
 # :Achtzack01_GPU => :commit1 => :SHMIP_case   = ["A1", "A1", "A2", ...]                                            #
-#                                :steady_state = [true, true, true, ...]                                            #
 #                                :run_time     = [28.1, 34.5, 38.1, ...]  # absolute time, in s                     #
 #                                :T_eff        = [20.3, 19.1, 18.7, ...]  # effective memory throughput, GB/s       #
 #                                :nx           = [1024, 4096, 4096, ...]                                            #
@@ -69,8 +68,11 @@ test_sets = [# 10^3 iterations without reaching steady state (and without calcul
             #(test_case="A1", nx=16384, ny=8192, itMax=10^3),
 
              # going into steady state
-            #(test_case="A1", nx=1024, ny=512, itMax=10^5),
-            #(test_case="A1", nx=4096, ny=2048, itMax=10^5),
+            (test_case="A1", nx=128, ny=128, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
+            (test_case="A1", nx=256, ny=256, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
+            (test_case="A1", nx=512, ny=512, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
+            #(test_case="A1", nx=1024, ny=1024, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),   # doesn't produce the correct result!
+            #(test_case="A1", nx=4096, ny=2048, itMax=10^6),
             #(test_case="A3", nx=1024, ny=512, itMax=10^5),
             #(test_case="A3", nx=4096, ny=1024, itMax=10^5),
             #(test_case="F1", nx=1024, ny=512, itMax=10^5),
@@ -92,7 +94,6 @@ for test_set in test_sets
     # save output in dictionary
     d = Dict(
         :SHMIP_case => inputs.SHMIP_case,
-        :steady_state => outputs.steady_state,
         :run_time => outputs.time_tot,
         :T_eff => outputs.T_eff,
         :nx => inputs.input_params.nx,
