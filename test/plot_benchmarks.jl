@@ -34,17 +34,16 @@ for (n, unit) in enumerate(keys(benchmarks))
         T_eff = benchmarks[unit][gitcommit][:T_eff]
         if n == 1
             if any(steadyst)
-                global plt_ttot = scatterplot(res[steadyst], t_tot[steadyst], marker=symbols[case[n]], color=colors[n], name=unit, xlabel="Grid size (nx*ny)", ylabel="Run time (s)")
+                global plt_ttot = scatterplot(res[steadyst], t_tot[steadyst], xscale=:log10, ylim=[0, 400], marker=symbols[case[n]], color=colors[n], name=unit, xlabel="Grid size (nx*ny)", ylabel="Run time (s)")
                 global nx = benchmarks[unit][gitcommit][:nx][steadyst]
                 global its = benchmarks[unit][gitcommit][:iterations][steadyst]
             end
-            #@infiltrate
-            global plt_Teff = scatterplot(res[.!steadyst], T_eff[.!steadyst], xscale=:log10, marker=symbols[case[n]], color=colors[n], name=unit, xlabel="Grid size (nx*ny)", ylabel="T_eff (GB/s)")
+            global plt_Teff = scatterplot(res[.!steadyst], T_eff[.!steadyst], xscale=:log10, yscale=:log10, ylim=[1, 400], marker=symbols[case[n]], color=colors[n], name=unit, xlabel="Grid size (nx*ny)", ylabel="T_eff (GB/s)")
         else
             if any(steadyst)
                 scatterplot!(plt_ttot, res[steadyst], t_tot[steadyst], marker=symbols[case[n]], color=colors[n], name=unit)
             end
-            scatterplot!(plt_Teff, res[.!steadyst], T_eff[.!steadyst], xscale=:log10, marker=symbols[case[n]], color=colors[n], name=unit)
+            scatterplot!(plt_Teff, res[.!steadyst], T_eff[.!steadyst], marker=symbols[case[n]], color=colors[n], name=unit)
         end
     end
 end
@@ -52,7 +51,8 @@ end
 # make sure everything displays properly in the shell
 print("Benchmarking results of the current commit: \n \n")
 display(plt_ttot)
+print("\n \n")
+for i in 1:length(nx) @printf("nx = ny = %d  -->  Number of iterations: %d \n", nx[i], its[i]) end
 print("\n \n \n")
-for i in 1:length(nx) @printf("nx = ny = %d  -->  Number of iterations: %d \n \n", nx[i], its[i]) end
 display(plt_Teff)
 print("\n")
