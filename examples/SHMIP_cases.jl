@@ -30,9 +30,8 @@ r(x, para) = (-4.5*x/6e3 + 5) * (surface_val(x, 0) - f(x, para)) /
 bed_val(x,y, para) = f(x,para) + g(y) * r(x, para)
 
 
-function run_SHMIP(;test_case, nx, ny, itMax=10^5, make_plot=false, printtime=10^5,
-                   dt=5e7, tsteps=1,
-                   γ_ϕ=0.2, γ_h=0.2, dτ_ϕ_=1.0, dτ_h_=7e-6)      # parameters for pseudo-transient time stepping
+function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, printtime=10^5,
+                   dt=1e9, tsteps=1, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6)      # parameters for pseudo-transient time stepping
 
     # suite A: use different steady and spatially uniform water inputs
     runoff = Dict("A1" => (x, y, t) -> 7.93e-11,
