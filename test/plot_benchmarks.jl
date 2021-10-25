@@ -38,7 +38,7 @@ for (n, unit) in enumerate(keys(benchmarks))
                 global nx = benchmarks[unit][gitcommit][:nx][steadyst]
                 global its = benchmarks[unit][gitcommit][:iterations][steadyst]
             end
-            global plt_Teff = scatterplot(res[.!steadyst], T_eff[.!steadyst], xscale=:log10, yscale=:log10, ylim=[1, 400], marker=symbols[case[n]], color=colors[n], name=unit, xlabel="Grid size (nx*ny)", ylabel="T_eff (GB/s)")
+            global plt_Teff = scatterplot(res[.!steadyst], T_eff[.!steadyst], xscale=:log10, yscale=:log10, ylim=[1, 500], marker=symbols[case[n]], color=colors[n], name=unit, xlabel="Grid size (nx*ny)", ylabel="T_eff (GB/s)")
         else
             if any(steadyst)
                 scatterplot!(plt_ttot, res[steadyst], t_tot[steadyst], marker=symbols[case[n]], color=colors[n], name=unit)
