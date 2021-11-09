@@ -40,6 +40,9 @@ end
 # Turn all negative numbers into 0.0
 pos(x) = x > 0.0 ? x : 0.0
 
+# Determine dx or dy from Lx and dx or Ly and dy
+grid_size(Lx, nx) = Lx / (nx-3)
+
 function plot_output(xc, yc, H, N, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
     pygui(true)
 
@@ -110,7 +113,7 @@ function plot_output(xc, yc, H, N, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs
     legend()
 end
 
-function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, printtime=10^5,
+function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false,
                    dt=1e9, tsteps=1, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6)      # parameters for pseudo-transient time stepping
 
     # suite A: use different steady and spatially uniform water inputs
@@ -183,21 +186,21 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, printtime=10
         water_input = make_runoff_fct(topo.surf, DT[test_case])
     end
 
-    # physical domain (without ghost points)
-    x1, xend          = topo.xrange                       # domain length in x-direction, m
-    y1, yend          = topo.yrange                       # domain length in y-direction, m
+    # input parameters
+    x1, xend          = topo.xrange
+    y1, yend          = topo.yrange
     Lx                = xend - x1
     Ly                = yend - y1
-    xc                = LinRange(x1, xend, nx) # vector of x-coordinates
-    yc                = LinRange(y1, yend, ny) # vector of y-coordinates
-
+    dx                = grid_size(Lx, nx)
+    dy                = grid_size(Ly, ny)
+    xc                = LinRange(x1-dx, xend+dx, nx)         # including ghost points
+    yc                = LinRange(y1-dy, yend+dy, ny)
     zb                = topo.bed.(xc, yc')
     H                 = pos.(topo.surf.(xc, yc') .- zb)
-    calc_m(ix, iy, t) = water_input(xc[ix], yc[iy], t)     # already taking ghost points into account
+    calc_m(ix, iy, t) = water_input(xc[ix], yc[iy], t)
+    ttot              = tsteps * dt
 
-    ttot = tsteps * dt
-
-    # Initial condition
+    # initial conditions
     ϕ_init, h_init = initial_conditions(
         xc,
         yc,
@@ -207,8 +210,12 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, printtime=10
         #calc_ϕ = (x, y) -> rand(),
         calc_h = (x, y) -> 0.04
     )
-    input = make_model_input(H, zb, Lx, Ly, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m)
+
+    # call the SheetModel
+    input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m)
     output = runthemodel(;input...);
+
+    # plotting
     @unpack N, ϕ, h, qx, qy,
             ittot, iters, Res_ϕ, Res_h, errs_ϕ, errs_h = output
 

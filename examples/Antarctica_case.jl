@@ -91,46 +91,43 @@ function read_bedmachine(thin=1)
     return GeoStack(GeoStack(gas..., metadata=nc.metadata), dims=D), nc
 #    return GeoStack(gas..., metadata=nc.metadata), nc
 end
-topo, nc = read_bedmachine();
+# topo, nc = read_bedmachine();
 # to plot
 # import Plots; Plt = Plots
 # topo[:surface] |> Plt.plot
 
-function run_Antarctica(;test_case, nx, ny, itMax=10^6, make_plot=false, printtime=10^5,
+function run_Antarctica(;itMax=2*10^4, make_plot=false,
     dt=1e9, tsteps=1, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6)      # parameters for pseudo-transient time stepping
 
+    # read data
     topo, nc = read_bedmachine();
-    x, y = Array.(dims(topo))
 
-    # physical domain (without ghost points)
+    # input parameters
+    x, y              = Vector{Float64}.(Array.(dims(topo)))
+    dx                = x[2] - x[1]
+    dy                = y[2] - y[1]
     Lx                = x[end] - x[1]
     Ly                = y[end] - y[1]
-
-    zb                = topo[:bed]
-    H                 = topo[:thickness]
+    zb                = Matrix{Float64}(topo[:bed])
+    H                 = Matrix{Float64}(topo[:thickness])
     calc_m(ix, iy, t) = 1e-6
-
     ttot = tsteps * dt
 
-    # Initial condition
-    ϕ_init, h_init = initial_conditions(
-        xc,
-        yc,
-        calc_ϕ = (x, y) -> 100.0,
-        #calc_ϕ = (x, y) -> 1e6/lx * x,
-        #calc_ϕ = (x, y) -> exp(- 1e-2*(x-Lx/2)^2) * exp(-1e-2*(yc-Ly/2)^2),
-        #calc_ϕ = (x, y) -> rand(),
-        calc_h = (x, y) -> 0.04
-    )
-    input = make_model_input(H, zb, Lx, Ly, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m)
+    # initial conditions
+    ϕ_init = 100. * ones(size(H))
+    h_init = 0.05 * ones(size(H))
+
+    # call the SheetModel
+    input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m)
     output = runthemodel(;input...);
+
+    # plotting
     @unpack N, ϕ, h, qx, qy,
             ittot, iters, Res_ϕ, Res_h, errs_ϕ, errs_h = output
 
-    # plotting
-
-    return (;input, SHMIP_case=test_case), output
+    return input, output
 end
 
 # todo: masks for b.c.
 
+input, output = run_Antarctica();

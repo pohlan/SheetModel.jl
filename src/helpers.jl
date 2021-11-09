@@ -14,21 +14,14 @@ function ghost(A)
     return A
 end
 
-"""
-Determine dx or dy from Lx and dx or Ly and dy
-"""
-grid_size(Lx, nx) = Lx / (nx-3)
 
-function make_model_input(H, zb, Lx, Ly, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m)
-    # make arrays larger by adding ghost points
+
+function make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m)
+    # make outermost rows and columns to ghost points
     H      = ghost(H)
     zb     = ghost(zb)
     ϕ_init = ghost(ϕ_init)
     h_init = ghost(h_init)
-
-    # calculate dx, dy
-    dx = grid_size(Lx, size(H, 1))
-    dy = grid_size(Ly, size(H, 2))
 
     # struct of input parameters
     params_struct = model_input(;H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_)
