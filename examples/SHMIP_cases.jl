@@ -2,7 +2,7 @@
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../"))
-using SheetModel, Parameters
+using SheetModel, Parameters, Infiltrator
 using PyPlot
 const S = SheetModel
 
@@ -29,6 +29,86 @@ r(x, para) = (-4.5*x/6e3 + 5) * (surface_val(x, 0) - f(x, para)) /
                (surface_val(x, 0) - f(x, para_bench) + eps())
 bed_val(x,y, para) = f(x,para) + g(y) * r(x, para)
 
+# Return arrays of initial conditions for ϕ and h
+function initial_conditions(xc, yc; calc_ϕ = (x,y) -> 0.0, calc_h = (x,y) -> 0.01)
+    ϕ_init = calc_ϕ.(xc, yc')
+    h_init = calc_h.(xc, yc')
+    return ϕ_init, h_init
+end
+
+
+# Turn all negative numbers into 0.0
+pos(x) = x > 0.0 ? x : 0.0
+
+function plot_output(xc, yc, H, N, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
+    pygui(true)
+
+    # (I) ϕ and h
+    x_plt = [xc[1]; xc .+ (xc[2]-xc[1])]
+    y_plt = [yc[1]; yc .+ (yc[2]-yc[1])]
+    N[H .== 0.0] .= NaN
+    h[H .== 0.0] .= NaN
+
+    figure()
+    # (Ia) pcolor of ϕ and h fields
+    subplot(2, 2, 1)
+    pcolor(x_plt, y_plt, h')#, edgecolors="black")
+    colorbar()
+    title("h")
+    subplot(2, 2, 2)
+    pcolor(x_plt, y_plt, N')#, edgecolors="black")
+    colorbar()
+    title("N")
+    # (Ib) cross-sections of ϕ and h
+    subplot(2, 2, 3)
+    ind = size(N,2)÷2
+    plot(xc, h[:, ind])
+    title(join(["h at y = ", string(round(yc[ind], digits=1))]))
+    subplot(2, 2, 4)
+    plot(xc, N[:, ind])
+    title(join(["N at y = ", string(round(yc[ind], digits=1))]))
+
+    # (II) fluxes
+    # don't show any value outside of glacier domain
+    qx[H[1:end-1, :] .== 0.] .= NaN
+    qx[H[2:end, :]   .== 0.] .= NaN
+    qy[H[:, 1:end-1] .== 0.] .= NaN
+    qy[H[:, 2:end]   .== 0.] .= NaN
+
+    figure()
+    subplot(1, 2, 1)
+    pcolor(qx')
+    colorbar()
+    title("qx (m/s)")
+    subplot(1, 2, 2)
+    pcolor(qy')
+    colorbar()
+    title("qy (m/s)")
+
+    # (III) residual fields
+    Res_ϕ[H .== 0.0] .= NaN
+    Res_h[H .== 0.0] .= NaN
+
+    figure()
+    subplot(1, 2, 1)
+    pcolormesh(Res_h')
+    colorbar()
+    title("err_h")
+    subplot(1, 2, 2)
+    pcolormesh(Res_ϕ')
+    colorbar()
+    title("err_ϕ")
+
+    # (IV) iteration vs. error
+    figure()
+    semilogy(iters, errs_ϕ, label=L"\mathrm{Res}_ϕ", color="gold")
+    semilogy(iters, errs_h, label=L"\mathrm{Res}_h", color="deepskyblue")
+    title("errors: norm(...) / length(..)")
+
+    xlabel(L"# iterations $i$")
+    ylabel("error")
+    legend()
+end
 
 function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, printtime=10^5,
                    dt=1e9, tsteps=1, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6)      # parameters for pseudo-transient time stepping
@@ -103,48 +183,38 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, printtime=10
         water_input = make_runoff_fct(topo.surf, DT[test_case])
     end
 
-    # Define numerical domain and input parameters
-    input_params = S.Para(
-        xrange = topo.xrange,  # domain length in x-direction, m
-        yrange = topo.yrange,  # domain length in y-direction, m
-        nx = nx,
-        ny = ny,
+    # physical domain (without ghost points)
+    x1, xend          = topo.xrange                       # domain length in x-direction, m
+    y1, yend          = topo.yrange                       # domain length in y-direction, m
+    Lx                = xend - x1
+    Ly                = yend - y1
+    xc                = LinRange(x1, xend, nx) # vector of x-coordinates
+    yc                = LinRange(y1, yend, ny) # vector of y-coordinates
 
-        calc_zs = topo.surf,    # surface elevation, m
-        calc_zb = topo.bed,     # bed elevation, m
-        calc_m_phys  = water_input,     # source term, m/s
+    zb                = topo.bed.(xc, yc')
+    H                 = pos.(topo.surf.(xc, yc') .- zb)
+    calc_m(ix, iy, t) = water_input(xc[ix], yc[iy], t)     # already taking ghost points into account
 
-        dt   = dt,  #  TODO: Adaptive time stepping, in the end it shouldn't be specified as input
-        ttot = tsteps * dt,
-
-        itMax = itMax,
-        γ_ϕ  = γ_ϕ,  # damping parameter for ϕ
-        γ_h  = γ_h,  # damping parameter for h
-        dτ_ϕ_ = dτ_ϕ_, # scaling factor for dτ_ϕ
-        dτ_h_ = dτ_h_  # scaling factor for dτ_h
-    )
+    ttot = tsteps * dt
 
     # Initial condition
-    @unpack xc, yc, H = input_params
-    ϕ_init, h_init = S.initial_conditions(
+    ϕ_init, h_init = initial_conditions(
         xc,
         yc,
-        H,
         calc_ϕ = (x, y) -> 100.0,
         #calc_ϕ = (x, y) -> 1e6/lx * x,
         #calc_ϕ = (x, y) -> exp(- 1e-2*(x-Lx/2)^2) * exp(-1e-2*(yc-Ly/2)^2),
         #calc_ϕ = (x, y) -> rand(),
         calc_h = (x, y) -> 0.04
     )
-
-
-    model_output = S.runthemodel(input_params, ϕ_init, h_init, printtime=printtime);
+    input = make_model_input(H, zb, Lx, Ly, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m)
+    output = runthemodel(;input...);
     @unpack N, ϕ, h, qx, qy,
-            ittot, iters, Res_ϕ, Res_h, errs_ϕ, errs_h = model_output
+            ittot, iters, Res_ϕ, Res_h, errs_ϕ, errs_h = output
 
     if make_plot
-        S.plot_output(xc, yc, H, N, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
+        plot_output(xc, yc, H, N, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
     end
 
-    return (;input_params, SHMIP_case=test_case, ϕ_init, h_init), model_output
+    return (;input, SHMIP_case=test_case), output
 end

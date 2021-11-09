@@ -231,8 +231,8 @@ end
 """
 Run the model with scaled parameters.
 """
-@views function runthemodel_scaled(params::Para, ϕ_init, h_init, printtime)
-    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, calc_Λ_m!, dx, dy, nx, ny, k, α, β,
+@views function runthemodel_scaled(params, ϕ_init, h_init, calc_Λ_m!)
+    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, dx, dy, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
 
     # Pre-calculate reciprocals for better performance
@@ -246,7 +246,8 @@ Run the model with scaled parameters.
     ϕ_0   = ρw * g * zb     # elevation potential; zb is never used in another context
 
     # Array allocation
-    qx, qy, d_eff, Λ_m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(params)
+    nx, ny = size(ϕ_init)
+    qx, qy, d_eff, Λ_m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(nx, ny)
 
     # Apply boundary conditions
     @parallel apply_bc!(ϕ_init, H, ϕ_0)
@@ -348,10 +349,15 @@ end
 """
 Scale the parameters and call the model run function.
 """
-@views function runthemodel(input::Para, ϕ_init, h_init;
-                    printtime=10^5)       # time step is printed after `printtime` number of physical time steps
-    params, ϕ_init, h_init, ϕ_, N_, h_, q_ = format(input, ϕ_init, h_init)
-    output = runthemodel_scaled(params::Para, ϕ_init, h_init, printtime)
-    output_descaled = reformat(output, N_, ϕ_, h_, q_)
+@views function runthemodel(;params_struct::model_input, ϕ_init, h_init, calc_m)
+    scaled_params, ϕ_init, h_init, calc_m, ϕ_, N_, h_, q_ = scaling(params_struct, ϕ_init, h_init, calc_m)
+    calc_Λ_m! = @parallel_indices (ix,iy)   function calc_Λ_m!(Λ_m, Λ, t)
+                                                if (ix <= size(Λ_m, 1) && iy <= size(Λ_m, 2))
+                                                    Λ_m[ix, iy] = Λ * calc_m(ix, iy, t)
+                                                end
+                                                return
+                                            end
+    output = runthemodel_scaled(scaled_params, ϕ_init, h_init, calc_Λ_m!)
+    output_descaled = descale(output, N_, ϕ_, h_, q_)
     return output_descaled
 end

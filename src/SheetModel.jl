@@ -2,7 +2,7 @@ __precompile__(false)
 module SheetModel
 
 using ParallelStencil
-export Para, USE_GPU
+export make_model_input, runthemodel, USE_GPU
 
 # Take command line argument to decide which processing unit should be used.
 const USE_GPU = any(ARGS .== "-gpu") # defaults to CPU

@@ -24,3 +24,6 @@ docs/site/
 # Manifest.toml
 
 benchmarks.jld2
+
+# data
+*.nc
