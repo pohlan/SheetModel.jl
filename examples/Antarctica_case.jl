@@ -113,13 +113,27 @@ function run_Antarctica(;itMax=2*10^4, make_plot=false,
     calc_m(ix, iy, t) = 1e-6
     ttot = tsteps * dt
 
+    sea = topo[:seamask]
+    ice = topo[:icemask]
+    land = topo[:landmask]
+    bc_diric = ice[2:end-1, 2:end-1] .& (sea[1:end-2, 2:end-1] .| sea[3:end, 2:end-1] .| sea[2:end-1, 1:end-2] .| sea[2:end-1, 3:end])
+    bc_no_xflux = abs.(diff(ice .- land, dims=1)) .== 2
+    bc_no_yflux = abs.(diff(ice .- land, dims=2)) .== 2
+
+    # to plot
+    # import Plots; Plt = Plots
+    # coords = findall(bc_diric .== 1)
+    # xs     = [coords[i][1] for i in 1:length(coords)]
+    # ys     = [coords[i][2] for i in 1:length(coords)]
+    # Plots.scatter(xs, ys)
+
     # initial conditions
     ϕ_init = 100. * ones(size(H))
     h_init = 0.05 * ones(size(H))
 
     # call the SheetModel
     input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m)
-    output = runthemodel(;input...);
+    output = runthemodel(;input..., bc_diric, bc_no_xflux, bc_no_yflux);
 
     # plotting
     @unpack N, ϕ, h, qx, qy,
@@ -128,6 +142,4 @@ function run_Antarctica(;itMax=2*10^4, make_plot=false,
     return input, output
 end
 
-# todo: masks for b.c.
-
-input, output = run_Antarctica();
+# input, output = run_Antarctica();

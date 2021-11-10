@@ -39,18 +39,14 @@ Calculate hydraulic gradient in x-direction; input coordinates on qx grid.
 Implicitly sets zero-flux boundary conditions.
 Needs access to H, ϕ, dx_
 """
-macro dϕ_dx(ix, iy) esc(:( (H[$ix, $iy] > 0. && H[$ix+1, $iy] > 0.) # only consider ice interior; gradients at boundary and outside are zero
-                           * (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) * dx_
-                        )) end
+macro dϕ_dx(ix, iy) esc(:( !bc_no_xflux[$ix, $iy] * (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) * dx_ )) end
 
 """
 Calculate hydraulic gradient in y-direction; input coordinates on qy grid.
 Implicitly sets zero-flux boundary conditions.
 Needs access to H, ϕ, dy_
 """
-macro dϕ_dy(ix, iy) esc(:( (H[$ix, $iy] > 0. && H[$ix, $iy+1] > 0.) # only consider ice interior; gradients at boundary and outside are zero
-                            * (ϕ[$ix, $iy+1] - ϕ[$ix, $iy]) * dy_
-                         )) end
+macro dϕ_dy(ix, iy) esc(:( !bc_no_yflux[$ix, $iy] * (ϕ[$ix, $iy+1] - ϕ[$ix, $iy]) * dy_ )) end
 
 """
 Calculate absolute hydraulic gradient, |∇ϕ|;
@@ -118,7 +114,7 @@ macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
 
 ### KERNEL FUNCTIONS ###
 
-@parallel_indices (ix, iy) function update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Θ_vo, Θ_vc, hr, g, ρi, n, H, ϕ_0, small)
+@parallel_indices (ix, iy) function update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Θ_vo, Θ_vc, hr, g, ρi, n, H, ϕ_0, small, bc_no_xflux, bc_no_yflux,)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
         d_eff[ix, iy] = @d_eff(ix, iy)
@@ -130,13 +126,13 @@ end
 Calculate residuals of ϕ and h and store them in arrays.
 Used for error calculation and only to be carried out every xx iterations, e.g. every thousand.
 """
-@parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff,
+@parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, bc_diric, bc_no_xflux, bc_no_yflux,
                                               dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
         # residual of ϕ
-        if ix == 2 # ϕ: without boundary points (divergence of q not defined there)
-            Res_ϕ[ix, iy] = 0. # position where dirichlet b.c. are imposed
+        if  bc_diric[ix, iy]    # position where dirichlet b.c. are imposed
+            Res_ϕ[ix, iy] = 0.
         elseif (1 < ix < nx && 1 < iy < ny)
             Res_ϕ[ix, iy] = @Res_ϕ(ix, iy)
         end
@@ -150,7 +146,7 @@ end
 """
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
-@parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter,
+@parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, bc_diric, bc_no_xflux, bc_no_yflux,
                                                   dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small,
                                                   dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     nx, ny = size(ϕ)
@@ -159,7 +155,7 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
         dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
         ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix, iy) * dϕ_dτ[ix, iy]
         # dirichlet boundary conditions to pw = 0
-        if ix == 2
+        if bc_diric[ix, iy]
             ϕ2[ix, iy] = ϕ_0[ix, iy]
         end
 
@@ -174,10 +170,10 @@ end
 Apply Dirichlet boundary conditions to ϕ, at the moment pw(x=0) = 0.
 Neumann boundary conditions are applied when calculating the hydraulic gradient (@dϕ_dx and @dϕ_dy macros).
 """
-@parallel_indices (ix,iy) function apply_bc!(ϕ, H, ϕ_0) # TODO: don't hard-wire, give bc as input parameters
+@parallel_indices (ix,iy) function apply_bc!(ϕ, ϕ_0, bc_diric) # TODO: don't hard-wire, give bc as input parameters
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
-        if ix == 2
+        if bc_diric[ix, iy]
             ϕ[ix, iy] = ϕ_0[ix, iy]
         end
         #if (ix == 2) && (iy == ny÷2+1)
@@ -216,7 +212,7 @@ end
 """
 Calculate effective pressure N and fluxes (qx, qy) at the end of model run, for plotting.
 """
-@parallel_indices (ix,iy) function output_params!(N, qx, qy, ϕ, h, d_eff, ρi, g, H, ϕ_0, k, α, β, dx_, dy_, small)
+@parallel_indices (ix,iy) function output_params!(N, qx, qy, ϕ, h, d_eff, ρi, g, H, ϕ_0, k, α, β, dx_, dy_, small, bc_no_xflux, bc_no_yflux)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
         N[ix, iy]  = @N(ix, iy)
@@ -231,7 +227,7 @@ end
 """
 Run the model with scaled parameters.
 """
-@views function runthemodel_scaled(params, ϕ_init, h_init, calc_Λ_m!)
+@views function runthemodel_scaled(params, ϕ_init, h_init, calc_Λ_m!, bc_diric, bc_no_xflux, bc_no_yflux)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, dx, dy, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
 
@@ -250,7 +246,7 @@ Run the model with scaled parameters.
     qx, qy, d_eff, Λ_m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(nx, ny)
 
     # Apply boundary conditions
-    @parallel apply_bc!(ϕ_init, H, ϕ_0)
+    @parallel apply_bc!(ϕ_init, ϕ_0, bc_diric)
 
     ϕ_old   = copy(ϕ_init)
     ϕ       = copy(ϕ_init)
@@ -284,10 +280,10 @@ Run the model with scaled parameters.
             # update d_eff (the bottleneck in performance, only do it every 10 iterations)
             # but it has to be done in a seperate kernel to ensure every grid point is accessing the same version of ϕ
             #if iter % 1000 == 0.
-                @parallel update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Θ_vo, Θ_vc, hr, g, ρi, n, H, ϕ_0, small)
+                @parallel update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Θ_vo, Θ_vc, hr, g, ρi, n, H, ϕ_0, small, bc_no_xflux, bc_no_yflux,)
             #end
             # update ϕ and h
-            @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter,
+            @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, bc_diric, bc_no_xflux, bc_no_yflux,
                                      dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small,
                                      dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
             #@infiltrate
@@ -302,7 +298,7 @@ Run the model with scaled parameters.
             if iter % 1000 == 0 && iter > 10^4 && itMax > 10^4     # only calculate errors every 1000 time steps
                                                     # and if itMax is high, i.e. if convergence is the goal
                 # update the residual arrays
-                @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff,
+                @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, bc_diric, bc_no_xflux, bc_no_yflux,
                                      dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small)
 
                 # residual error
@@ -339,7 +335,7 @@ Run the model with scaled parameters.
     @printf("Time = %1.3f sec, T_eff = %1.1f GB/s, iterations total = %d, (nx, ny) = (%d, %d)\n", t_toc, round(T_eff, sigdigits=3), ittot, nx, ny)
 
     # calculate N, qx and qy as output parameters
-    @parallel output_params!(N, qx, qy, ϕ, h, d_eff, ρi, g, H, ϕ_0, k, α, β, dx_, dy_, small)
+    @parallel output_params!(N, qx, qy, ϕ, h, d_eff, ρi, g, H, ϕ_0, k, α, β, dx_, dy_, small, bc_no_xflux, bc_no_yflux,)
 
     return model_output{Data.Array}(;   N, ϕ, h, qx, qy,
                             Res_ϕ, Res_h, errs_ϕ, errs_h, ittot, iters,
@@ -349,7 +345,7 @@ end
 """
 Scale the parameters and call the model run function.
 """
-@views function runthemodel(;params_struct::model_input, ϕ_init, h_init, calc_m)
+@views function runthemodel(;params_struct::model_input, ϕ_init, h_init, calc_m, bc_diric, bc_no_xflux, bc_no_yflux)
     scaled_params, ϕ_init, h_init, calc_m, ϕ_, N_, h_, q_ = scaling(params_struct, ϕ_init, h_init, calc_m)
     calc_Λ_m! = @parallel_indices (ix,iy)   function calc_Λ_m!(Λ_m, Λ, t)
                                                 if (ix <= size(Λ_m, 1) && iy <= size(Λ_m, 2))
@@ -357,7 +353,7 @@ Scale the parameters and call the model run function.
                                                 end
                                                 return
                                             end
-    output = runthemodel_scaled(scaled_params, ϕ_init, h_init, calc_Λ_m!)
+    output = runthemodel_scaled(scaled_params, ϕ_init, h_init, calc_Λ_m!, bc_diric, bc_no_xflux, bc_no_yflux)
     output_descaled = descale(output, N_, ϕ_, h_, q_)
     return output_descaled
 end
