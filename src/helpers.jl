@@ -118,7 +118,7 @@ end
 Convert input parameters to non-dimensional quantities.
 Convert arrays of H and zb to correct types depending on whether CPU or GPU is used.
 """
-function scaling(p::model_input, ϕ_init, h_init, calc_m)
+function scaling(p::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
     @unpack g, ρw, k, A, lr, hr,
             H, zb, ub,
             Lx, Ly, dx, dy,
@@ -186,7 +186,13 @@ function scaling(p::model_input, ϕ_init, h_init, calc_m)
     # source term function
     calc_m = (ix, iy, t) -> calc_m(ix, iy, t) / m_,
 
-    return scaled_params, ϕ_init, h_init, calc_m, ϕ_, N_, h_, q_
+    # masks
+    ice_mask = Data.Array(ice_mask)
+    bc_diric = Data.Array(bc_diric)
+    bc_no_xflux = Data.Array(bc_no_xflux)
+    bc_no_yflux = Data.Array(bc_no_yflux)
+
+    return scaled_params, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, ϕ_, N_, h_, q_
 end
 
 mat(x) = Matrix{Float64}(x) # shorter notation for use in reformat() function

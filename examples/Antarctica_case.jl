@@ -100,7 +100,7 @@ function run_Antarctica(;itMax=2*10^4, make_plot=false,
     dt=1e9, tsteps=1, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6)      # parameters for pseudo-transient time stepping
 
     # read data
-    topo, nc = read_bedmachine();
+    topo, nc = read_bedmachine(4);
 
     # input parameters
     x, y              = Vector{Float64}.(Array.(dims(topo)))
@@ -113,10 +113,10 @@ function run_Antarctica(;itMax=2*10^4, make_plot=false,
     calc_m(ix, iy, t) = 1e-6
     ttot = tsteps * dt
 
-    ice_mask = topo[:icemask]
-    bc_diric = ice_mask[2:end-1, 2:end-1] .& (topo[:seamask][1:end-2, 2:end-1] .| topo[:seamask][3:end, 2:end-1] .| topo[:seamask][2:end-1, 1:end-2] .| topo[:seamask][2:end-1, 3:end])
-    bc_no_xflux = abs.(diff(ice_mask .- topo[:landmask], dims=1)) .== 2
-    bc_no_yflux = abs.(diff(ice_mask .- topo[:landmask], dims=2)) .== 2
+    ice_mask = Matrix{Bool}(topo[:icemask])
+    bc_diric = Matrix{Bool}(ice_mask[2:end-1, 2:end-1] .& (topo[:seamask][1:end-2, 2:end-1] .| topo[:seamask][3:end, 2:end-1] .| topo[:seamask][2:end-1, 1:end-2] .| topo[:seamask][2:end-1, 3:end]))
+    bc_no_xflux = Matrix{Bool}(abs.(diff(ice_mask .- topo[:landmask], dims=1)) .== 2)
+    bc_no_yflux = Matrix{Bool}(abs.(diff(ice_mask .- topo[:landmask], dims=2)) .== 2)
 
     # to plot
     # import Plots; Plt = Plots
@@ -140,4 +140,4 @@ function run_Antarctica(;itMax=2*10^4, make_plot=false,
     return input, output
 end
 
-# input, output = run_Antarctica();
+input, output = run_Antarctica();

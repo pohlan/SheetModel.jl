@@ -346,7 +346,7 @@ end
 Scale the parameters and call the model run function.
 """
 @views function runthemodel(;params_struct::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
-    scaled_params, ϕ_init, h_init, calc_m, ϕ_, N_, h_, q_ = scaling(params_struct, ϕ_init, h_init, calc_m)
+    scaled_params, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, ϕ_, N_, h_, q_ = scaling(params_struct, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
     calc_Λ_m! = @parallel_indices (ix,iy)   function calc_Λ_m!(Λ_m, Λ, t)
                                                 if (ix <= size(Λ_m, 1) && iy <= size(Λ_m, 2))
                                                     Λ_m[ix, iy] = Λ * calc_m(ix, iy, t)
