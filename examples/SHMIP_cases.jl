@@ -211,13 +211,15 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false,
         calc_h = (x, y) -> 0.04
     )
 
+    ice_mask    = H .> 0.
     bc_diric    = falses(nx, ny); bc_diric[2, :] .= true
     bc_no_xflux = falses(nx-1, ny); bc_no_xflux[end, :] .= true
     bc_no_yflux = falses(nx, ny-1); bc_no_yflux[:, [1, end]] .= true
 
     # call the SheetModel
-    input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m)
-    output = runthemodel(;input..., bc_diric, bc_no_xflux, bc_no_yflux);
+    input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m,
+                             ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
+    output = runthemodel(;input...);
 
     # plotting
     @unpack N, ϕ, h, qx, qy,

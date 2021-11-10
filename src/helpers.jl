@@ -8,25 +8,26 @@ small = eps(Float64)
 Create a vector of lenght nx where boundary points are zeros and interior points ones.
 Used to achieve zero ice thickness (H=0) at ghost points
 """
-function ghost(A)
+function ghost!(A)
     A[[1, end], :] .= 0.
     A[:, [1, end]] .= 0.
-    return A
+    return
 end
 
 
 
-function make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m)
+function make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
     # make outermost rows and columns to ghost points
-    H      = ghost(H)
-    zb     = ghost(zb)
-    ϕ_init = ghost(ϕ_init)
-    h_init = ghost(h_init)
+    ghost!(H)
+    ghost!(zb)
+    ghost!(ϕ_init)
+    ghost!(h_init)
+    ghost!(ice_mask)
 
     # struct of input parameters
     params_struct = model_input(;H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_)
 
-    return (;params_struct, ϕ_init, h_init, calc_m)
+    return (;params_struct, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
 end
 
 

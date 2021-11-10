@@ -94,22 +94,22 @@ macro flux_y(ix, iy) esc(:(
 Calculate residual of ϕ; input coordinates on ϕ/h grid (but only defined on inner grid points 2:nx-1, 2:ny-1, due to d_eff).
 Needs access to ϕ, ϕ_old, h, H, ρi, g, k, α, β, small, dx_, dy_, min_dxy2, dt, dt_, Λ_m, hr, ϕ_0, n, Θ_PDE, Θ_vo, Θ_vo
 """
-macro Res_ϕ(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (                                                      # only calculate at points with non-zero ice thickness
-                                                  - Θ_PDE * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) * dt_                                                            # dhe/dt = ev(ρw*g) * dϕ/dt
-                                                  - ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) * dx_ + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) * dy_ )    # divergence
-                                                  - (@vo($ix, $iy) - @vc($ix, $iy))                                                                          # dh/dt
-                                                  + Λ_m[$ix, $iy]                                                                                            # source term Λ * m
-                                                 )
+macro Res_ϕ(ix, iy) esc(:(  ice_mask[ix, iy] * (                                                      # only calculate at points with non-zero ice thickness
+                                                 - Θ_PDE * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) * dt_                                                            # dhe/dt = ev(ρw*g) * dϕ/dt
+                                                 - ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) * dx_ + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) * dy_ )    # divergence
+                                                 - (@vo($ix, $iy) - @vc($ix, $iy))                                                                          # dh/dt
+                                                 + Λ_m[$ix, $iy]                                                                                            # source term Λ * m
+                                                )
 )) end
 
 """
 Calculate residual of h; input coordinates on ϕ/h grid.
 Needs access to ϕ, h, h_old, H, dt_, hr, ϕ_0, n, ρi, g, Θ_vo, Θ_vc
 """
-macro Res_h(ix, iy) esc(:(( H[$ix, $iy] > 0.) * (
-                                                  - (h[$ix, $iy] - h_old[$ix, $iy]) * dt_
-                                                  + (@vo($ix, $iy) - @vc($ix, $iy))
-                                                 )
+macro Res_h(ix, iy) esc(:(  ice_mask[ix, iy] * (
+                                                 - (h[$ix, $iy] - h_old[$ix, $iy]) * dt_
+                                                 + (@vo($ix, $iy) - @vc($ix, $iy))
+                                                )
 )) end
 
 ### KERNEL FUNCTIONS ###
@@ -126,7 +126,7 @@ end
 Calculate residuals of ϕ and h and store them in arrays.
 Used for error calculation and only to be carried out every xx iterations, e.g. every thousand.
 """
-@parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, bc_diric, bc_no_xflux, bc_no_yflux,
+@parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
                                               dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
@@ -146,7 +146,7 @@ end
 """
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
-@parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, bc_diric, bc_no_xflux, bc_no_yflux,
+@parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
                                                   dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small,
                                                   dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
     nx, ny = size(ϕ)
@@ -227,7 +227,7 @@ end
 """
 Run the model with scaled parameters.
 """
-@views function runthemodel_scaled(params, ϕ_init, h_init, calc_Λ_m!, bc_diric, bc_no_xflux, bc_no_yflux)
+@views function runthemodel_scaled(params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, dx, dy, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
 
@@ -283,7 +283,7 @@ Run the model with scaled parameters.
                 @parallel update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Θ_vo, Θ_vc, hr, g, ρi, n, H, ϕ_0, small, bc_no_xflux, bc_no_yflux,)
             #end
             # update ϕ and h
-            @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, bc_diric, bc_no_xflux, bc_no_yflux,
+            @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
                                      dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small,
                                      dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
             #@infiltrate
@@ -298,7 +298,7 @@ Run the model with scaled parameters.
             if iter % 1000 == 0 && iter > 10^4 && itMax > 10^4     # only calculate errors every 1000 time steps
                                                     # and if itMax is high, i.e. if convergence is the goal
                 # update the residual arrays
-                @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, bc_diric, bc_no_xflux, bc_no_yflux,
+                @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
                                      dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small)
 
                 # residual error
@@ -345,7 +345,7 @@ end
 """
 Scale the parameters and call the model run function.
 """
-@views function runthemodel(;params_struct::model_input, ϕ_init, h_init, calc_m, bc_diric, bc_no_xflux, bc_no_yflux)
+@views function runthemodel(;params_struct::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
     scaled_params, ϕ_init, h_init, calc_m, ϕ_, N_, h_, q_ = scaling(params_struct, ϕ_init, h_init, calc_m)
     calc_Λ_m! = @parallel_indices (ix,iy)   function calc_Λ_m!(Λ_m, Λ, t)
                                                 if (ix <= size(Λ_m, 1) && iy <= size(Λ_m, 2))
@@ -353,7 +353,7 @@ Scale the parameters and call the model run function.
                                                 end
                                                 return
                                             end
-    output = runthemodel_scaled(scaled_params, ϕ_init, h_init, calc_Λ_m!, bc_diric, bc_no_xflux, bc_no_yflux)
+    output = runthemodel_scaled(scaled_params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
     output_descaled = descale(output, N_, ϕ_, h_, q_)
     return output_descaled
 end

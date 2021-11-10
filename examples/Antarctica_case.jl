@@ -113,12 +113,10 @@ function run_Antarctica(;itMax=2*10^4, make_plot=false,
     calc_m(ix, iy, t) = 1e-6
     ttot = tsteps * dt
 
-    sea = topo[:seamask]
-    ice = topo[:icemask]
-    land = topo[:landmask]
-    bc_diric = ice[2:end-1, 2:end-1] .& (sea[1:end-2, 2:end-1] .| sea[3:end, 2:end-1] .| sea[2:end-1, 1:end-2] .| sea[2:end-1, 3:end])
-    bc_no_xflux = abs.(diff(ice .- land, dims=1)) .== 2
-    bc_no_yflux = abs.(diff(ice .- land, dims=2)) .== 2
+    ice_mask = topo[:icemask]
+    bc_diric = ice_mask[2:end-1, 2:end-1] .& (topo[:seamask][1:end-2, 2:end-1] .| topo[:seamask][3:end, 2:end-1] .| topo[:seamask][2:end-1, 1:end-2] .| topo[:seamask][2:end-1, 3:end])
+    bc_no_xflux = abs.(diff(ice_mask .- topo[:landmask], dims=1)) .== 2
+    bc_no_yflux = abs.(diff(ice_mask .- topo[:landmask], dims=2)) .== 2
 
     # to plot
     # import Plots; Plt = Plots
@@ -132,8 +130,8 @@ function run_Antarctica(;itMax=2*10^4, make_plot=false,
     h_init = 0.05 * ones(size(H))
 
     # call the SheetModel
-    input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m)
-    output = runthemodel(;input..., bc_diric, bc_no_xflux, bc_no_yflux);
+    input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
+    output = runthemodel(;input...);
 
     # plotting
     @unpack N, ϕ, h, qx, qy,
