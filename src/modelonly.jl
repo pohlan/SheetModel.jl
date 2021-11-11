@@ -39,14 +39,14 @@ Calculate hydraulic gradient in x-direction; input coordinates on qx grid.
 Implicitly sets zero-flux boundary conditions.
 Needs access to H, ϕ, dx_
 """
-macro dϕ_dx(ix, iy) esc(:( !bc_no_xflux[$ix, $iy] * (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) * dx_ )) end
+macro dϕ_dx(ix, iy) esc(:( bc_no_xflux[$ix, $iy] == 1 ? 0. : (ϕ[$ix+1, $iy] - ϕ[$ix, $iy]) * dx_ )) end
 
 """
 Calculate hydraulic gradient in y-direction; input coordinates on qy grid.
 Implicitly sets zero-flux boundary conditions.
 Needs access to H, ϕ, dy_
 """
-macro dϕ_dy(ix, iy) esc(:( !bc_no_yflux[$ix, $iy] * (ϕ[$ix, $iy+1] - ϕ[$ix, $iy]) * dy_ )) end
+macro dϕ_dy(ix, iy) esc(:( bc_no_yflux[$ix, $iy] == 1 ? 0. : (ϕ[$ix, $iy+1] - ϕ[$ix, $iy]) * dy_ )) end
 
 """
 Calculate absolute hydraulic gradient, |∇ϕ|;
@@ -131,7 +131,7 @@ Used for error calculation and only to be carried out every xx iterations, e.g. 
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
         # residual of ϕ
-        if  bc_diric[ix, iy]    # position where dirichlet b.c. are imposed
+        if  bc_diric[ix, iy] == 1    # position where dirichlet b.c. are imposed
             Res_ϕ[ix, iy] = 0.
         elseif (1 < ix < nx && 1 < iy < ny)
             Res_ϕ[ix, iy] = @Res_ϕ(ix, iy)
@@ -155,7 +155,7 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
         dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
         ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix, iy) * dϕ_dτ[ix, iy]
         # dirichlet boundary conditions to pw = 0
-        if bc_diric[ix, iy]
+        if bc_diric[ix, iy] == 1
             ϕ2[ix, iy] = ϕ_0[ix, iy]
         end
 
@@ -173,7 +173,7 @@ Neumann boundary conditions are applied when calculating the hydraulic gradient 
 @parallel_indices (ix,iy) function apply_bc!(ϕ, ϕ_0, bc_diric) # TODO: don't hard-wire, give bc as input parameters
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
-        if bc_diric[ix, iy]
+        if bc_diric[ix, iy] == 1
             ϕ[ix, iy] = ϕ_0[ix, iy]
         end
         #if (ix == 2) && (iy == ny÷2+1)

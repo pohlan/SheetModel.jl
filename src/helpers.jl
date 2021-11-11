@@ -184,7 +184,7 @@ function scaling(p::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc
     h_init = Data.Array(h_init ./ h_)
 
     # source term function
-    calc_m = (ix, iy, t) -> calc_m(ix, iy, t) / m_,
+    calc_m_sc = (ix, iy, t) -> calc_m(ix, iy, t) / m_
 
     # masks
     ice_mask = Data.Array(ice_mask)
@@ -192,7 +192,7 @@ function scaling(p::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc
     bc_no_xflux = Data.Array(bc_no_xflux)
     bc_no_yflux = Data.Array(bc_no_yflux)
 
-    return scaled_params, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, ϕ_, N_, h_, q_
+    return scaled_params, ϕ_init, h_init, calc_m_sc, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, ϕ_, N_, h_, q_
 end
 
 mat(x) = Matrix{Float64}(x) # shorter notation for use in reformat() function
