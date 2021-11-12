@@ -197,8 +197,15 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false,
     yc                = LinRange(y1-dy, yend+dy, ny)
     zb                = topo.bed.(xc, yc')
     H                 = pos.(topo.surf.(xc, yc') .- zb)
-    calc_m(ix, iy, t) = water_input(xc[ix], yc[iy], t)
     ttot              = tsteps * dt
+
+    # definition of function calc_m (calculating the source term)
+    # (doing calc_m(ix, iy, t) =  water_input(xc[ix], yc[iy], t) directly gives an error as xc and yc are not accessible anymore later)
+    function make_calc_m(xc, yc, water_input)
+        calc_m(ix, iy, t) = water_input(xc[ix], yc[iy], t)
+        return calc_m
+    end
+    calc_m = make_calc_m(xc, yc, water_input)
 
     # initial conditions
     ϕ_init, h_init = initial_conditions(
