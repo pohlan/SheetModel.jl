@@ -1,5 +1,6 @@
 using LazyArrays: Diff
 using Printf, Infiltrator
+import Plots; Plt = Plots
 
 # used grids:
 # - normal grid (i,j), size (nx, ny)
@@ -170,18 +171,15 @@ end
 Apply Dirichlet boundary conditions to ϕ, at the moment pw(x=0) = 0.
 Neumann boundary conditions are applied when calculating the hydraulic gradient (@dϕ_dx and @dϕ_dy macros).
 """
-@parallel_indices (ix,iy) function apply_bc!(ϕ, ϕ_0, bc_diric) # TODO: don't hard-wire, give bc as input parameters
+@parallel_indices (ix,iy) function apply_bc!(ϕ, ϕ_0, bc_diric, h, ice_mask) # TODO: don't hard-wire, give bc as input parameters
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny)
         if bc_diric[ix, iy] == 1
             ϕ[ix, iy] = ϕ_0[ix, iy]
         end
-        #if (ix == 2) && (iy == ny÷2+1)
-        #    ϕ[2, ny÷2+1] = ϕ_0[2, ny÷2+1]
-        #end
-        #if (ix == 2) && (iy == ny÷2) && iseven(ny)
-        #    ϕ[2, ny÷2] = ϕ_0[2, ny÷2]
-        #end
+        if ice_mask[ix, iy] == 0
+            h[ix, iy] = 0
+        end
     end
     return
 end
@@ -246,7 +244,7 @@ Run the model with scaled parameters.
     qx, qy, d_eff, Λ_m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(nx, ny)
 
     # Apply boundary conditions
-    @parallel apply_bc!(ϕ_init, ϕ_0, bc_diric)
+    @parallel apply_bc!(ϕ_init, ϕ_0, bc_diric, h_init, ice_mask)
 
     ϕ_old   = copy(ϕ_init)
     ϕ       = copy(ϕ_init)

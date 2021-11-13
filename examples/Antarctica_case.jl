@@ -1,6 +1,7 @@
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../"))
 using SheetModel, Parameters, GeoData, Infiltrator      # GeoData contains function NCDstack()
+import Plots; Plt = Plots
 # using PyPlot
 const S = SheetModel
 
@@ -100,7 +101,7 @@ function run_Antarctica(;itMax=2*10^4, make_plot=false,
     dt=1e9, tsteps=1, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6)      # parameters for pseudo-transient time stepping
 
     # read data
-    topo, nc = read_bedmachine(4);
+    topo, nc = read_bedmachine(50);
 
     # input parameters
     x, y              = Vector{Float64}.(Array.(dims(topo)))
@@ -126,7 +127,7 @@ function run_Antarctica(;itMax=2*10^4, make_plot=false,
     # Plots.scatter(xs, ys)
 
     # initial conditions
-    ϕ_init = 100. * ones(size(H))
+    ϕ_init = 1e6 * ones(size(H))
     h_init = 0.05 * ones(size(H))
 
     # call the SheetModel
@@ -140,4 +141,9 @@ function run_Antarctica(;itMax=2*10^4, make_plot=false,
     return input, output
 end
 
-input, output = run_Antarctica();
+input, output = run_Antarctica(γ_ϕ=0.8, γ_h=0.9, dτ_ϕ_=1e-8, dτ_h_=1e-14, itMax=10^6);
+ice = input.ice_mask
+ϕ = output.ϕ; ϕ[ice_mask .== 0] .= NaN
+h = output.h; h[ice_mask .== 0] .= NaN
+Plt.plot(Plt.heatmap(output.ϕ', aspect_ratio=:equal, title="ϕ"),
+         Plt.heatmap(output.h', aspect_ratio=:equal, title="h"))
