@@ -143,7 +143,7 @@ end
 
 input, output = run_Antarctica(γ_ϕ=0.8, γ_h=0.9, dτ_ϕ_=1e-8, dτ_h_=1e-14, itMax=10^6);
 ice = input.ice_mask
-ϕ = output.ϕ; ϕ[ice_mask .== 0] .= NaN
-h = output.h; h[ice_mask .== 0] .= NaN
+ϕ = output.ϕ; ϕ[ice .== 0] .= NaN
+h = output.h; h[ice .== 0] .= NaN
 Plt.plot(Plt.heatmap(output.ϕ', aspect_ratio=:equal, title="ϕ"),
          Plt.heatmap(output.h', aspect_ratio=:equal, title="h"))

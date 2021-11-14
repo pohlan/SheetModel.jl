@@ -95,22 +95,22 @@ macro flux_y(ix, iy) esc(:(
 Calculate residual of ϕ; input coordinates on ϕ/h grid (but only defined on inner grid points 2:nx-1, 2:ny-1, due to d_eff).
 Needs access to ϕ, ϕ_old, h, H, ρi, g, k, α, β, small, dx_, dy_, min_dxy2, dt, dt_, Λ_m, hr, ϕ_0, n, Θ_PDE, Θ_vo, Θ_vo
 """
-macro Res_ϕ(ix, iy) esc(:(  ice_mask[ix, iy] * (                                                      # only calculate at points with non-zero ice thickness
+macro Res_ϕ(ix, iy) esc(:(  ice_mask[ix, iy] == 1 ? (                                                      # only calculate at points with non-zero ice thickness
                                                  - Θ_PDE * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) * dt_                                                            # dhe/dt = ev(ρw*g) * dϕ/dt
                                                  - ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) * dx_ + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) * dy_ )    # divergence
                                                  - (@vo($ix, $iy) - @vc($ix, $iy))                                                                          # dh/dt
                                                  + Λ_m[$ix, $iy]                                                                                            # source term Λ * m
-                                                )
+                                                ) : 0.0
 )) end
 
 """
 Calculate residual of h; input coordinates on ϕ/h grid.
 Needs access to ϕ, h, h_old, H, dt_, hr, ϕ_0, n, ρi, g, Θ_vo, Θ_vc
 """
-macro Res_h(ix, iy) esc(:(  ice_mask[ix, iy] * (
+macro Res_h(ix, iy) esc(:(  ice_mask[ix, iy] == 1 ? (
                                                  - (h[$ix, $iy] - h_old[$ix, $iy]) * dt_
                                                  + (@vo($ix, $iy) - @vc($ix, $iy))
-                                                )
+                                                ) : 0.0
 )) end
 
 ### KERNEL FUNCTIONS ###
@@ -177,9 +177,9 @@ Neumann boundary conditions are applied when calculating the hydraulic gradient 
         if bc_diric[ix, iy] == 1
             ϕ[ix, iy] = ϕ_0[ix, iy]
         end
-        if ice_mask[ix, iy] == 0
-            h[ix, iy] = 0
-        end
+        # if ice_mask[ix, iy] == 0
+        #     h[ix, iy] = 0
+        # end
     end
     return
 end
