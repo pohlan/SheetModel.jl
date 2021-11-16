@@ -130,11 +130,11 @@ Used for error calculation and only to be carried out every xx iterations, e.g. 
 @parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
                                               dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small)
     nx, ny = size(ϕ)
-    if (ix <= nx && iy <= ny)
+    if (1 < ix < nx && 1 < iy < ny)
         # residual of ϕ
         if  bc_diric[ix, iy] == 1    # position where dirichlet b.c. are imposed
             Res_ϕ[ix, iy] = 0.
-        elseif (1 < ix < nx && 1 < iy < ny)
+        else
             Res_ϕ[ix, iy] = @Res_ϕ(ix, iy)
         end
 
@@ -154,10 +154,10 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
     if (1 < ix < nx && 1 < iy < ny)
         # update ϕ
         dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
-        ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix, iy) * dϕ_dτ[ix, iy]
-        # dirichlet boundary conditions to pw = 0
         if bc_diric[ix, iy] == 1
-            ϕ2[ix, iy] = ϕ_0[ix, iy]
+            ϕ2[ix, iy] = ϕ_0[ix, iy]   # dirichlet boundary conditions to pw = 0
+        else
+            ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix, iy) * dϕ_dτ[ix, iy]
         end
 
         # update h
@@ -284,7 +284,7 @@ Run the model with scaled parameters.
             @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
                                      dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small,
                                      dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
-            #@infiltrate
+
             # pointer swap
             ϕ, ϕ2 = ϕ2, ϕ
             h, h2 = h2, h
