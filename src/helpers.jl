@@ -135,7 +135,7 @@ function scaling(p::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc
     h_ = hr
     xy_ = max(Lx, Ly)
 
-    H_ = mean(H)
+    H_ = maximum(H)
     zb_ = H_ / r_ρ
     m_ = mean(calc_m(1:size(H, 1), (1:size(H, 2))', 0.0)) # for time-dependent input: temporal peak
     ub_ = ub
