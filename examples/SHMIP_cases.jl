@@ -165,7 +165,6 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, update_h_onl
                             yrange   = (0.0, 20e3),
                             surf = (x, y) -> (6 *( sqrt(x+5e3) - sqrt(5e3) ) + 1 ),
                              bed  = (x, y) -> 0.0
-                            # bed = (x, y) -> x * 1e-3 * ((y-10e3)*2e-4)^2 # alternative bed topography varying in y-direction; no convergence
                             ),
                  "valley" => (xrange = (0.0, 6e3),
                               yrange = (-500.0, 500.0),
@@ -212,9 +211,6 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, update_h_onl
         xc,
         yc,
         calc_ϕ = (x, y) -> 100.0,
-        #calc_ϕ = (x, y) -> 1e6/lx * x,
-        #calc_ϕ = (x, y) -> exp(- 1e-2*(x-Lx/2)^2) * exp(-1e-2*(yc-Ly/2)^2),
-        #calc_ϕ = (x, y) -> rand(),
         calc_h = (x, y) -> 0.04
     )
 
