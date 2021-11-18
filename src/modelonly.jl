@@ -1,6 +1,4 @@
-using LazyArrays: Diff
 using Printf, Infiltrator
-import Plots; Plt = Plots
 
 # used grids:
 # - normal grid (i,j), size (nx, ny)
@@ -162,10 +160,10 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
         # update ϕ
-        dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
         if bc_diric[ix, iy] == 1
-            ϕ2[ix, iy] = ϕ_0[ix, iy]   # dirichlet boundary conditions to pw = 0
+            ϕ2[ix, iy] = 0.             # dirichlet boundary conditions
         else
+            dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
             ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix, iy) * dϕ_dτ[ix, iy]
         end
 
@@ -177,13 +175,13 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
 end
 
 """
-Apply Dirichlet boundary conditions to ϕ, at the moment pw(x=0) = 0.
+Apply Dirichlet boundary conditions to ϕ=0.
 Neumann boundary conditions are applied when calculating the hydraulic gradient (@dϕ_dx and @dϕ_dy macros).
 """
-@parallel_indices (ix,iy) function apply_bc!(ϕ, ϕ_0, bc_diric, h, ice_mask)
+@parallel_indices (ix,iy) function apply_bc!(ϕ, bc_diric)
     nx, ny = size(ϕ)
     if (ix <= nx && iy <= ny) && bc_diric[ix, iy] == 1
-        ϕ[ix, iy] = ϕ_0[ix, iy]
+        ϕ[ix, iy] = 0.
     end
     return
 end
@@ -248,7 +246,7 @@ Run the model with scaled parameters.
     qx, qy, d_eff, Λ_m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(nx, ny)
 
     # Apply boundary conditions
-    @parallel apply_bc!(ϕ_init, ϕ_0, bc_diric, h_init, ice_mask)
+    @parallel apply_bc!(ϕ_init, bc_diric)
 
     ϕ_old   = copy(ϕ_init)
     ϕ       = copy(ϕ_init)
@@ -261,8 +259,8 @@ Run the model with scaled parameters.
     iters      = Int64[]
     errs_ϕ     = Float64[]
     errs_h     = Float64[]
-    err_ϕ      = 0.
-    err_h      = 0.
+    err_ϕ      = 1e10
+    err_h      = 1e10
 
     # initiate time loop parameters
     t = 0.0; tstep=0; ittot = 0; t_tic = 0.
@@ -270,7 +268,6 @@ Run the model with scaled parameters.
     # Physical time loop
     while t<ttot
         iter = 0
-        err_ϕ, err_h = 1., 1.
 
         @parallel calc_Λ_m!(Λ_m, Λ, t)
 
@@ -278,7 +275,7 @@ Run the model with scaled parameters.
         while !(max(err_ϕ, err_h) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 
             if  err_h > 1e-3 && update_h_only # once update_h_only = false it cannot go back
-                dτ_h = 1e-3
+                dτ_h = 1e-8
             else
                 dτ_h = dτ_h_
                 update_h_only = false

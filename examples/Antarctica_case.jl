@@ -97,11 +97,11 @@ end
 # import Plots; Plt = Plots
 # topo[:surface] |> Plt.plot
 
-function run_Antarctica(;itMax=2*10^4, make_plot=false,
-    dt=1e9, tsteps=1, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6)      # parameters for pseudo-transient time stepping
+function run_Antarctica(;itMax=2*10^4, make_plot=false, update_h_only=false,
+    dt=1e9, tsteps=1, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6, thin=10)      # parameters for pseudo-transient time stepping
 
     # read data
-    topo, nc = read_bedmachine(50);
+    topo, nc = read_bedmachine(thin);
 
     # input parameters
     x, y              = Vector{Float64}.(Array.(dims(topo)))
@@ -132,7 +132,7 @@ function run_Antarctica(;itMax=2*10^4, make_plot=false,
 
     # call the SheetModel
     input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
-    output = runthemodel(;input...);
+    output = runthemodel(;input..., update_h_only);
 
     # plotting
     @unpack N, ϕ, h, qx, qy,
@@ -141,7 +141,7 @@ function run_Antarctica(;itMax=2*10^4, make_plot=false,
     return input, output
 end
 
-input, output = run_Antarctica(γ_ϕ=0.8, γ_h=0.9, dτ_ϕ_=1e-8, dτ_h_=1e-14, itMax=10^6);
+input, output = run_Antarctica(γ_ϕ=0.81, γ_h=0.86, dτ_ϕ_=8e-7, dτ_h_=1e-20, itMax=100*10^3, thin=50, update_h_only=true);
 ice = input.ice_mask
 ϕ = output.ϕ; ϕ[ice .== 0] .= NaN
 h = output.h; h[ice .== 0] .= NaN
