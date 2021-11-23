@@ -1,4 +1,3 @@
-using LazyArrays: Diff
 using Printf, Infiltrator
 import Plots; Plt = Plots
 
@@ -130,11 +129,11 @@ Used for error calculation and only to be carried out every xx iterations, e.g. 
 @parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
                                               dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small)
     nx, ny = size(ϕ)
-    if (ix <= nx && iy <= ny)
+    if (1 < ix < nx && 1 < iy < ny)
         # residual of ϕ
         if  bc_diric[ix, iy] == 1    # position where dirichlet b.c. are imposed
             Res_ϕ[ix, iy] = 0.
-        elseif (1 < ix < nx && 1 < iy < ny)
+        else
             Res_ϕ[ix, iy] = @Res_ϕ(ix, iy)
         end
 
@@ -144,42 +143,46 @@ Used for error calculation and only to be carried out every xx iterations, e.g. 
     return
 end
 
-"""
-Update the fields of ϕ and h using the pseudo-transient method with damping.
-"""
-@parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                                  dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small,
-                                                  dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
+@parallel_indices (ix, iy) function update_h_only!(ϕ, h, h2, h_old, ice_mask, k, α, β, dt_, hr, Θ_vo, Θ_vc, g, ρi, n, H,  ϕ_0, small, dh_dτ, γ_h, dτ_h)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
-        # update ϕ
-        dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
-        ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix, iy) * dϕ_dτ[ix, iy]
-        # dirichlet boundary conditions to pw = 0
-        if bc_diric[ix, iy] == 1
-            ϕ2[ix, iy] = ϕ_0[ix, iy]
-        end
-
-        # update h
         dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
-        h2[ix, iy] = h[ix, iy] + dτ_h_ * dh_dτ[ix, iy]
+        h2[ix, iy] = h[ix, iy] + dτ_h * dh_dτ[ix, iy]
     end
     return
 end
 
 """
-Apply Dirichlet boundary conditions to ϕ, at the moment pw(x=0) = 0.
+Update the fields of ϕ and h using the pseudo-transient method with damping.
+"""
+@parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
+                                                  dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small,
+                                                  dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
+    nx, ny = size(ϕ)
+    if (1 < ix < nx && 1 < iy < ny)
+        # update ϕ
+        if bc_diric[ix, iy] == 1
+            ϕ2[ix, iy] = 0.             # dirichlet boundary conditions
+        else
+            dϕ_dτ[ix, iy] = @Res_ϕ(ix, iy) + γ_ϕ * dϕ_dτ[ix, iy]
+            ϕ2[ix, iy] = ϕ[ix, iy] + @dτ_ϕ(ix, iy) * dϕ_dτ[ix, iy]
+        end
+
+        # update h
+        dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
+        h2[ix, iy] = h[ix, iy] + dτ_h * dh_dτ[ix, iy]
+    end
+    return
+end
+
+"""
+Apply Dirichlet boundary conditions to ϕ=0.
 Neumann boundary conditions are applied when calculating the hydraulic gradient (@dϕ_dx and @dϕ_dy macros).
 """
-@parallel_indices (ix,iy) function apply_bc!(ϕ, ϕ_0, bc_diric, h, ice_mask) # TODO: don't hard-wire, give bc as input parameters
+@parallel_indices (ix,iy) function apply_bc!(ϕ, bc_diric)
     nx, ny = size(ϕ)
-    if (ix <= nx && iy <= ny)
-        if bc_diric[ix, iy] == 1
-            ϕ[ix, iy] = ϕ_0[ix, iy]
-        end
-        # if ice_mask[ix, iy] == 0
-        #     h[ix, iy] = 0
-        # end
+    if (ix <= nx && iy <= ny) && bc_diric[ix, iy] == 1
+        ϕ[ix, iy] = 0.
     end
     return
 end
@@ -225,7 +228,7 @@ end
 """
 Run the model with scaled parameters.
 """
-@views function runthemodel_scaled(params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
+@views function runthemodel_scaled(params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only)
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, dx, dy, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
 
@@ -244,7 +247,7 @@ Run the model with scaled parameters.
     qx, qy, d_eff, Λ_m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h = array_allocation(nx, ny)
 
     # Apply boundary conditions
-    @parallel apply_bc!(ϕ_init, ϕ_0, bc_diric, h_init, ice_mask)
+    @parallel apply_bc!(ϕ_init, bc_diric)
 
     ϕ_old   = copy(ϕ_init)
     ϕ       = copy(ϕ_init)
@@ -257,8 +260,8 @@ Run the model with scaled parameters.
     iters      = Int64[]
     errs_ϕ     = Float64[]
     errs_h     = Float64[]
-    err_ϕ      = 0.
-    err_h      = 0.
+    err_ϕ      = 1e10
+    err_h      = 1e10
 
     # initiate time loop parameters
     t = 0.0; tstep=0; ittot = 0; t_tic = 0.
@@ -266,35 +269,41 @@ Run the model with scaled parameters.
     # Physical time loop
     while t<ttot
         iter = 0
-        err_ϕ, err_h = 2*tol, 2*tol
 
         @parallel calc_Λ_m!(Λ_m, Λ, t)
+
         # Pseudo-transient iteration
         while !(max(err_ϕ, err_h) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
+
+            if  err_h > 1e-3 && update_h_only # once update_h_only = false it cannot go back
+                dτ_h = 1e-8
+            else
+                dτ_h = dτ_h_
+                update_h_only = false
+            end
 
             # don't consider first ten iterations for performance measure
             if (iter == 10) t_tic = Base.time() end
 
-            # update d_eff (the bottleneck in performance, only do it every 10 iterations)
-            # but it has to be done in a seperate kernel to ensure every grid point is accessing the same version of ϕ
-            #if iter % 1000 == 0.
-                @parallel update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Θ_vo, Θ_vc, hr, g, ρi, n, H, ϕ_0, small, bc_no_xflux, bc_no_yflux,)
-            #end
-            # update ϕ and h
-            @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                     dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small,
-                                     dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h_, dτ_ϕ_)
-            #@infiltrate
+            if update_h_only
+                @parallel update_h_only!(ϕ, h, h2, h_old, ice_mask, k, α, β, dt_, hr, Θ_vo, Θ_vc, g, ρi, n, H,  ϕ_0, small, dh_dτ, γ_h, dτ_h)
+            else
+                # update ϕ and h
+                @parallel update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Θ_vo, Θ_vc, hr, g, ρi, n, H, ϕ_0, small, bc_no_xflux, bc_no_yflux)
+                @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
+                                         dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small,
+                                         dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
+            end
+
             # pointer swap
             ϕ, ϕ2 = ϕ2, ϕ
             h, h2 = h2, h
 
             iter += 1
 
-            # determine the errors (only consider points where the ice thickness is > 0)
-
-            if iter % 1000 == 0 && iter > 10^4 && itMax > 10^4     # only calculate errors every 1000 time steps
-                                                    # and if itMax is high, i.e. if convergence is the goal
+            # determine the errors
+            if (update_h_only || iter % 1000 == 0) && itMax > 10^4     # only calculate errors every 1000 time steps
+                                                                       # and if itMax is high, i.e. if convergence is the goal
                 # update the residual arrays
                 @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
                                      dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small)
@@ -316,16 +325,12 @@ Run the model with scaled parameters.
         end
         ittot += iter; tstep += 1; t += dt
 
-        #if mod(tstep, printtime) == 0
-        #    @printf("time step = %d, number of iterations = %d \n", tstep, iter)
-        #end
-
         @parallel old2new!(ϕ, ϕ_old, h, h_old)
     end
 
     # Perfomance measures
     t_toc = Base.time() - t_tic                # execution time, s
-    A_eff = (5+10)/1e9*nx*ny*sizeof(Float64)  # effective main memory access per iteration [GB];
+    A_eff = (5+10)/1e9*nx*ny*sizeof(Float64)   # effective main memory access per iteration [GB];
                                                # 5 write arrays (dϕ_dτ, ϕ2, dh_dτ, h2, d_eff)
                                                # 10 read arrays (ϕ, ϕ_old, dϕ_dτ, h, h_old, dh_dτ, H, zb, m, d_eff)
     t_it  = t_toc/(ittot-10)                   # execution time per iteration, s
@@ -343,7 +348,7 @@ end
 """
 Scale the parameters and call the model run function.
 """
-@views function runthemodel(;params_struct::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
+@views function runthemodel(;params_struct::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only)
     scaled_params, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, ϕ_, N_, h_, q_ = scaling(params_struct, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
     calc_Λ_m! = @parallel_indices (ix,iy)   function calc_Λ_m!(Λ_m, Λ, t)
                                                 if (ix <= size(Λ_m, 1) && iy <= size(Λ_m, 2))
@@ -351,7 +356,7 @@ Scale the parameters and call the model run function.
                                                 end
                                                 return
                                             end
-    output = runthemodel_scaled(scaled_params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
+    output = runthemodel_scaled(scaled_params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only)
     output_descaled = descale(output, N_, ϕ_, h_, q_)
     return output_descaled
 end

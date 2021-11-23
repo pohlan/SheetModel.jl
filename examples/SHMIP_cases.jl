@@ -113,7 +113,7 @@ function plot_output(xc, yc, H, N, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs
     legend()
 end
 
-function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false,
+function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, update_h_only=true,
                    dt=1e9, tsteps=1, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6)      # parameters for pseudo-transient time stepping
 
     # suite A: use different steady and spatially uniform water inputs
@@ -165,7 +165,6 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false,
                             yrange   = (0.0, 20e3),
                             surf = (x, y) -> (6 *( sqrt(x+5e3) - sqrt(5e3) ) + 1 ),
                              bed  = (x, y) -> 0.0
-                            # bed = (x, y) -> x * 1e-3 * ((y-10e3)*2e-4)^2 # alternative bed topography varying in y-direction; no convergence
                             ),
                  "valley" => (xrange = (0.0, 6e3),
                               yrange = (-500.0, 500.0),
@@ -212,9 +211,6 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false,
         xc,
         yc,
         calc_ϕ = (x, y) -> 100.0,
-        #calc_ϕ = (x, y) -> 1e6/lx * x,
-        #calc_ϕ = (x, y) -> exp(- 1e-2*(x-Lx/2)^2) * exp(-1e-2*(yc-Ly/2)^2),
-        #calc_ϕ = (x, y) -> rand(),
         calc_h = (x, y) -> 0.04
     )
 
@@ -226,7 +222,7 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false,
     # call the SheetModel
     input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m,
                              ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
-    output = runthemodel(;input...);
+    output = runthemodel(;input..., update_h_only);
 
     # plotting
     @unpack N, ϕ, h, qx, qy,
