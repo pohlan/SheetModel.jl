@@ -43,13 +43,13 @@ pos(x) = x > 0.0 ? x : 0.0
 # Determine dx or dy from Lx and dx or Ly and dy
 grid_size(Lx, nx) = Lx / (nx-3)
 
-function plot_output(xc, yc, H, N, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
+function plot_output(xc, yc, H, ϕ, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
     pygui(true)
 
     # (I) ϕ and h
     x_plt = [xc[1]; xc .+ (xc[2]-xc[1])]
     y_plt = [yc[1]; yc .+ (yc[2]-yc[1])]
-    N[H .== 0.0] .= NaN
+    ϕ[H .== 0.0] .= NaN
     h[H .== 0.0] .= NaN
 
     figure()
@@ -59,48 +59,48 @@ function plot_output(xc, yc, H, N, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs
     colorbar()
     title("h")
     subplot(2, 2, 2)
-    pcolor(x_plt, y_plt, N')#, edgecolors="black")
+    pcolor(x_plt, y_plt, ϕ')#, edgecolors="black")
     colorbar()
-    title("N")
+    title("ϕ")
     # (Ib) cross-sections of ϕ and h
     subplot(2, 2, 3)
-    ind = size(N,2)÷2
+    ind = size(ϕ ,2)÷2
     plot(xc, h[:, ind])
     title(join(["h at y = ", string(round(yc[ind], digits=1))]))
     subplot(2, 2, 4)
-    plot(xc, N[:, ind])
-    title(join(["N at y = ", string(round(yc[ind], digits=1))]))
+    plot(xc, ϕ[:, ind])
+    title(join(["ϕ at y = ", string(round(yc[ind], digits=1))]))
 
     # (II) fluxes
     # don't show any value outside of glacier domain
-    qx[H[1:end-1, :] .== 0.] .= NaN
-    qx[H[2:end, :]   .== 0.] .= NaN
-    qy[H[:, 1:end-1] .== 0.] .= NaN
-    qy[H[:, 2:end]   .== 0.] .= NaN
+    # qx[H[1:end-1, :] .== 0.] .= NaN
+    # qx[H[2:end, :]   .== 0.] .= NaN
+    # qy[H[:, 1:end-1] .== 0.] .= NaN
+    # qy[H[:, 2:end]   .== 0.] .= NaN
 
-    figure()
-    subplot(1, 2, 1)
-    pcolor(qx')
-    colorbar()
-    title("qx (m/s)")
-    subplot(1, 2, 2)
-    pcolor(qy')
-    colorbar()
-    title("qy (m/s)")
+    # figure()
+    # subplot(1, 2, 1)
+    # pcolor(qx')
+    # colorbar()
+    # title("qx (m/s)")
+    # subplot(1, 2, 2)
+    # pcolor(qy')
+    # colorbar()
+    # title("qy (m/s)")
 
     # (III) residual fields
-    Res_ϕ[H .== 0.0] .= NaN
-    Res_h[H .== 0.0] .= NaN
+    # Res_ϕ[H .== 0.0] .= NaN
+    # Res_h[H .== 0.0] .= NaN
 
-    figure()
-    subplot(1, 2, 1)
-    pcolormesh(Res_h')
-    colorbar()
-    title("err_h")
-    subplot(1, 2, 2)
-    pcolormesh(Res_ϕ')
-    colorbar()
-    title("err_ϕ")
+    # figure()
+    # subplot(1, 2, 1)
+    # pcolormesh(Res_h')
+    # colorbar()
+    # title("err_h")
+    # subplot(1, 2, 2)
+    # pcolormesh(Res_ϕ')
+    # colorbar()
+    # title("err_ϕ")
 
     # (IV) iteration vs. error
     figure()
@@ -229,7 +229,7 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, update_h_onl
             ittot, iters, Res_ϕ, Res_h, errs_ϕ, errs_h = output
 
     if make_plot
-        plot_output(xc, yc, H, N, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
+        plot_output(xc, yc, H, ϕ, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
     end
 
     return (;input, SHMIP_case=test_case), output

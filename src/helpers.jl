@@ -44,7 +44,7 @@ Create struct including all model parameters, physical and numerical
     k     = 0.005             # sheet conductivity, m^(7/4)kg^(-1/2)
     n     = 3.0               # Glen's flow law exponent
     A     = 3.375e-24         # ice flow constant, Pa^(-n)s^(-1)
-    ev    = 0.0               # englacial void ratio; SHMIP: 0 for ice-sheet, 1e-3 for valley glacier
+    ev    = 1e-6               # englacial void ratio; SHMIP: 0 for ice-sheet, 1e-3 for valley glacier
     lr    = 2.0               # horizontal cavity spacing, m
     hr    = 0.1               # bedrock bump height, m
     ub    = 1e-6              # basal sliding speed, m/s
@@ -135,7 +135,7 @@ function scaling(p::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc
     h_ = hr
     xy_ = max(Lx, Ly)
 
-    H_ = mean(H)
+    H_ = maximum(H)
     zb_ = H_ / r_ρ
     m_ = mean(calc_m(1:size(H, 1), (1:size(H, 2))', 0.0)) # for time-dependent input: temporal peak
     ub_ = ub

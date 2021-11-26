@@ -94,7 +94,7 @@ macro flux_y(ix, iy) esc(:(
 Calculate residual of ϕ; input coordinates on ϕ/h grid (but only defined on inner grid points 2:nx-1, 2:ny-1, due to d_eff).
 Needs access to ϕ, ϕ_old, h, H, ρi, g, k, α, β, small, dx_, dy_, min_dxy2, dt, dt_, Λ_m, hr, ϕ_0, n, Θ_PDE, Θ_vo, Θ_vo
 """
-macro Res_ϕ(ix, iy) esc(:(  ice_mask[ix, iy] == 1 ? (                                                      # only calculate at points with non-zero ice thickness
+macro Res_ϕ(ix, iy) esc(:(  ice_mask[$ix, $iy] == 1 ? (                                                      # only calculate at points with non-zero ice thickness
                                                  - Θ_PDE * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) * dt_                                                            # dhe/dt = ev(ρw*g) * dϕ/dt
                                                  - ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) * dx_ + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) * dy_ )    # divergence
                                                  - (@vo($ix, $iy) - @vc($ix, $iy))                                                                          # dh/dt
@@ -106,9 +106,14 @@ macro Res_ϕ(ix, iy) esc(:(  ice_mask[ix, iy] == 1 ? (                          
 Calculate residual of h; input coordinates on ϕ/h grid.
 Needs access to ϕ, h, h_old, H, dt_, hr, ϕ_0, n, ρi, g, Θ_vo, Θ_vc
 """
-macro Res_h(ix, iy) esc(:(  ice_mask[ix, iy] == 1 ? (
+macro Res_h(ix, iy) esc(:(  ice_mask[$ix, $iy] == 1 ? (
                                                  - (h[$ix, $iy] - h_old[$ix, $iy]) * dt_
                                                  + (@vo($ix, $iy) - @vc($ix, $iy))
+                                                 + ev_ratio[$ix, $iy] * (
+                                                    - ( (@flux_x($ix, $iy) - @flux_x($ix-1, $iy)) * dx_ + (@flux_y($ix, $iy) - @flux_y($ix, $iy-1)) * dy_ )    # divergence
+                                                    - (@vo($ix, $iy) - @vc($ix, $iy))                                                                          # dh/dt
+                                                    + Λ_m[$ix, $iy]
+                                                 )
                                                 ) : 0.0
 )) end
 
@@ -127,7 +132,7 @@ Calculate residuals of ϕ and h and store them in arrays.
 Used for error calculation and only to be carried out every xx iterations, e.g. every thousand.
 """
 @parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                              dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small)
+                                              dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, ev_ratio, g, ρi, n, H, ϕ_0, small)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
         # residual of ϕ
@@ -143,7 +148,7 @@ Used for error calculation and only to be carried out every xx iterations, e.g. 
     return
 end
 
-@parallel_indices (ix, iy) function update_h_only!(ϕ, h, h2, h_old, ice_mask, k, α, β, dt_, hr, Θ_vo, Θ_vc, g, ρi, n, H,  ϕ_0, small, dh_dτ, γ_h, dτ_h)
+@parallel_indices (ix, iy) function update_h_only!(ϕ, h, h2, h_old, ice_mask, k, α, β, dt_, hr, Θ_vo, Θ_vc, ev_ratio, g, ρi, n, H,  ϕ_0, small, dh_dτ, γ_h, dτ_h)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
         dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
@@ -156,7 +161,7 @@ end
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
 @parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                                  dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small,
+                                                  dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, ev_ratio, g, ρi, n, H, ϕ_0, small,
                                                   dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
@@ -170,7 +175,7 @@ Update the fields of ϕ and h using the pseudo-transient method with damping.
 
         # update h
         dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
-        h2[ix, iy] = h[ix, iy] + dτ_h * dh_dτ[ix, iy]
+        h2[ix, iy] = max(h[ix, iy] + dτ_h * dh_dτ[ix, iy], 0.0)
     end
     return
 end
@@ -232,12 +237,15 @@ Run the model with scaled parameters.
     @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, dx, dy, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
 
+    ev_num = 0.1
+
     # Pre-calculate reciprocals for better performance
     min_dxy2 = min(dx, dy)^2
     dx_, dy_, dt_, min_dxy2_ = (dx, dy, dt, min_dxy2).^(-1)
 
     # Collapse some factors for better performance
-    Θ_PDE = ev / (ρw * g)
+    Θ_PDE = (ev + ev_num) / (ρw * g)
+    ev_ratio = (bc_diric .== 0) .* ev_num ./ (ev + ev_num)
     Θ_vo  = Σ * ub / lr     # has to be put differently if ub and lr are space and/or time dependent
     Θ_vc  = Γ * 2 / n^n
     ϕ_0   = ρw * g * zb     # elevation potential; zb is never used in another context
@@ -286,12 +294,12 @@ Run the model with scaled parameters.
             if (iter == 10) t_tic = Base.time() end
 
             if update_h_only
-                @parallel update_h_only!(ϕ, h, h2, h_old, ice_mask, k, α, β, dt_, hr, Θ_vo, Θ_vc, g, ρi, n, H,  ϕ_0, small, dh_dτ, γ_h, dτ_h)
+                @parallel update_h_only!(ϕ, h, h2, h_old, ice_mask, k, α, β, dt_, hr, Θ_vo, Θ_vc, ev_ratio, g, ρi, n, H,  ϕ_0, small, dh_dτ, γ_h, dτ_h)
             else
                 # update ϕ and h
                 @parallel update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Θ_vo, Θ_vc, hr, g, ρi, n, H, ϕ_0, small, bc_no_xflux, bc_no_yflux)
                 @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                         dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small,
+                                         dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, ev_ratio, g, ρi, n, H, ϕ_0, small,
                                          dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
             end
 
@@ -306,7 +314,7 @@ Run the model with scaled parameters.
                                                                        # and if itMax is high, i.e. if convergence is the goal
                 # update the residual arrays
                 @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                     dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small)
+                                     dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, ev_ratio, g, ρi, n, H, ϕ_0, small)
 
                 # residual error
                 err_ϕ = norm(Res_ϕ) / sqrt(length(Res_ϕ))
