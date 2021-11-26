@@ -113,7 +113,7 @@ function plot_output(xc, yc, H, ϕ, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, err
     legend()
 end
 
-function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, update_h_only=true,
+function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, update_h_only=true, ev_num=0.1,
                    dt=1e9, tsteps=1, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6)      # parameters for pseudo-transient time stepping
 
     # suite A: use different steady and spatially uniform water inputs
@@ -220,7 +220,7 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, update_h_onl
     bc_no_yflux = falses(nx, ny-1); bc_no_yflux[:, [1, end]] .= true
 
     # call the SheetModel
-    input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m,
+    input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ev_num, ϕ_init, h_init, calc_m,
                              ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
     output = runthemodel(;input..., update_h_only);
 

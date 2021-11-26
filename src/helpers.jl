@@ -16,7 +16,7 @@ end
 
 
 
-function make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
+function make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ev_num, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
     # make outermost rows and columns to ghost points
     ghost!(H)
     ghost!(zb)
@@ -25,7 +25,7 @@ function make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, d
     ghost!(ice_mask)
 
     # struct of input parameters
-    params_struct = model_input(;H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_)
+    params_struct = model_input(;H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ev_num)
 
     return (;params_struct, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
 end
@@ -36,18 +36,19 @@ Create struct including all model parameters, physical and numerical
 """
 @with_kw struct model_input{T} @deftype Float64
     # Physics
-    g     = 9.81              # gravitational acceleration, m/s^2
-    ρw    = 1000.0            # water density, kg/m^3
-    ρi    = 910.0             # ice density, kg/m^3
-    α     = 1.25              # first sheet flow exponent
-    β     = 1.5               # second sheet flow exponent
-    k     = 0.005             # sheet conductivity, m^(7/4)kg^(-1/2)
-    n     = 3.0               # Glen's flow law exponent
-    A     = 3.375e-24         # ice flow constant, Pa^(-n)s^(-1)
-    ev    = 1e-6               # englacial void ratio; SHMIP: 0 for ice-sheet, 1e-3 for valley glacier
-    lr    = 2.0               # horizontal cavity spacing, m
-    hr    = 0.1               # bedrock bump height, m
-    ub    = 1e-6              # basal sliding speed, m/s
+    g      = 9.81              # gravitational acceleration, m/s^2
+    ρw     = 1000.0            # water density, kg/m^3
+    ρi     = 910.0             # ice density, kg/m^3
+    α      = 1.25              # first sheet flow exponent
+    β      = 1.5               # second sheet flow exponent
+    k      = 0.005             # sheet conductivity, m^(7/4)kg^(-1/2)
+    n      = 3.0               # Glen's flow law exponent
+    A      = 3.375e-24         # ice flow constant, Pa^(-n)s^(-1)
+    ev     = 1e-6              # englacial void ratio; SHMIP: 0 for ice-sheet, 1e-3 for valley glacier
+    ev_num = 1e-1              # regularisation void ratio
+    lr     = 2.0               # horizontal cavity spacing, m
+    hr     = 0.1               # bedrock bump height, m
+    ub     = 1e-6              # basal sliding speed, m/s
     H::T                      # ice thickness, m
     zb::T                     # bed elevation, m
 

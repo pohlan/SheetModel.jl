@@ -234,10 +234,8 @@ end
 Run the model with scaled parameters.
 """
 @views function runthemodel_scaled(params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only)
-    @unpack ev, g, ρw, ρi, n, A, Σ, Γ, Λ, dx, dy, k, α, β,
+    @unpack ev, ev_num, g, ρw, ρi, n, A, Σ, Γ, Λ, dx, dy, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
-
-    ev_num = 0.1
 
     # Pre-calculate reciprocals for better performance
     min_dxy2 = min(dx, dy)^2
