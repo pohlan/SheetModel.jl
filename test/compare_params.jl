@@ -26,4 +26,4 @@ for (col, γ) in enumerate(γs)
     end
 end
 
-save("params_comp_nx" * string(nx) * "_ny" * string(ny) * ".jld2", "wall_time", wall_time)
+jldsave("params_comp_nx" * string(nx) * "_ny" * string(ny) * ".jld2"; γs, dτ_hs, wall_time)
