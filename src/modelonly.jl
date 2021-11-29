@@ -235,7 +235,7 @@ end
 """
 Run the model with scaled parameters.
 """
-@views function runthemodel_scaled(params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only)
+@views function runthemodel_scaled(params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only, do_print, warmup)
     @unpack ev, ev_num, g, ρw, ρi, n, A, Σ, Γ, Λ, dx, dy, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
 
@@ -281,7 +281,7 @@ Run the model with scaled parameters.
         @parallel calc_Λ_m!(Λ_m, Λ, t)
 
         # Pseudo-transient iteration
-        while !(max(err_ϕ, err_h) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
+        while !(max(err_ϕ, err_h) < tol) && iter<itMax && !any(isnan.([err_ϕ, err_h]))
 
             if  err_h > 1e-3 && update_h_only # once update_h_only = false it cannot go back
                 dτ_h = 1e-3
@@ -291,7 +291,7 @@ Run the model with scaled parameters.
             end
 
             # don't consider first ten iterations for performance measure
-            if (iter == 10) t_tic = Base.time() end
+            if (iter == warmup) t_tic = Base.time() end
 
             if update_h_only
                 @parallel update_h_only!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
@@ -327,7 +327,7 @@ Run the model with scaled parameters.
                 append!(errs_ϕ, err_ϕ)
                 append!(errs_h, err_h)
 
-                @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ, err_h)
+                if do_print @printf("iterations = %d, error ϕ = %1.2e, error h = %1.2e \n", iter, err_ϕ, err_h) end
 
             end
 
@@ -345,7 +345,7 @@ Run the model with scaled parameters.
                                                # 10 read arrays (ϕ, ϕ_old, dϕ_dτ, h, h_old, dh_dτ, H, zb, m, d_eff)
     t_it  = t_toc/(ittot-10)                   # execution time per iteration, s
     T_eff = A_eff/t_it                         # effective memory throughput, GB/s
-    @printf("Time = %1.3f sec, T_eff = %1.1f GB/s, iterations total = %d, (nx, ny) = (%d, %d)\n", t_toc, round(T_eff, sigdigits=3), ittot, nx, ny)
+    if do_print @printf("Time = %1.3f sec, T_eff = %1.1f GB/s, iterations total = %d, (nx, ny) = (%d, %d)\n", t_toc, round(T_eff, sigdigits=3), ittot, nx, ny) end
 
     # calculate N, qx and qy as output parameters
     @parallel output_params!(N, qx, qy, ϕ, h, d_eff, ρi, g, H, ϕ_0, k, α, β, dx_, dy_, small, bc_no_xflux, bc_no_yflux,)
@@ -358,7 +358,7 @@ end
 """
 Scale the parameters and call the model run function.
 """
-@views function runthemodel(;params_struct::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only)
+@views function runthemodel(;params_struct::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only, do_print=true, warmup=10)
     scaled_params, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, ϕ_, N_, h_, q_ = scaling(params_struct, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
     calc_Λ_m! = @parallel_indices (ix,iy)   function calc_Λ_m!(Λ_m, Λ, t)
                                                 if (ix <= size(Λ_m, 1) && iy <= size(Λ_m, 2))
@@ -366,7 +366,7 @@ Scale the parameters and call the model run function.
                                                 end
                                                 return
                                             end
-    output = runthemodel_scaled(scaled_params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only)
+    output = runthemodel_scaled(scaled_params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only, do_print, warmup)
     output_descaled = descale(output, N_, ϕ_, h_, q_)
     return output_descaled
 end

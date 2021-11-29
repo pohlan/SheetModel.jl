@@ -16,7 +16,7 @@ end
 
 
 
-function make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ev_num, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
+function make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, tol, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ev_num, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
     # make outermost rows and columns to ghost points
     ghost!(H)
     ghost!(zb)
@@ -25,7 +25,7 @@ function make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, d
     ghost!(ice_mask)
 
     # struct of input parameters
-    params_struct = model_input(;H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ev_num)
+    params_struct = model_input(;H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, tol, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ev_num)
 
     return (;params_struct, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
 end
