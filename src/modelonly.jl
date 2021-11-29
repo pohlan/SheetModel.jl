@@ -77,7 +77,7 @@ Calculate flux in x-direction using an upstream scheme; input coordinates on qx 
 Needs access to k, h, α, β, small, ϕ, dx_, dy_, H
 """
 macro flux_x(ix, iy) esc(:(
-    - d_eff[$ix+1, $iy] * max(@dϕ_dx($ix, $iy), 0) +   # flux in negative x-direction
+    - d_eff[$ix+1, $iy] * max(@dϕ_dx($ix, $iy), 0.) +   # flux in negative x-direction
     - d_eff[$ix,   $iy] * min(@dϕ_dx($ix, $iy), 0.)    # flux in positive x-direction
     )) end
 """
@@ -137,18 +137,20 @@ Used for error calculation and only to be carried out every xx iterations, e.g. 
     if (1 < ix < nx && 1 < iy < ny)
         # residual of ϕ
         if  bc_diric[ix, iy] == 1    # position where dirichlet b.c. are imposed
-            Res_ϕ[ix, iy] = 0.
+            Res_ϕ[ix-1, iy-1] = 0.
         else
-            Res_ϕ[ix, iy] = @Res_ϕ(ix, iy)
+            Res_ϕ[ix-1, iy-1] = @Res_ϕ(ix, iy)
         end
 
         # residual of h
-        Res_h[ix, iy] = @Res_h(ix, iy)
+        Res_h[ix-1, iy-1] = @Res_h(ix, iy)
     end
     return
 end
 
-@parallel_indices (ix, iy) function update_h_only!(ϕ, h, h2, h_old, ice_mask, k, α, β, dt_, hr, Θ_vo, Θ_vc, ev_ratio, g, ρi, n, H,  ϕ_0, small, dh_dτ, γ_h, dτ_h)
+@parallel_indices (ix, iy) function update_h_only!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
+                                                   dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, ev_ratio, g, ρi, n, H, ϕ_0, small,
+                                                   dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
         dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
@@ -282,7 +284,7 @@ Run the model with scaled parameters.
         while !(max(err_ϕ, err_h) < tol) && iter<itMax # with the ! the loop also continues for NaN values of err
 
             if  err_h > 1e-3 && update_h_only # once update_h_only = false it cannot go back
-                dτ_h = 1e-8
+                dτ_h = 1e-3
             else
                 dτ_h = dτ_h_
                 update_h_only = false
@@ -292,7 +294,9 @@ Run the model with scaled parameters.
             if (iter == 10) t_tic = Base.time() end
 
             if update_h_only
-                @parallel update_h_only!(ϕ, h, h2, h_old, ice_mask, k, α, β, dt_, hr, Θ_vo, Θ_vc, ev_ratio, g, ρi, n, H,  ϕ_0, small, dh_dτ, γ_h, dτ_h)
+                @parallel update_h_only!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
+                                         dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, ev_ratio, g, ρi, n, H, ϕ_0, small,
+                                         dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
             else
                 # update ϕ and h
                 @parallel update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Θ_vo, Θ_vc, hr, g, ρi, n, H, ϕ_0, small, bc_no_xflux, bc_no_yflux)

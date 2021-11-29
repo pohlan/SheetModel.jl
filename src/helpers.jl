@@ -103,15 +103,15 @@ Broadcast.broadcastable(out::model_output) = Ref(out)
 Pre-allocate arrays
 """
 function array_allocation(nx, ny)
-    qx     = @zeros(nx-1, ny)
-    qy     = @zeros(nx, ny-1)
-    d_eff  = @zeros(nx, ny)
-    Λ_m    = @zeros(nx, ny)
-    N      = @zeros(nx, ny)
-    dϕ_dτ  = @zeros(nx, ny)
-    dh_dτ  = @zeros(nx, ny)
-    Res_ϕ  = @zeros(nx, ny)
-    Res_h  = @zeros(nx, ny)
+    qx     = @zeros(nx-1, ny  )
+    qy     = @zeros(nx,   ny-1)
+    d_eff  = @zeros(nx,   ny  )
+    Λ_m    = @zeros(nx,   ny  )
+    N      = @zeros(nx,   ny  )
+    dϕ_dτ  = @zeros(nx,   ny  )
+    dh_dτ  = @zeros(nx,   ny  )
+    Res_ϕ  = @zeros(nx-2, ny-2)
+    Res_h  = @zeros(nx-2, ny-2)
     return qx, qy, d_eff, Λ_m, N, dϕ_dτ, dh_dτ, Res_ϕ, Res_h
 end
 
