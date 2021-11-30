@@ -5,8 +5,8 @@ using Printf, JLD2
 include("../examples/SHMIP_cases.jl")
 
 nx, ny = 64, 32
-γs = 0.8:0.01:0.9
-dτ_hs = 5e-6:1e-6:2.5e-5
+γs = 0.7:0.01:0.92
+dτ_hs = 1e-6:1e-6:3e-5
 
 wall_time = zeros(length(γs), length(dτ_hs))
 run_SHMIP(; nx, ny, γ_ϕ= 0.9, γ_h=0.9, dτ_h_=7e-6, tol=1e-3, do_print=false); # "warming up" to make also the first run representative
@@ -26,4 +26,4 @@ for (col, γ) in enumerate(γs)
     end
 end
 
-jldsave("params_comp_nx" * string(nx) * "_ny" * string(ny) * ".jld2"; γs, dτ_hs, wall_time)
+jldsave("test/params_comp_nx" * string(nx) * "_ny" * string(ny) * ".jld2"; γs, dτ_hs, wall_time)
