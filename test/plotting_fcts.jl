@@ -7,27 +7,27 @@ rcParams["font.size"] = 24
 Plot a map of wall time vs damping (γ) and pseudo-time step (dτ_h)
 """
 function plot_para_comp()
+    fig, axs = subplots(1, 2, figsize=(23,10))
+    fig.subplots_adjust(hspace=0.3, wspace=0.5)
+    for (n, dof) in enumerate(["nx64_ny32", "nx128_ny64"])
+        γ, dτ_h, wt = load("test/params_comp_" * dof * ".jld2","γs", "dτ_hs", "wall_time")
 
-    γ, dτ_h, wt = load("test/params_comp_nx64_ny32.jld2","γs", "dτ_hs", "wall_time")
-    wt_norm = wt ./ maximum(wt[.!isnan.(wt)])
-    wt_min  = minimum(wt_norm[.!isnan.(wt_norm)])
+        dγ       = γ[2]-γ[1]
+        dτ       = dτ_h[2] - dτ_h[1]
+        γ_plt    = [γ[1] - 0.5dγ; γ .+ 0.5dγ]
+        dτ_h_plt = [dτ_h[1] - 0.5dτ; dτ_h .+ 0.5dτ]
 
-    dγ       = γ[2]-γ[1]
-    dτ       = dτ_h[2] - dτ_h[1]
-    γ_plt    = [γ[1] - 0.5dγ; γ .+ 0.5dγ]
-    dτ_h_plt = [dτ_h[1] - 0.5dτ; dτ_h .+ 0.5dτ]
-    figure(figsize=(15, 10))
-    pcolormesh(γ_plt, dτ_h_plt, wt_norm', cmap="viridis_r")
-    xlabel(L"Damping parameter $γ$ = $γ_h$ = $γ_ϕ$", labelpad=20)
-    ylabel(L"Pseudo-time step $dτ_h$ (s)", labelpad=20)
-    cb = colorbar(cmap="viridis")
-    cb.set_ticks([wt_min, 1])
-    cb.set_ticklabels(["fast", "slow"])
+        p = axs[n].pcolormesh(γ_plt, dτ_h_plt, wt', cmap="viridis_r"; norm=PyPlot.matplotlib.colors.LogNorm())
+        axs[n].set_xlabel(L"Damping parameter $γ$ = $γ_h$ = $γ_ϕ$", labelpad=20)
+        axs[n].set_ylabel(L"Pseudo-time step $dτ_h$", labelpad=20)
+
+        axs[n].set_title("nx=" * split(dof, "_")[1][3:end] * ", ny=" * split(dof, "_")[2][3:end])
+    end
+    cb = fig.colorbar(p, ax=fig.get_axes())
+    cb.set_ticks([cb.vmin, cb.vmax])
+    cb.set_ticklabels(["slow", "fast"])
     cb.set_label("Wall time, normalised")
-
-    title("nx=64, ny=32")
 end
 
 
 plot_para_comp()
-
