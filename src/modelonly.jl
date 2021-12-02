@@ -305,8 +305,8 @@ Run the model with scaled parameters.
                                      dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small)
 
                 # residual error
-                err_ϕ = norm(Res_ϕ) / length(Res_ϕ)
-                err_h = norm(Res_h) / length(Res_h)
+                err_ϕ = norm(Res_ϕ) / sqrt(length(Res_ϕ))
+                err_h = norm(Res_h) / sqrt(length(Res_h))
 
                 # save error evolution in vector
                 append!(iters, iter)

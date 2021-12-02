@@ -65,7 +65,7 @@ Create struct including all model parameters, physical and numerical
     dt          # physical time step
 
     # Pseudo-time iteration
-    tol    = 2e-6       # tolerance
+    tol    = 1e-6       # tolerance
     itMax  = 10^6       # max number of iterations
     γ_ϕ    = 1e-3       # damping parameter for ϕ update
     γ_h    = 0.8        # damping parameter for h update

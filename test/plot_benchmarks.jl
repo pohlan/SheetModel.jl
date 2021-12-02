@@ -56,3 +56,6 @@ print("\n \n \n")
 for i in 1:length(nx) @printf("nx = ny = %d  -->  Number of iterations: %d \n \n", nx[i], its[i]) end
 display(plt_Teff)
 print("\n")
+
+
+benchmarks_old = load("test/benchmarks_old.jld2")

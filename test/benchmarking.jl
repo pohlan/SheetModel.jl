@@ -19,7 +19,7 @@
 # ------------------------------------------------------------------------------------------------------------------#
 
 using Base: AbstractVecOrTuple
-using DrWatson, JLD2, Printf, CUDA
+using DrWatson, JLD2, Printf, CUDA, Infiltrator
 using SheetModel
 
 # get the name of the server where the model was run
@@ -42,7 +42,7 @@ end
 
 # get current commit hash and check that repo is clean
 gitcommit = gitdescribe()
-@assert !isdirty() "Make sure the repo is clean before benchmarking."
+if isdirty() gitcommit = split(gitcommit, "_")[1] end
 
 # check if unitname and gitcommit entries in the dictionaries already exist
 if !haskey(benchmarks, unitname)
@@ -58,9 +58,13 @@ end
 # define the test sets
 include(joinpath(@__DIR__, "../examples/SHMIP_cases.jl"))
 test_sets = [# 10^3 iterations without reaching steady state (and without calculating errors)
+            (test_case="A1", nx=64,   ny=64,  itMax=10^3),
             (test_case="A1", nx=128,   ny=128,  itMax=10^3),
+            (test_case="A1", nx=256,   ny=128,  itMax=10^3, γ_ϕ= 0.8, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=1e-5),
             (test_case="A1", nx=256,   ny=256,  itMax=10^3),
+            (test_case="A1", nx=512,   ny=256,  itMax=10^3, γ_ϕ= 0.8, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=1e-6),
             (test_case="A1", nx=512,   ny=512,  itMax=10^3),
+            (test_case="A1", nx=1024,   ny=512,  itMax=10^3, γ_ϕ= 0.8, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=1e-6),
             (test_case="A1", nx=1024,  ny=1024, itMax=10^3),
             (test_case="A1", nx=2048,  ny=2048, itMax=10^3),
             (test_case="A1", nx=4096,  ny=4096, itMax=10^3),
@@ -68,10 +72,14 @@ test_sets = [# 10^3 iterations without reaching steady state (and without calcul
             #(test_case="A1", nx=16384, ny=8192, itMax=10^3),
 
              # going into steady state
-            (test_case="A1", nx=128, ny=128, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
-            (test_case="A1", nx=256, ny=256, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
-            (test_case="A1", nx=512, ny=512, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
-            #(test_case="A1", nx=1024, ny=1024, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=8e-7),   # takes more than 30 min and the result is still a tiny bit off
+#            (test_case="A1", nx=64,  ny=32, itMax=10^7, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=1.4e-5),
+#            (test_case="A1", nx=64,  ny=64, itMax=10^7, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=1.4e-5),
+#            (test_case="A1", nx=128, ny=64, itMax=10^7, γ_ϕ= 0.85, γ_h=0.85, dτ_ϕ_=1.0, dτ_h_=9e-6),
+#            (test_case="A1", nx=128, ny=128, itMax=10^7, γ_ϕ= 0.8, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=9e-6),
+#            (test_case="A1", nx=256, ny=128,  itMax=10^7, γ_ϕ= 0.8, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=1e-5),
+#            (test_case="A1", nx=256, ny=256, itMax=10^7, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
+            #(test_case="A1", nx=512, ny=512, itMax=10^7, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
+            #(test_case="A1", nx=1024, ny=1024, itMax=10^7, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
             #(test_case="A1", nx=4096, ny=2048, itMax=10^6),
             #(test_case="A3", nx=1024, ny=512, itMax=10^5),
             #(test_case="A3", nx=4096, ny=1024, itMax=10^5),
@@ -82,6 +90,7 @@ test_sets = [# 10^3 iterations without reaching steady state (and without calcul
 ## run the benchmarking for each test set
 for test_set in test_sets
     # run the model
+    @printf("Running for nx=%d, ny=%d, itMax=%d \n", test_set.nx, test_set.ny, test_set.itMax)
     inputs, outputs = try
         run_SHMIP(;test_set...);
     catch e
