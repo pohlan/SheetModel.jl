@@ -143,7 +143,7 @@ function run_SHMIP(;test_case, nx, ny, itMax=10^6, make_plot=false, printtime=10
             ittot, iters, Res_ϕ, Res_h, errs_ϕ, errs_h = model_output
 
     if make_plot
-        S.plot_output(xc, yc, H, N, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
+        S.plot_output(xc, yc, H, ϕ, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
     end
 
     return (;input_params, SHMIP_case=test_case, ϕ_init, h_init), model_output

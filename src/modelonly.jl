@@ -133,11 +133,11 @@ Used for error calculation and only to be carried out every xx iterations, e.g. 
 @parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff,
                                               dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small)
     nx, ny = size(ϕ)
-    if (ix <= nx && iy <= ny)
+    if (1 < ix < nx && 1 < iy < ny)
         # residual of ϕ
         if ix == 2 # ϕ: without boundary points (divergence of q not defined there)
             Res_ϕ[ix, iy] = 0. # position where dirichlet b.c. are imposed
-        elseif (1 < ix < nx && 1 < iy < ny)
+        else
             Res_ϕ[ix, iy] = @Res_ϕ(ix, iy)
         end
 
@@ -305,8 +305,8 @@ Run the model with scaled parameters.
                                      dx_, dy_, min_dxy2, k, α, β, dt, dt_, hr, Θ_PDE, Θ_vo, Θ_vc, g, ρi, n, H, ϕ_0, small)
 
                 # residual error
-                err_ϕ = norm(Res_ϕ) / sqrt(length(Res_ϕ))
-                err_h = norm(Res_h) / sqrt(length(Res_h))
+                err_ϕ = norm(Res_ϕ[2:end-1, 2:end-1]) / sqrt((nx-2)*(ny-2))
+                err_h = norm(Res_h[2:end-1, 2:end-1]) / sqrt((nx-2)*(ny-2))
 
                 # save error evolution in vector
                 append!(iters, iter)
