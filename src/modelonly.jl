@@ -245,7 +245,7 @@ Run the model with scaled parameters.
 
     # Collapse some factors for better performance
     Θ_PDE = (ev + ev_num) / (ρw * g)
-    ev_ratio = (bc_diric .== 0) .* ev_num ./ (ev + ev_num)
+    ev_ratio = max.((bc_diric .== 0) .* ev_num ./ (ev + ev_num), 0)
     Θ_vo  = Σ * ub / lr     # has to be put differently if ub and lr are space and/or time dependent
     Θ_vc  = Γ * 2 / n^n
     ϕ_0   = ρw * g * zb     # elevation potential; zb is never used in another context

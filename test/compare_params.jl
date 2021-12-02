@@ -5,14 +5,16 @@ using Printf, JLD2
 include("../examples/SHMIP_cases.jl")
 
 
-nx, ny = [(64, 32), (128, 64)][2]
+nx, ny = [(64, 32), (256, 128), (1024, 512)][2]
 tol = Dict((64, 32)  => 5e-3,
-           (128, 64) => 5e-2)
-γs = 0.7:0.01:0.92
-dτ_hs = 1e-6:1e-6:3e-5
+           (128, 64) => 5e-2,
+           (256, 128) => 1e-3,
+           (1024, 512) => 5e-3)
+γs = 0.5:0.05:0.7
+dτ_hs = 3e-5:2e-6:5.4e-5
 
 wall_time = zeros(length(γs), length(dτ_hs))
-run_SHMIP(; nx, ny, γ_ϕ= 0.9, γ_h=0.9, dτ_h_=7e-6, tol=1e-3, do_print=false); # "warming up" to make also the first run representative
+run_SHMIP(; nx, ny, γ_ϕ= 0.9, γ_h=0.9, dτ_h_=7e-6, tol=1e-2, do_print=false); # "warming up" to make also the first run representative
 
 for (col, γ) in enumerate(γs)
     for (row, dτ_h_) in enumerate(dτ_hs)
