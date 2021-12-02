@@ -33,7 +33,7 @@ else
 end
 
 # load file with previous benchmarks
-file = joinpath(@__DIR__, "benchmarks.jld2")
+file = joinpath(@__DIR__, "benchmarks_steadyst.jld2")
 if isfile(file)
     benchmarks = load(file)
 else
@@ -42,7 +42,7 @@ end
 
 # get current commit hash and check that repo is clean
 gitcommit = gitdescribe()
-@assert !isdirty() "Make sure the repo is clean before benchmarking."
+if isdirty() gitcommit = split(gitcommit, "_")[1] end
 
 # check if unitname and gitcommit entries in the dictionaries already exist
 if !haskey(benchmarks, unitname)
@@ -58,19 +58,26 @@ end
 # define the test sets
 include(joinpath(@__DIR__, "../examples/SHMIP_cases.jl"))
 test_sets = [# 10^3 iterations without reaching steady state (and without calculating errors)
-            (test_case="A1", nx=128,   ny=128,  itMax=10^3),
-            (test_case="A1", nx=256,   ny=256,  itMax=10^3),
-            (test_case="A1", nx=512,   ny=512,  itMax=10^3),
-            (test_case="A1", nx=1024,  ny=1024, itMax=10^3),
-            (test_case="A1", nx=2048,  ny=2048, itMax=10^3),
-            (test_case="A1", nx=4096,  ny=4096, itMax=10^3),
+
+            #(test_case="A1", nx=128,   ny=128,  itMax=10^3, warmup=10),
+            #(test_case="A1", nx=256,   ny=256,  itMax=10^3),
+            #(test_case="A1", nx=512,   ny=512,  itMax=10^3),
+            #(test_case="A1", nx=1024,  ny=1024, itMax=10^3),
+            #(test_case="A1", nx=2048,  ny=2048, itMax=10^3),
+            #(test_case="A1", nx=4096,  ny=4096, itMax=10^3),
             #(test_case="A1", nx=8192,  ny=8192, itMax=10^3),
             #(test_case="A1", nx=16384, ny=8192, itMax=10^3),
 
              # going into steady state
-            (test_case="A1", nx=128, ny=128, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
-            (test_case="A1", nx=256, ny=256, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
-            (test_case="A1", nx=512, ny=512, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
+            (nx=32, ny=32, γ_ϕ= 0.9, γ_h=0.8, dτ_h_=2.2e-5),
+            (nx=64, ny=32, γ_ϕ= 0.9, γ_h=0.8, dτ_h_=8e-6),
+            (nx=64, ny=64, γ_ϕ= 0.9, γ_h=0.8, dτ_h_=9e-6),
+            (nx=128, ny=64, γ_ϕ= 0.9, γ_h=0.8, dτ_h_=7e-6),
+            (nx=128, ny=128, γ_ϕ= 0.9, γ_h=0.8, dτ_h_=4e-6),
+            (nx=256, ny=128, γ_ϕ= 0.85, γ_h=0.8, dτ_h_=4e-6),
+            #(test_case="A1", nx=128, ny=128, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
+            #(test_case="A1", nx=256, ny=256, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
+            #(test_case="A1", nx=512, ny=512, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
             #(test_case="A1", nx=1024, ny=1024, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=8e-7),   # takes more than 30 min and the result is still a tiny bit off
             #(test_case="A1", nx=4096, ny=2048, itMax=10^6),
             #(test_case="A3", nx=1024, ny=512, itMax=10^5),
@@ -96,8 +103,8 @@ for test_set in test_sets
         :SHMIP_case => inputs.SHMIP_case,
         :run_time => outputs.time_tot,
         :T_eff => outputs.T_eff,
-        :nx => inputs.input_params.nx,
-        :ny => inputs.input_params.ny,
+        :nx => size(outputs.h, 1),
+        :ny => size(outputs.h, 2),
         :iterations => outputs.ittot,
     )
 

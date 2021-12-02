@@ -113,7 +113,7 @@ function plot_output(xc, yc, H, ϕ, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, err
     legend()
 end
 
-function run_SHMIP(;test_case="A1", nx, ny, itMax=10^6, tol=1e-6, make_plot=false, update_h_only=false, ev_num=0., do_print=true, warmup=10,
+function run_SHMIP(;test_case="A1", nx, ny, itMax=10^6, tol=1e-6, make_plot=false, update_h_only=false, ev_num=0., do_print=true, warmup=0,
                    dt=8e3*s_per_day, tsteps=1, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6)      # parameters for pseudo-transient time stepping
 
     # suite A: use different steady and spatially uniform water inputs
