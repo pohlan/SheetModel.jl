@@ -44,7 +44,7 @@ Create struct including all model parameters, physical and numerical
     k      = 0.005             # sheet conductivity, m^(7/4)kg^(-1/2)
     n      = 3.0               # Glen's flow law exponent
     A      = 3.375e-24         # ice flow constant, Pa^(-n)s^(-1)
-    ev     = 1e-6              # englacial void ratio; SHMIP: 0 for ice-sheet, 1e-3 for valley glacier
+    ev     = 0              # englacial void ratio; SHMIP: 0 for ice-sheet, 1e-3 for valley glacier
     ev_num = 1e-1              # regularisation void ratio
     lr     = 2.0               # horizontal cavity spacing, m
     hr     = 0.1               # bedrock bump height, m
@@ -71,10 +71,10 @@ Create struct including all model parameters, physical and numerical
     dτ_h_ = 50.0              # scaling factor for dτ_h
 
     # Dimensionless numbers
+    Ψ   = NaN
     Σ   = NaN
     Γ   = NaN
     Λ   = NaN
-    r_ρ = ρw / ρi
 end
 Broadcast.broadcastable(p::model_input) = Ref(p)
 
@@ -120,16 +120,17 @@ Convert input parameters to non-dimensional quantities.
 Convert arrays of H and zb to correct types depending on whether CPU or GPU is used.
 """
 function scaling(p::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
-    @unpack g, ρw, k, A, lr, hr,
+    @unpack g, ρw, ρi, k, A, lr, hr,
             H, zb, ub,
             Lx, Ly, dx, dy,
             ttot, dt,
-            r_ρ, α, β, n,
-            Σ, Γ, Λ = p
+            α, β, n, ev,
+            Ψ, Σ, Γ, Λ = p
 
     # Scaling factors
     g_ = g
-    ρ_ = ρw
+    ρw_ = ρw
+    ρi_ = ρi
     k_ = k
     A_ = A
     lr_ = lr
@@ -137,27 +138,27 @@ function scaling(p::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc
     xy_ = max(Lx, Ly)
 
     H_ = maximum(H)
-    zb_ = H_ / r_ρ
+    zb_ = H_ * ρi_ / ρw_
     m_ = mean(calc_m(1:size(H, 1), (1:size(H, 2))', 0.0)) # for time-dependent input: temporal peak
     ub_ = ub
 
-    ϕ_ = g_ * H_ * ρ_ / r_ρ
+    ϕ_ = g_ * H_ * ρi_
     N_ = ϕ_
     q_ = k_ * h_^α * ( ϕ_  / xy_ )^(β-1)
     t_ = xy_ * h_ / q_
     vo_ = ub_ * h_ / lr_
-    vc_ = A_ * h_ * N_ ^n
+    vc_ = 2 / n^n * A_ * h_ * N_ ^n
 
     if any(.!isnan.([Σ, Γ, Λ]))
-        @warn "Σ, Γ and Λ have already been assigned."
+        @warn "Ψ, Σ, Γ and Λ have already been assigned."
     end
 
     # Dimensionless parameters
     scaled_params = reconstruct(model_input{Data.Array}, p,
         # Scalars (one global value)
         g = g / g_,
-        ρw = ρw / ρ_,
-        ρi = ρw / ρ_ / r_ρ,
+        ρw = ρw / ρw_,
+        ρi = ρi / ρi_,
         k = k / k_,
         A = A / A_,
         lr = lr / lr_,
@@ -175,6 +176,7 @@ function scaling(p::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc
         ttot = ttot / t_,
         dt = dt / t_,
 
+        Ψ = ev * ϕ_ / (ρw_ * g_ * h_),
         Σ = vo_ * xy_ / q_,
         Γ = vc_ * xy_ / q_,
         Λ = m_ * xy_ / q_

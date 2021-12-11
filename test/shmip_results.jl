@@ -5,6 +5,7 @@ case = "A1"
 # ncinfo(case * "_mw.nc") # to see which variables are available
 
 # h, ϕ and N
+print(pwd())
 h_shmip = ncread("test/" * case * "_mw.nc", "h")
 H_shmip = ncread("test/" * case * "_mw.nc", "H")
 N_shmip = ncread("test/" * case * "_mw.nc", "N")

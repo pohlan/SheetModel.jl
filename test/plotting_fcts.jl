@@ -82,7 +82,7 @@ function plot_fieldresults(;inputs, outputs)
     fig.suptitle("cross-sections")
 end
 
-#plot_fieldresults(;inputs, outputs)
+plot_fieldresults(;inputs, outputs)
 
 
 function plot_benchmarks()
@@ -189,4 +189,4 @@ function plot_benchmarks()
     end
 end
 
-plot_benchmarks()
+#plot_benchmarks()
