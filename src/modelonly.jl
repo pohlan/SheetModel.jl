@@ -288,7 +288,7 @@ Run the model with scaled parameters.
 
             # don't consider first ten iterations for performance measure
             if (iter == warmup) t_tic = Base.time() end
-            @infiltrate
+
             if update_h_only
                 @parallel update_h_only!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
                                          dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, ev_ratio, A, n, H, zb, small,
@@ -300,7 +300,7 @@ Run the model with scaled parameters.
                                          dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, ev_ratio, A, n, H, zb, small,
                                          dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
             end
-
+            @infiltrate
             # pointer swap
             ϕ, ϕ2 = ϕ2, ϕ
             h, h2 = h2, h

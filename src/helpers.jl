@@ -44,8 +44,8 @@ Create struct including all model parameters, physical and numerical
     k      = 0.005             # sheet conductivity, m^(7/4)kg^(-1/2)
     n      = 3.0               # Glen's flow law exponent
     A      = 3.375e-24         # ice flow constant, Pa^(-n)s^(-1)
-    ev     = 0              # englacial void ratio; SHMIP: 0 for ice-sheet, 1e-3 for valley glacier
-    ev_num = 1e-1              # regularisation void ratio
+    ev     = 0                 # englacial void ratio; SHMIP: 0 for ice-sheet, 1e-3 for valley glacier
+    ev_num = 0                 # regularisation void ratio
     lr     = 2.0               # horizontal cavity spacing, m
     hr     = 0.1               # bedrock bump height, m
     ub     = 1e-6              # basal sliding speed, m/s
@@ -137,7 +137,7 @@ function scaling(p::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc
     h_ = hr
     xy_ = max(Lx, Ly)
 
-    H_ = maximum(H)
+    H_ = mean(H)
     zb_ = H_ * ρi_ / ρw_
     m_ = mean(calc_m(1:size(H, 1), (1:size(H, 2))', 0.0)) # for time-dependent input: temporal peak
     ub_ = ub
@@ -147,7 +147,7 @@ function scaling(p::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc
     q_ = k_ * h_^α * ( ϕ_  / xy_ )^(β-1)
     t_ = xy_ * h_ / q_
     vo_ = ub_ * h_ / lr_
-    vc_ = 2 / n^n * A_ * h_ * N_ ^n
+    vc_ = 2 / n^n * A_ * h_ * N_^n
 
     if any(.!isnan.([Σ, Γ, Λ]))
         @warn "Ψ, Σ, Γ and Λ have already been assigned."
