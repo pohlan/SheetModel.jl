@@ -175,8 +175,10 @@ function run_SHMIP(;test_case="A1", nx, ny, itMax=10^6, tol=1e-6, make_plot=fals
 
     if any(startswith.(test_case, ["A", "D"]))
         topo = geom["sqrt"]
+        ev = 0
     elseif any(startswith.(test_case, ["E", "F"]))
         topo = geom["valley"]
+        ev = 1e-3
     end
 
     if any(startswith.(test_case, ["A", "E"]))
@@ -220,7 +222,7 @@ function run_SHMIP(;test_case="A1", nx, ny, itMax=10^6, tol=1e-6, make_plot=fals
     bc_no_yflux = falses(nx, ny-1); bc_no_yflux[:, [1, end]] .= true
 
     # call the SheetModel
-    input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, tol, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ev_num, ϕ_init, h_init, calc_m,
+    input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, tol, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ev, ev_num, ϕ_init, h_init, calc_m,
                              ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
     output = runthemodel(;input..., update_h_only, do_print, warmup);
 
