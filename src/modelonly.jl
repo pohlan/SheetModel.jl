@@ -300,7 +300,7 @@ Run the model with scaled parameters.
                                          dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, ev_ratio, A, n, H, zb, small,
                                          dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
             end
-            @infiltrate
+
             # pointer swap
             ϕ, ϕ2 = ϕ2, ϕ
             h, h2 = h2, h

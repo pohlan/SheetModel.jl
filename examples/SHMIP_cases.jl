@@ -43,6 +43,13 @@ pos(x) = x > 0.0 ? x : 0.0
 # Determine dx or dy from Lx and dx or Ly and dy
 grid_size(Lx, nx) = Lx / (nx-3)
 
+# Set boundaries (ghostpoints) to zero.
+function ghost(A)
+    A[[1, end], :] .= 0.
+    A[:, [1, end]] .= 0.
+    return A
+end
+
 function plot_output(xc, yc, H, ϕ, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
     pygui(true)
 
@@ -196,8 +203,8 @@ function run_SHMIP(;test_case="A1", nx, ny, itMax=10^6, tol=1e-6, make_plot=fals
     dy                = grid_size(Ly, ny)
     xc                = LinRange(x1-dx, xend+dx, nx)         # including ghost points
     yc                = LinRange(y1-dy, yend+dy, ny)
-    zb                = topo.bed.(xc, yc')
-    H                 = pos.(topo.surf.(xc, yc') .- zb)
+    zb                = ghost(topo.bed.(xc, yc'))
+    H                 = ghost(pos.(topo.surf.(xc, yc') .- zb))
     ttot              = tsteps * dt
 
     # definition of function calc_m (calculating the source term)
@@ -209,28 +216,26 @@ function run_SHMIP(;test_case="A1", nx, ny, itMax=10^6, tol=1e-6, make_plot=fals
     calc_m = make_calc_m(xc, yc, water_input)
 
     # initial conditions
-    ϕ_init, h_init = initial_conditions(
-        xc,
-        yc,
-        calc_ϕ = (x, y) -> 100.0,
-        calc_h = (x, y) -> 0.04
-    )
+    ϕ_init = 100. * ones(nx, ny)
+    h_init = 0.04 * ones(nx, ny)
 
+    # masks for ice domain and boundary conditions
     ice_mask    = H .> 0.
     bc_diric    = falses(nx, ny); bc_diric[2, :] .= true
-    bc_no_xflux = falses(nx-1, ny); bc_no_xflux[end, :] .= true
-    bc_no_yflux = falses(nx, ny-1); bc_no_yflux[:, [1, end]] .= true
+    bc_no_xflux = diff(ice_mask, dims=1) .!= 0
+    bc_no_yflux = diff(ice_mask, dims=2) .!= 0
 
+    # struct of input parameters
+    params_struct = S.model_input(;H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, tol, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ev, ev_num)
     # call the SheetModel
-    input = make_model_input(H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, tol, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ev, ev_num, ϕ_init, h_init, calc_m,
-                             ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
-    output = runthemodel(;input..., update_h_only, do_print, warmup);
+    input = (;params_struct, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only, do_print, warmup)
+    output = runthemodel(;input...);
 
     # plotting
     @unpack N, ϕ, h, qx, qy,
             ittot, iters, Res_ϕ, Res_h, errs_ϕ, errs_h = output
 
-    if make_plot
+    if make_plot && !any(isnan.([errs_ϕ[end], errs_h[end]]))
         plot_output(xc, yc, H, ϕ, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
     end
 
