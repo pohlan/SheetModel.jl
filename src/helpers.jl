@@ -9,7 +9,7 @@ Create struct including all model parameters, physical and numerical
 """
 @with_kw struct model_input{T} @deftype Float64
     # Physics
-    g      = 9.81              # gravitational acceleration, m/s^2
+    g      = 9.8               # gravitational acceleration, m/s^2
     ρw     = 1000.0            # water density, kg/m^3
     ρi     = 910.0             # ice density, kg/m^3
     α      = 1.25              # first sheet flow exponent
@@ -18,12 +18,11 @@ Create struct including all model parameters, physical and numerical
     n      = 3.0               # Glen's flow law exponent
     A      = 3.375e-24         # ice flow constant, Pa^(-n)s^(-1)
     ev     = 0                 # englacial void ratio; SHMIP: 0 for ice-sheet, 1e-3 for valley glacier
-    ev_num = 0                 # regularisation void ratio
     lr     = 2.0               # horizontal cavity spacing, m
     hr     = 0.1               # bedrock bump height, m
     ub     = 1e-6              # basal sliding speed, m/s
-    H::T                      # ice thickness, m
-    zb::T                     # bed elevation, m
+    H::T                       # ice thickness, m
+    zb::T                      # bed elevation, m
 
     # Domain
     Lx

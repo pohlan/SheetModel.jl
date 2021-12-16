@@ -1,16 +1,17 @@
 using NetCDF, PyPlot, Statistics, SmoothingSplines
 
-case = "A1"
+case = "A2"
+model = "mw"
 #cd(@__DIR__)
 # ncinfo(case * "_mw.nc") # to see which variables are available
 
+path = "../shmip_results/" * model * "/"
 # h, ϕ and N
-print(pwd())
-h_shmip = ncread("test/" * case * "_mw.nc", "h")
-H_shmip = ncread("test/" * case * "_mw.nc", "H")
-N_shmip = ncread("test/" * case * "_mw.nc", "N")
+h_shmip = ncread(path * case * "_" * model * ".nc", "h")
+H_shmip = ncread(path * case * "_" * model * ".nc", "H")
+N_shmip = ncread(path * case * "_" * model * ".nc", "N")
 ϕ_shmip = 910 * 9.81 .* H_shmip .- N_shmip
-coords1 = ncread("test/" * case * "_mw.nc", "coords1")
+coords1 = ncread(path * case * "_" * model * ".nc", "coords1")
 x1 = coords1[:, 1]
 y1 = coords1[:, 2]
 

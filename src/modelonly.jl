@@ -1,5 +1,4 @@
 using Printf, Infiltrator
-import Plots; Plt = Plots
 
 # used grids:
 # - normal grid (i,j), size (nx, ny)
@@ -26,13 +25,13 @@ macro N(ix, iy) esc(:(H[$ix, $iy] - @pw($ix, $iy))) end
 Calculate closure rate; input coordinates on ϕ/h grid.
 Needs access to ϕ, H, zb, n, h, Γ, A
 """
-macro vc(ix, iy) esc(:(Γ * A * h[$ix, $iy] * abs(@N($ix, $iy))^(n-1) * @N($ix, $iy))) end
+macro vc(ix, iy) esc(:(A * h[$ix, $iy] * abs(@N($ix, $iy))^(n-1) * @N($ix, $iy))) end
 
 """
 Calculate opening rate; input coordinates on ϕ/h grid.
 Needs access to h, hr, Σ, ub, lr
 """
-macro vo(ix, iy) esc(:(h[$ix, $iy] < hr ? Σ * ub / lr  * (hr - h[$ix, $iy]) : 0.0)) end
+macro vo(ix, iy) esc(:(h[$ix, $iy] < hr ? ub / lr  * (hr - h[$ix, $iy]) : 0.0)) end
 
 """
 Calculate hydraulic gradient in x-direction; input coordinates on qx grid.
@@ -97,7 +96,7 @@ Needs access to ϕ, ϕ_old, h, H, k, α, β, small, dx_, dy_, min_dxy2, dt, dt_,
 macro Res_ϕ(ix, iy) esc(:(  ice_mask[$ix, $iy] == 1 ? (                                                      # only calculate at points with non-zero ice thickness
                                                  - Ψ * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) * dt_                                                                # dϕ/dt
                                                  - ( (@qx($ix, $iy) - @qx($ix-1, $iy)) * dx_ + (@qy($ix, $iy) - @qy($ix, $iy-1)) * dy_ )    # divergence
-                                                 - (@vo($ix, $iy) - @vc($ix, $iy))                                                                          # dh/dt
+                                                 - (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))                                                                          # dh/dt
                                                  + Λ_m[$ix, $iy]                                                                                            # source term Λ * m
                                                 ) : 0.0
 )) end
@@ -108,17 +107,11 @@ Needs access to ϕ, h, h_old, H, dt_, ub, lr, hr, zb, n, Σ, Γ
 """
 macro Res_h(ix, iy) esc(:(  ice_mask[$ix, $iy] == 1 ? (
                                                  - (h[$ix, $iy] - h_old[$ix, $iy]) * dt_
-                                                 + (@vo($ix, $iy) - @vc($ix, $iy))
-                                                 + ev_ratio[$ix, $iy] * (
-                                                    - ( (@qx($ix, $iy) - @qx($ix-1, $iy)) * dx_ + (@qy($ix, $iy) - @qy($ix, $iy-1)) * dy_ )    # divergence
-                                                    - (@vo($ix, $iy) - @vc($ix, $iy))                                                                          # dh/dt
-                                                    + Λ_m[$ix, $iy]
-                                                 )
+                                                 + (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))
                                                 ) : 0.0
 )) end
 
 ### KERNEL FUNCTIONS ###
-
 @parallel_indices (ix, iy) function update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Σ, Γ, ub, lr, hr, n, H, zb, small, bc_no_xflux, bc_no_yflux,)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
@@ -132,7 +125,7 @@ Calculate residuals of ϕ and h and store them in arrays.
 Used for error calculation and only to be carried out every xx iterations, e.g. every thousand.
 """
 @parallel_indices (ix,iy) function residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                              dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, ev_ratio, A, n, H, zb, small)
+                                              dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, A, n, H, zb, small)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
         # residual of ϕ
@@ -149,7 +142,7 @@ Used for error calculation and only to be carried out every xx iterations, e.g. 
 end
 
 @parallel_indices (ix, iy) function update_h_only!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                                   dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, ev_ratio, A, n, H, zb, small,
+                                                   dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, A, n, H, zb, small,
                                                    dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
@@ -163,7 +156,7 @@ end
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
 @parallel_indices (ix,iy) function update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                                  dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, ev_ratio, A, n, H, zb, small,
+                                                  dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, A, n, H, zb, small,
                                                   dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
     nx, ny = size(ϕ)
     if (1 < ix < nx && 1 < iy < ny)
@@ -236,15 +229,12 @@ end
 Run the model with scaled parameters.
 """
 @views function runthemodel_scaled(params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only, do_print, warmup)
-    @unpack ev, ev_num, n, A, Ψ, Σ, Γ, Λ, dx, dy, k, α, β,
+    @unpack ev, n, A, Ψ, Σ, Γ, Λ, dx, dy, k, α, β,
             H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
 
     # Pre-calculate reciprocals for better performance
     min_dxy2 = min(dx, dy)^2
     dx_, dy_, dt_, min_dxy2_ = (dx, dy, dt, min_dxy2).^(-1)
-
-    # Regularisation factor for h residual
-    ev_ratio = max.((bc_diric .== 0) .* ev_num ./ (ev + ev_num), 0)
 
     # Array allocation
     nx, ny = size(ϕ_init)
@@ -291,13 +281,13 @@ Run the model with scaled parameters.
 
             if update_h_only
                 @parallel update_h_only!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                         dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, ev_ratio, A, n, H, zb, small,
+                                         dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, A, n, H, zb, small,
                                          dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
             else
                 # update ϕ and h
-                @parallel update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Σ, Γ,ub, lr, hr, n, H, zb, small, bc_no_xflux, bc_no_yflux)
+                @parallel update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Σ, Γ, ub, lr, hr, n, H, zb, small, bc_no_xflux, bc_no_yflux)
                 @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                         dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, ev_ratio, A, n, H, zb, small,
+                                         dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, A, n, H, zb, small,
                                          dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
             end
 
@@ -312,7 +302,7 @@ Run the model with scaled parameters.
                                                                        # and if itMax is high, i.e. if convergence is the goal
                 # update the residual arrays
                 @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                     dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, ev_ratio, A, n, H, zb, small)
+                                     dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, A, n, H, zb, small)
 
                 # residual error
                 err_ϕ = norm(Res_ϕ) / sqrt(length(Res_ϕ))
