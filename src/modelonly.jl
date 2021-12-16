@@ -94,7 +94,7 @@ Calculate residual of ϕ; input coordinates on ϕ/h grid (but only defined on in
 Needs access to ϕ, ϕ_old, h, H, k, α, β, small, dx_, dy_, min_dxy2, dt, dt_, Λ_m, hr, zb, n, Ψ, Σ, ub, lr
 """
 macro Res_ϕ(ix, iy) esc(:(  ice_mask[$ix, $iy] == 1 ? (                                                      # only calculate at points with non-zero ice thickness
-                                                 - Ψ * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) * dt_                                                                # dϕ/dt
+                                                # - Ψ * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) * dt_                                                                # dϕ/dt
                                                  - ( (@qx($ix, $iy) - @qx($ix-1, $iy)) * dx_ + (@qy($ix, $iy) - @qy($ix, $iy-1)) * dy_ )    # divergence
                                                  - (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))                                                                          # dh/dt
                                                  + Λ_m[$ix, $iy]                                                                                            # source term Λ * m
@@ -106,8 +106,8 @@ Calculate residual of h; input coordinates on ϕ/h grid.
 Needs access to ϕ, h, h_old, H, dt_, ub, lr, hr, zb, n, Σ, Γ
 """
 macro Res_h(ix, iy) esc(:(  ice_mask[$ix, $iy] == 1 ? (
-                                                 - (h[$ix, $iy] - h_old[$ix, $iy]) * dt_
-                                                 + (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))
+                                                # - (h[$ix, $iy] - h_old[$ix, $iy]) * dt_ +
+                                                 (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))
                                                 ) : 0.0
 )) end
 
