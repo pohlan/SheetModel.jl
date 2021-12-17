@@ -32,78 +32,109 @@ end
 
 #plot_para_comp()
 
-function plot_error()
-    file = "test/bm_results.jld2"
-    bm = load(file)
-    unit = "achtzack01_GPU"
-    key  = "std-state"
+# function plot_error()
+#     file = "test/bm_results.jld2"
+#     bm = load(file)
+#     unit = "achtzack01_GPU"
+#     key  = "std-state"
 
-    errs_ϕ = bm[unit][key].errs_ϕ
-    errs_h = bm[unit][key].errs_h
-    iters  = bm[unit][key].iters
-    dof    = bm[unit][key].dof
+#     errs_ϕ = bm[unit][key].errs_ϕ
+#     errs_h = bm[unit][key].errs_h
+#     iters  = bm[unit][key].iters
+#     dof    = bm[unit][key].dof
 
-    lw = 2
-    fig, axs = subplots(1, 2, figsize=(17,10), gridspec_kw=Dict(:wspace=>0.45, :hspace=>0.3))
+#     lw = 2
+#     fig, axs = subplots(1, 2, figsize=(17,10), gridspec_kw=Dict(:wspace=>0.45, :hspace=>0.3))
 
-    for n in 1:2:length(bm[unit][key].dof)
-        axs[1].plot(iters[n], errs_ϕ[n], label=string(n); lw) # color="gold"
-        axs[2].plot(iters[n], errs_h[n], label=string(n); lw) # , color="deepskyblue"
-    end
+#     for n in 1:2:length(bm[unit][key].dof)
+#         axs[1].plot(iters[n], errs_ϕ[n], label=string(n); lw) # color="gold"
+#         axs[2].plot(iters[n], errs_h[n], label=string(n); lw) # , color="deepskyblue"
+#     end
 
-    axs[1].set_xscale("log")
-    axs[1].set_yscale("log")
-    axs[1].set_xlabel("Iteration count")
-    axs[1].set_ylabel(L"RMS($f_\phi$)")
-    axs[1].legend()
+#     axs[1].set_xscale("log")
+#     axs[1].set_yscale("log")
+#     axs[1].set_xlabel("Iteration count")
+#     axs[1].set_ylabel(L"RMS($f_\phi$)")
+#     axs[1].legend()
 
-    axs[2].set_xscale("log")
-    axs[2].set_yscale("log")
-    axs[2].set_xlabel("Iteration count")
-    axs[2].set_ylabel(L"RMS($f_h$)")
+#     axs[2].set_xscale("log")
+#     axs[2].set_yscale("log")
+#     axs[2].set_xlabel("Iteration count")
+#     axs[2].set_ylabel(L"RMS($f_h$)")
 
-end
+# end
 
 # after running run_SHMIP
 #plot_error()
 
-function plot_fieldresults(;inputs, outputs)
-    @unpack Lx, Ly, dx, dy, H = inputs.params_struct
-    @unpack ϕ, h = outputs
-    nx, ny = size(ϕ)
-    xc                = LinRange(-dx, Lx+dx, nx)         # including ghost points
-    yc                = LinRange(-dy, Ly+dy, ny)
-    x_plt = [xc[1]; xc .+ (xc[2]-xc[1])]
-    y_plt = [yc[1]; yc .+ (yc[2]-yc[1])]
-    ϕ[H .== 0.0] .= NaN
-    h[H .== 0.0] .= NaN
 
-    include("shmip_results.jl")
+function shmip_results(case, model)
+    path = "../shmip_results/" * model * "/"
+    # h, ϕ and N
+    h_shmip = ncread(path * case * "_" * model * ".nc", "h")
+    H_shmip = ncread(path * case * "_" * model * ".nc", "H")
+    N_shmip = ncread(path * case * "_" * model * ".nc", "N")
+    ϕ_shmip = 910 * 9.81 .* H_shmip .- N_shmip
+    coords1 = ncread(path * case * "_" * model * ".nc", "coords1")
+    x1 = coords1[:, 1]
+    y1 = coords1[:, 2]
+
+    # get an interpolated cross-section averaged over all y coordinates
+    spl_h = fit(SmoothingSpline, x1, vec(h_shmip), 250.0) # λ=250.0
+    spl_ϕ = fit(SmoothingSpline, x1, vec(ϕ_shmip), 250.0)
+    get_ϕ_ref(x) = predict(spl_ϕ, x)
+    get_h_ref(x) = predict(spl_h, x)
+    return get_ϕ_ref, get_h_ref
+end
+
+function plot_error(inout)
+    lw = 2.5
+    figure(figsize=(13,10))
+    for (n, ((inputs, outputs), ls)) in enumerate(zip[inout, [":", "--"]])
+        @unpack ϕ
+        @unpack iters, errs_ϕ, errs_h = outputs
+        nx, ny = size(ϕ)
+        dof = nx * ny
+
+        plot(iters, errs_ϕ, label="GPU model", color="darkskyblue"; lw, ls)
+        plot(iters, errs_h, label="GPU model", color="purple"; lw, ls)
+        xlabel("Iteration count")
+        ylabel(L"RMS($f$)")
+        legend()
+    end
+end
+
+function plot_fieldresults(inout...)
     xs     = LinRange(0, 100e3, nx-2)
+    get_ϕ_ref, get_h_ref = shmip_results("A1", "mw")
     ϕ_ref = get_ϕ_ref(xs)
     h_ref = get_h_ref(xs)
 
-    fig, axs = subplots(1, 2, figsize=(17,10))
-    fig.subplots_adjust(hspace=0.3, wspace=0.5)
+    fig, axs = subplots(1, length(inout), figsize=(26,10), gridspec_kw=Dict(:wspace=>0.5, :hspace=>0.3))
     lw = 2.5
 
-    ind = size(ϕ ,2)÷2
+    for (n, (inputs, outputs)) in enumerate(inout)
 
-    axs[1].plot(xc.*1e-3, ϕ[:, ind], label="GPU model"; lw)
-    axs[1].plot(xs.*1e-3, ϕ_ref, label="GlaDS"; lw)
-    axs[1].set_xlabel("x-coordinate (km)")
-    axs[1].set_ylabel("ϕ (Pa)")
+        @unpack Lx, Ly, dx, dy, H = inputs.params_struct
+        @unpack ϕ, h = outputs
+        nx, ny = size(ϕ)
 
-    axs[2].plot(xc.*1e-3, h[:, ind], label="GPU model"; lw)
-    axs[2].plot(xs.*1e-3, h_ref, label="GlaDS"; lw)
-    axs[2].legend()
-    axs[2].set_xlabel("x-coordinate (km)")
-    axs[2].set_ylabel("h (m)")
+        ϕ[H  .== 0.0] .= NaN
+        h[H  .== 0.0] .= NaN
+        ind   = size(ϕ ,2)÷2
 
-    fig.suptitle("cross-sections")
+        axs[1].plot(xs.*1e-3, ϕ[2:end-1, ind], label="GPU model"; lw)
+        axs[1].plot(xs.*1e-3, ϕ_ref, label="GlaDS"; lw)
+        axs[1].set_xlabel("x-coordinate (km)")
+        axs[1].set_ylabel("ϕ (Pa)")
+
+        axs[2].plot(xs.*1e-3, h[2:end-1, ind], label="GPU model"; lw)
+        axs[2].plot(xs.*1e-3, h_ref, label="GlaDS"; lw)
+        axs[2].legend()
+        axs[2].set_xlabel("x-coordinate (km)")
+        axs[2].set_ylabel("h (m)")
+    end
 end
-
-#plot_fieldresults(;inputs, outputs)
 
 
 function plot_benchmarks()
@@ -200,5 +231,3 @@ function plot_benchmarks()
 
     axs[3].axis("off") # trick to make legend fit in the figure
 end
-
-plot_benchmarks()
