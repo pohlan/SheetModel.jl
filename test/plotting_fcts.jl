@@ -12,7 +12,7 @@ function plot_para_comp()
     fig, axs = subplots(1, 3, figsize=(23,10))
     fig.subplots_adjust(hspace=0.3, wspace=0.5)
     p = (nothing for i=1:100)
-    for (n, dof) in enumerate(["nx64_ny32", "nx128_ny64", "nx256_ny128"])
+    for (n, dof) in enumerate(["nx64_ny32", "nx128_ny64"]) #, "nx256_ny128"])
         γ, dτ_h, wt = load("test/params_comp_" * dof * ".jld2","γs", "dτ_hs", "wall_time")
 
         dγ       = γ[2]-γ[1]
