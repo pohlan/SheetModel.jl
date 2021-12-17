@@ -88,12 +88,13 @@ for set in keys(test_sets)
         push!(nt.nit,       outputs.ittot)
         push!(nt.dof,       length(outputs.h))
 
-        if set == "std-state"
-            push!(nt.ϕ,      outputs.ϕ[2:end-1,end÷2])
-            push!(nt.h,      outputs.h[2:end-1,end÷2])
-            push!(nt.iters,  outputs.iters)
-            push!(nt.errs_ϕ, outputs.errs_ϕ)
-            push!(nt.errs_h, outputs.errs_h)
+        if set != "Teff"
+            push!(nt.test_case, inputs.test_case)
+            push!(nt.ϕ,         outputs.ϕ[2:end-1,end÷2])
+            push!(nt.h,         outputs.h[2:end-1,end÷2])
+            push!(nt.iters,     outputs.iters)
+            push!(nt.errs_ϕ,    outputs.errs_ϕ)
+            push!(nt.errs_h,    outputs.errs_h)
         end
 
     end

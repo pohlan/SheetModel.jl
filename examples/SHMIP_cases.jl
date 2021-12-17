@@ -240,5 +240,5 @@ function run_SHMIP(;test_case="A1", nx=64, ny=32, itMax=10^7, tol=1e-6, make_plo
         plot_output(xc, yc, H, ϕ, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, errs_ϕ)
     end
 
-    return (;input..., SHMIP_case=test_case), output
+    return (;input..., test_case), output
 end

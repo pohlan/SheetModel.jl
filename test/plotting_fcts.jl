@@ -1,7 +1,9 @@
-using JLD2, PyPlot, LaTeXStrings, Parameters, DataFrames
+using JLD2, PyPlot, LaTeXStrings, Parameters, DataFrames, NetCDF, Statistics, SmoothingSplines
 
 rcParams = PyPlot.PyDict(PyPlot.matplotlib."rcParams")
-rcParams["font.size"] = 26
+rcParams["font.size"] = 27
+
+L2D = PyPlot.matplotlib.lines.Line2D
 
 """
 Plot a map of wall time vs damping (γ) and pseudo-time step (dτ_h)
@@ -68,7 +70,7 @@ end
 #plot_error()
 
 
-function shmip_results(case, model)
+function shmip_results(case, model, x)
     path = "../shmip_results/" * model * "/"
     # h, ϕ and N
     h_shmip = ncread(path * case * "_" * model * ".nc", "h")
@@ -82,9 +84,9 @@ function shmip_results(case, model)
     # get an interpolated cross-section averaged over all y coordinates
     spl_h = fit(SmoothingSpline, x1, vec(h_shmip), 250.0) # λ=250.0
     spl_ϕ = fit(SmoothingSpline, x1, vec(ϕ_shmip), 250.0)
-    get_ϕ_ref(x) = predict(spl_ϕ, x)
-    get_h_ref(x) = predict(spl_h, x)
-    return get_ϕ_ref, get_h_ref
+    ϕ_ref = predict(spl_ϕ, x)
+    h_ref = predict(spl_h, x)
+    return ϕ_ref, h_ref
 end
 
 function plot_error()
@@ -98,7 +100,8 @@ function plot_error()
 
         plot(iters, errs_ϕ, label=L"$f_\phi$, "*string(nx)*" x "*string(ny)*" grid", ls="-"; lw, color)
         plot(iters, errs_h, label=L"$f_h$, "*string(nx)*" x "*string(ny)*" grid", ls=":"; lw, color)
-        xscale("log")
+        #xscale("log")
+        xticks([10^4, 10^5, 2*10^5, 3*10^5, 4*10^5], [L"$1\times10^4$", L"$1\times10^5$", L"$2\times10^5$", L"$3\times10^5$", L"$4\times10^5$"])
         yscale("log")
         xlabel("Iteration count", labelpad=10)
         ylabel(L"RMS($f$)", labelpad=10)
@@ -106,37 +109,38 @@ function plot_error()
     end
 end
 
-function plot_fieldresults(inout...)
+function plot_fieldresults()
     bm = load("test/bm_results.jld2")
 
-    xs     = LinRange(0, 100e3, nx-2)
-    get_ϕ_ref, get_h_ref = shmip_results("A1", "mw")
-    ϕ_ref = get_ϕ_ref(xs)
-    h_ref = get_h_ref(xs)
+    key = "A-suite"
+    unit = "achtzack01_GPU"
+    ϕs  = bm[unit][key].ϕ
+    hs  = bm[unit][key].h
+    tcs = bm[unit][key].test_case
+    xs     = LinRange(0, 100e3, length(ϕs[1]))
 
-    fig, axs = subplots(1, length(inout), figsize=(26,10), gridspec_kw=Dict(:wspace=>0.5, :hspace=>0.3))
-    lw = 2.5
+    fig, axs = subplots(1, 2, figsize=(20,12), gridspec_kw=Dict(:wspace=>0.4, :hspace=>0.3))
+    lw = 1.5
+    lw_ref = 2
 
-    for (n, (inputs, outputs)) in enumerate(inout)
+    custom_legend = [L2D([0], [0], color="black", lw=lw_ref)]
 
-        @unpack Lx, Ly, dx, dy, H = inputs.params_struct
-        @unpack ϕ, h = outputs
-        nx, ny = size(ϕ)
+    for (n, (ϕ, h, tc)) in enumerate(zip(ϕs, hs, tcs))
+        ϕ_ref, h_ref = shmip_results(tc, "jd", xs)
 
-        ϕ[H  .== 0.0] .= NaN
-        h[H  .== 0.0] .= NaN
-        ind   = size(ϕ ,2)÷2
-
-        axs[1].plot(xs.*1e-3, ϕ[2:end-1, ind], label="GPU model"; lw)
-        axs[1].plot(xs.*1e-3, ϕ_ref, label="GlaDS"; lw)
+        axs[1].plot(xs.*1e-3, ϕ, zorder=2; lw)
+        axs[1].plot(xs.*1e-3, ϕ_ref, color="black", zorder=1; lw=lw_ref)
         axs[1].set_xlabel("x-coordinate (km)", labelpad=10)
         axs[1].set_ylabel("ϕ (Pa)", labelpad=10)
+        axs[1].legend(custom_legend, ["Reference ('jd')"], fontsize="small")
+        axs[1].text(-0.2, 1., L"\bf{a}", transform=axs[1].transAxes, ha="right", va="top", fontsize=27)
 
-        axs[2].plot(xs.*1e-3, h[2:end-1, ind], label="GPU model"; lw)
-        axs[2].plot(xs.*1e-3, h_ref, label="GlaDS"; lw)
-        axs[2].legend()
+        axs[2].plot(xs.*1e-3, h, label=tc, zorder=2; lw)
+        axs[2].plot(xs.*1e-3, h_ref, color="black", zorder=1; lw=lw_ref)
         axs[2].set_xlabel("x-coordinate (km)", labelpad=10)
         axs[2].set_ylabel("h (m)", labelpad=10)
+        axs[2].legend(title="GPU sheet model", fontsize="small")
+        axs[2].text(-0.2, 1., L"\bf{b}", transform=axs[2].transAxes, ha="right", va="top", fontsize=27)
     end
 end
 
@@ -208,7 +212,7 @@ function plot_benchmarks()
         axs[1].plot(glads[k].dof, glads[k].wt, marker="o", ls=get_ls(k), color="purple", label="GlaDS " * k; lw, ms)
         axs[1].legend()
     end
-    axs[1].text(-0.2, 1., L"\bf{a}", transform=axs[1].transAxes, ha="right", va="top", fontsize=26)
+    axs[1].text(-0.2, 1., L"\bf{a}", transform=axs[1].transAxes, ha="right", va="top", fontsize=27)
 
     #            T_eff        #
     # ------------------------#
@@ -230,7 +234,7 @@ function plot_benchmarks()
     axs[2].hlines(900, dof[1], dof[end], color=colors["node35.octopoda_GPU"], ls=":", label="Tesla V100 bandwidth"; lw)
     axs[2].hlines(448, dof[1], dof[end], color=colors["achtzack01_GPU"], ls=":", label="RTX2070 bandwidth"; lw)
     axs[2].legend(handlelength=4, fontsize="small",bbox_to_anchor=(1.1,1), loc="upper left")
-    axs[2].text(-0.2, 1., L"\bf{b}", transform=axs[2].transAxes, ha="right", va="top", fontsize=26)
+    axs[2].text(-0.2, 1., L"\bf{b}", transform=axs[2].transAxes, ha="right", va="top", fontsize=27)
 
     axs[3].axis("off") # trick to make legend fit in the figure
 end
