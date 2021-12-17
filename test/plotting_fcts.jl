@@ -87,24 +87,28 @@ function shmip_results(case, model)
     return get_ϕ_ref, get_h_ref
 end
 
-function plot_error(inout)
+function plot_error()
+    inout = load("test/error_count.jld2", "inout")
     lw = 2.5
     figure(figsize=(13,10))
-    for (n, ((inputs, outputs), ls)) in enumerate(zip[inout, [":", "--"]])
-        @unpack ϕ
-        @unpack iters, errs_ϕ, errs_h = outputs
+    for (n, ((inputs, outputs), color)) in enumerate(zip(inout, ["blue", "purple"]))
+        @unpack ϕ, iters, errs_ϕ, errs_h = outputs
         nx, ny = size(ϕ)
         dof = nx * ny
 
-        plot(iters, errs_ϕ, label="GPU model", color="darkskyblue"; lw, ls)
-        plot(iters, errs_h, label="GPU model", color="purple"; lw, ls)
-        xlabel("Iteration count")
-        ylabel(L"RMS($f$)")
+        plot(iters, errs_ϕ, label=L"$f_\phi$, "*string(nx)*" x "*string(ny)*" grid", ls="-"; lw, color)
+        plot(iters, errs_h, label=L"$f_h$, "*string(nx)*" x "*string(ny)*" grid", ls=":"; lw, color)
+        xscale("log")
+        yscale("log")
+        xlabel("Iteration count", labelpad=10)
+        ylabel(L"RMS($f$)", labelpad=10)
         legend()
     end
 end
 
 function plot_fieldresults(inout...)
+    bm = load("test/bm_results.jld2")
+
     xs     = LinRange(0, 100e3, nx-2)
     get_ϕ_ref, get_h_ref = shmip_results("A1", "mw")
     ϕ_ref = get_ϕ_ref(xs)
@@ -125,21 +129,20 @@ function plot_fieldresults(inout...)
 
         axs[1].plot(xs.*1e-3, ϕ[2:end-1, ind], label="GPU model"; lw)
         axs[1].plot(xs.*1e-3, ϕ_ref, label="GlaDS"; lw)
-        axs[1].set_xlabel("x-coordinate (km)")
-        axs[1].set_ylabel("ϕ (Pa)")
+        axs[1].set_xlabel("x-coordinate (km)", labelpad=10)
+        axs[1].set_ylabel("ϕ (Pa)", labelpad=10)
 
         axs[2].plot(xs.*1e-3, h[2:end-1, ind], label="GPU model"; lw)
         axs[2].plot(xs.*1e-3, h_ref, label="GlaDS"; lw)
         axs[2].legend()
-        axs[2].set_xlabel("x-coordinate (km)")
-        axs[2].set_ylabel("h (m)")
+        axs[2].set_xlabel("x-coordinate (km)", labelpad=10)
+        axs[2].set_ylabel("h (m)", labelpad=10)
     end
 end
 
 
 function plot_benchmarks()
-    file = "test/bm_results.jld2"
-    bm = load(file)
+    bm = load("test/bm_results.jld2")
 
     glads = Dict("ode15s" => (wt  = [2.64, 31.42, 59.9, 116.58, 314.5, 627.86],
                               dof = [0.087, 0.701, 1.359, 2.65, 6.586, 12.9780].*1e3),

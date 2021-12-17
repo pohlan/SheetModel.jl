@@ -34,6 +34,14 @@ test_sets = Dict(# test case A1, 900 iterations not reaching steady-state, no er
                                 (nx=128, ny=128, dτ_h_=7e-6),
                                 (nx=256, ny=128, dτ_h_=7e-6),
                                 (nx=512, ny=256, dτ_h_=6e-6)
+                                ],
+
+                # run different shmip cases to compare with reference from other models
+                "A-suite"   => [(test_case="A1", dτ_h_=1e-5),
+                                (test_case="A2", dτ_h_=1e-5),
+                                (test_case="A3", dτ_h_=1e-5),
+                                (test_case="A4", dτ_h_=1e-5),
+                                (test_case="A5", dτ_h_=1e-5)
                                 ]
 )
 
@@ -48,12 +56,13 @@ for set in keys(test_sets)
             nit       = [],   # number of iterations
             dof       = []    # degrees of freedeom
     )
-    if set == "std-state"
-        nt = merge(nt, (ϕ      = [],
-                        h      = [],
-                        iters  = [],
-                        errs_ϕ = [],
-                        errs_h = [])
+    if set != "Teff"
+        nt = merge(nt, (test_case = [],
+                        ϕ         = [],
+                        h         = [],
+                        iters     = [],
+                        errs_ϕ    = [],
+                        errs_h    = [])
         )
     end
 
@@ -92,6 +101,6 @@ for set in keys(test_sets)
 end
 
 # save to file
-jldopen("test/bm_results.jld2", "a+") do file
+jldopen("test/bm_results2.jld2", "a+") do file
     file[unitname] = dic
 end
