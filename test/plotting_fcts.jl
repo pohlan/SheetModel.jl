@@ -32,19 +32,40 @@ end
 
 #plot_para_comp()
 
-function plot_error(errs_ϕ, errs_h, iters; nx, ny)
-    figure(figsize=(13, 10))
-    semilogy(iters, errs_ϕ, label=L"ϕ", color="gold", lw=2)
-    semilogy(iters, errs_h, label=L"h", color="deepskyblue", lw=2)
-    title("nx = " * string(nx) * ", ny = " * string(ny))
+function plot_error()
+    file = "test/bm_results.jld2"
+    bm = load(file)
+    unit = "achtzack01_GPU"
+    key  = "std-state"
 
-    xlabel("Iteration")
-    ylabel(L"RMS($f_h$)")
-    legend()
+    errs_ϕ = bm[unit][key].errs_ϕ
+    errs_h = bm[unit][key].errs_h
+    iters  = bm[unit][key].iters
+    dof    = bm[unit][key].dof
+
+    lw = 2
+    fig, axs = subplots(1, 2, figsize=(17,10), gridspec_kw=Dict(:wspace=>0.45, :hspace=>0.3))
+
+    for n in 1:2:length(bm[unit][key].dof)
+        axs[1].plot(iters[n], errs_ϕ[n], label=string(n); lw) # color="gold"
+        axs[2].plot(iters[n], errs_h[n], label=string(n); lw) # , color="deepskyblue"
+    end
+
+    axs[1].set_xscale("log")
+    axs[1].set_yscale("log")
+    axs[1].set_xlabel("Iteration count")
+    axs[1].set_ylabel(L"RMS($f_\phi$)")
+    axs[1].legend()
+
+    axs[2].set_xscale("log")
+    axs[2].set_yscale("log")
+    axs[2].set_xlabel("Iteration count")
+    axs[2].set_ylabel(L"RMS($f_h$)")
+
 end
 
 # after running run_SHMIP
-#plot_error(outputs.errs_ϕ, outputs.errs_h, outputs.iters; nx=size(outputs.h, 1), ny=size(outputs.h, 2))
+#plot_error()
 
 function plot_fieldresults(;inputs, outputs)
     @unpack Lx, Ly, dx, dy, H = inputs.params_struct
@@ -132,54 +153,52 @@ function plot_benchmarks()
 
     # going into steady state #
     # ------------------------#
-    fig, axs = subplots(1, 3, figsize=(23,10), gridspec_kw=Dict(:width_ratios => [1,1,0.4], :wspace=>0.45, :hspace=>0.3))
+    fig, axs = subplots(1, 3, figsize=(26,10), gridspec_kw=Dict(:width_ratios => [1,1,0.4], :wspace=>0.5, :hspace=>0.3))
 
-    unit = "achtzack01_GPU"
     key  = "std-state"
-    dof   = bm[unit][key].dof
-    wt    = bm[unit][key].wall_time
-    T_eff = bm[unit][key].T_eff
-    nit   = bm[unit][key].nit
 
-    axs[1].plot(dof, wt, "o", ls=get_ls(unit), ms=5, color=colors[unit], label=get_lab(unit); lw) #marker="x", markersize=5,
-    #axs[1].set_ylim(0, 400)
-    axs[1].set_xscale("log")
-    axs[1].set_yscale("log")
-    axs[1].set_xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
-    axs[1].set_ylabel("Wall time (s)", labelpad=10)
-    for k in keys(glads)
-        axs[1].plot(glads[k].dof, glads[k].wt, marker="o", ls=get_ls(k), color="purple", label="GlaDS " * k; lw, ms)
-        axs[1].legend()
-    end
-
-    # axs[2].plot(dof, nit, marker="o", ls=get_ls(unit), color=colors[unit], label=get_lab(unit); lw, ms)
-    # #axs[2].set_ylim(1, 500)
-    # axs[2].set_xscale("log")
-    # axs[2].set_yscale("log")
-    # axs[2].set_xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
-    # axs[2].set_ylabel("Number of iterations", labelpad=10)
-
-    #            T_eff        #
-    # ------------------------#
-
-    key = "Teff"
-    for unit in ["achtzack01_GPU", "achtzack01_CPU_32threads", "achtzack01_CPU_16threads", "achtzack01_CPU_8threads", "achtzack01_CPU_4threads"] #, "node35.octopoda_GPU"]
+    for unit in ["node35.octopoda_GPU", "achtzack01_GPU"]
         dof   = bm[unit][key].dof
         wt    = bm[unit][key].wall_time
         T_eff = bm[unit][key].T_eff
         nit   = bm[unit][key].nit
 
-        axs[2].plot(dof, T_eff, "o", ls=get_ls(unit), color=colors[unit], label=get_lab(unit); lw, ms=10)
+        axs[1].plot(dof, wt, "o", ls=get_ls(unit), color=colors[unit], label=get_lab(unit); lw, ms) #marker="x", markersize=5,
+        #axs[1].set_ylim(0, 400)
+        axs[1].set_xscale("log")
+        axs[1].set_yscale("log")
+        axs[1].set_xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
+        axs[1].set_ylabel("Wall time (s)", labelpad=10)
+    end
+    for k in keys(glads)
+        axs[1].plot(glads[k].dof, glads[k].wt, marker="o", ls=get_ls(k), color="purple", label="GlaDS " * k; lw, ms)
+        axs[1].legend()
+    end
+    axs[1].text(-0.2, 1., L"\bf{a}", transform=axs[1].transAxes, ha="right", va="top", fontsize=26)
+
+    #            T_eff        #
+    # ------------------------#
+
+    key = "Teff"
+    for unit in ["node35.octopoda_GPU", "achtzack01_GPU", "achtzack01_CPU_32threads", "achtzack01_CPU_16threads", "achtzack01_CPU_8threads", "achtzack01_CPU_4threads"] #, ]
+        dof   = bm[unit][key].dof
+        wt    = bm[unit][key].wall_time
+        T_eff = bm[unit][key].T_eff
+        nit   = bm[unit][key].nit
+
+        axs[2].plot(dof, T_eff, "o", ls=get_ls(unit), color=colors[unit], label=get_lab(unit); lw, ms)
         axs[2].set_xscale("log")
         axs[2].set_yscale("log")
         axs[2].set_xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
         axs[2].set_ylabel(L"$T_{eff}$ (GB/s)", labelpad=10)
     end
+    dof = bm["achtzack01_GPU"][key].dof
     axs[2].hlines(900, dof[1], dof[end], color=colors["node35.octopoda_GPU"], ls=":", label="Tesla V100 bandwidth"; lw)
     axs[2].hlines(448, dof[1], dof[end], color=colors["achtzack01_GPU"], ls=":", label="RTX2070 bandwidth"; lw)
     axs[2].legend(handlelength=4, fontsize="small",bbox_to_anchor=(1.1,1), loc="upper left")
+    axs[2].text(-0.2, 1., L"\bf{b}", transform=axs[2].transAxes, ha="right", va="top", fontsize=26)
 
-    axs[3].axis("off")
+    axs[3].axis("off") # trick to make legend fit in the figure
 end
 
 plot_benchmarks()

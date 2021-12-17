@@ -1,5 +1,5 @@
 using Base: Float64, Int64
-using LinearAlgebra, Parameters, Statistics, PyPlot, LaTeXStrings, Infiltrator
+using LinearAlgebra, Parameters, Statistics, LaTeXStrings, Infiltrator
 
 # misc fudge factors to avoid dividing by zero
 small = eps(Float64)
