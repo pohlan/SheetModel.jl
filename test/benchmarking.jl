@@ -1,25 +1,9 @@
-# ------------------------------------------------------------------------------------------------------------------#
-# This script runs the model over run_SHMIP.jl and saves the parameters                                             #
-# in a nested dictionary, which is then saved in the "benchmarks.jld2" file.                                        #
-# Structure:                                                                                                        #
-#                                                                                                                   #
-# :Achtzack01_GPU => :commit1 => :SHMIP_case   = ["A1", "A1", "A2", ...]                                            #
-#                                :run_time     = [28.1, 34.5, 38.1, ...]  # absolute time, in s                     #
-#                                :T_eff        = [20.3, 19.1, 18.7, ...]  # effective memory throughput, GB/s       #
-#                                :nx           = [1024, 4096, 4096, ...]                                            #
-#                                :ny           = [512, 1024, 4096, ...]                                             #
-#                                :iterations   = [10^3, 28200, 10^3, ...]                                           #
-#                    :commit2  => ...                                                                               #
-#                                                                                                                   #
-# :Achtzack01_CPU-1threads      => :commit1  => ...                                                                 #
-# :Achtzack01_CPU-16threads     => ...                                                                              #
-# :Achtzack01_CPU-32threads     => ...                                                                              #
-# :annegret-laptop_CPU-1threads => ...                                                                              #
-# :Octopus_GPU                  => ...                                                                              #
-# ------------------------------------------------------------------------------------------------------------------#
+# ---------------------------------------------------------#
+# Running benchmarking test cases and saving to jld2 file  #
+# ---------------------------------------------------------#
 
 using Base: AbstractVecOrTuple
-using DrWatson, JLD2, Printf, CUDA
+using JLD2, Printf, CUDA, DataFrames
 using SheetModel
 
 # get the name of the server where the model was run
@@ -29,95 +13,86 @@ hostname = read(`hostname`, String)[1:end-1] # the last character is always "\n"
 if USE_GPU
     unitname = join([hostname "_GPU"])
 else
-    unitname = join([hostname, "_CPU-", string(Threads.nthreads()), "threads"])
-end
-
-# load file with previous benchmarks
-file = joinpath(@__DIR__, "benchmarks_steadyst.jld2")
-if isfile(file)
-    benchmarks = load(file)
-else
-    benchmarks = Dict()
-end
-
-# get current commit hash and check that repo is clean
-gitcommit = gitdescribe()
-if isdirty() gitcommit = split(gitcommit, "_")[1] end
-
-# check if unitname and gitcommit entries in the dictionaries already exist
-if !haskey(benchmarks, unitname)
-    benchmarks[unitname] = Dict()
-end
-if haskey(benchmarks[unitname], gitcommit)
-    @printf("This commit has already been benchmarked by %s. Press enter to continue or ^C to abort.", unitname)
-    readline() # will stop the execution and only continue when pressing enter
-else
-    benchmarks[unitname][gitcommit] = Dict()
+    unitname = join([hostname, "_CPU_", string(Threads.nthreads()), "threads"])
 end
 
 # define the test sets
+test_sets = Dict(# test case A1, 900 iterations not reaching steady-state, no error calculation; for T_eff vs. dof plot
+                "Teff"      => [(nx=128,   ny=128,  itMax=900, warmup=10),
+                                (nx=256,   ny=256,  itMax=900, warmup=10),
+                                #(nx=1024,  ny=1024, itMax=900, warmup=10),
+                                #(nx=2048,  ny=2048, itMax=900, warmup=10),
+                                #(nx=4096,  ny=4096, itMax=900, warmup=10),
+                                #(nx=8192,  ny=4096, itMax=900, warmup=10),
+                                ],
+
+                # test case A1, going into steady state; for wall time/#it vs. dof plot
+                "std-state" => [(nx=32,  ny=32,  dτ_h_=1e-5, itMax=2*10^4),
+                                (nx=64,  ny=32,  dτ_h_=1e-5, itMax=2*10^4),
+                                #(nx=64,  ny=64,  dτ_h_=1e-5),
+                                #(nx=128, ny=64,  dτ_h_=1e-5),
+                                #(nx=128, ny=128, dτ_h_=7e-6),
+                                #(nx=256, ny=128, dτ_h_=7e-6),
+                                #(nx=256, ny=256, dτ_h_=6e-6),
+                                #(nx=512, ny=256, dτ_h_=6e-6)
+                                ]
+)
+
+# get run_SHMIP function
 include(joinpath(@__DIR__, "../examples/SHMIP_cases.jl"))
-test_sets = [# 10^3 iterations without reaching steady state (and without calculating errors)
-
-            #(test_case="A1", nx=128,   ny=128,  itMax=10^3, warmup=10),
-            #(test_case="A1", nx=256,   ny=256,  itMax=10^3),
-            #(test_case="A1", nx=512,   ny=512,  itMax=10^3),
-            #(test_case="A1", nx=1024,  ny=1024, itMax=10^3),
-            #(test_case="A1", nx=2048,  ny=2048, itMax=10^3),
-            #(test_case="A1", nx=4096,  ny=4096, itMax=10^3),
-            #(test_case="A1", nx=8192,  ny=8192, itMax=10^3),
-            #(test_case="A1", nx=16384, ny=8192, itMax=10^3),
-
-             # going into steady state
-            (nx=32, ny=32, γ_ϕ= 0.9, γ_h=0.8, dτ_h_=2.2e-5),
-            (nx=64, ny=32, γ_ϕ= 0.9, γ_h=0.8, dτ_h_=8e-6),
-            (nx=64, ny=64, γ_ϕ= 0.9, γ_h=0.8, dτ_h_=9e-6),
-            (nx=128, ny=64, γ_ϕ= 0.9, γ_h=0.8, dτ_h_=7e-6),
-            (nx=128, ny=128, γ_ϕ= 0.9, γ_h=0.8, dτ_h_=4e-6),
-            (nx=256, ny=128, γ_ϕ= 0.85, γ_h=0.8, dτ_h_=4e-6),
-            #(test_case="A1", nx=128, ny=128, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
-            #(test_case="A1", nx=256, ny=256, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
-            #(test_case="A1", nx=512, ny=512, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6),
-            #(test_case="A1", nx=1024, ny=1024, itMax=10^6, γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=8e-7),   # takes more than 30 min and the result is still a tiny bit off
-            #(test_case="A1", nx=4096, ny=2048, itMax=10^6),
-            #(test_case="A3", nx=1024, ny=512, itMax=10^5),
-            #(test_case="A3", nx=4096, ny=1024, itMax=10^5),
-            #(test_case="F1", nx=1024, ny=512, itMax=10^5),
-            #(test_case="F1", nx=4096, ny=2048, itMax=10^5),
-             ]
 
 ## run the benchmarking for each test set
-for test_set in test_sets
-    # run the model
-    inputs, outputs = try
-        run_SHMIP(;test_set...);
-    catch e
-        if isa(e, CUDA.OutOfGPUMemoryError)
-            @printf("nx =%d, ny=%d could not be run, not enough memory. \n", test_set.nx, test_set.ny)
+dic = Dict()
+for set in keys(test_sets)
+    nt = (  wall_time = [],   # wall time in s
+            T_eff     = [],   # effective memory throughput in GB/s
+            nit       = [],   # number of iterations
+            dof       = []    # degrees of freedeom
+    )
+    if set == "std-state"
+        nt = merge(nt, (ϕ      = [],
+                        h      = [],
+                        iters  = [],
+                        errs_ϕ = [],
+                        errs_h = [])
+        )
+    end
+
+    for kwargs in test_sets[set]
+        # for CPU only do the dof_Teff test runs
+        if !USE_GPU && set != "Teff"
             continue
         end
-    end
 
-    # save output in dictionary
-    d = Dict(
-        :SHMIP_case => inputs.SHMIP_case,
-        :run_time => outputs.time_tot,
-        :T_eff => outputs.T_eff,
-        :nx => size(outputs.h, 1),
-        :ny => size(outputs.h, 2),
-        :iterations => outputs.ittot,
-    )
+        # run the model
+        inputs, outputs = try
+            run_SHMIP(;kwargs...);
+        catch e
+            if isa(e, CUDA.OutOfGPUMemoryError)
+                @printf("nx =%d, ny=%d could not be run, not enough memory. \n", test_set.nx, test_set.ny)
+                continue
+            end
+        end
 
-    # push to each entry of the dictionary
-    if !haskey(benchmarks[unitname][gitcommit], :SHMIP_case)
-        [benchmarks[unitname][gitcommit][k] = typeof(d[k])[] for k in keys(d)]
+        # push results to arrays
+        push!(nt.wall_time, outputs.time_tot)
+        push!(nt.T_eff,     outputs.T_eff)
+        push!(nt.nit,       outputs.ittot)
+        push!(nt.dof,       length(outputs.h))
+
+        if set == "std-state"
+            push!(nt.ϕ,      outputs.ϕ[2:end-1,end÷2])
+            push!(nt.h,      outputs.h[2:end-1,end÷2])
+            push!(nt.iters,  outputs.iters)
+            push!(nt.errs_ϕ, outputs.errs_ϕ)
+            push!(nt.errs_h, outputs.errs_h)
+        end
+
     end
-    for key in filter(x->x!=:gitpatch, keys(benchmarks[unitname][gitcommit]))
-        push!(benchmarks[unitname][gitcommit][key], d[key])
-    end
+    dic[set] = DataFrame(;nt...)
 end
 
-# write updated dictionary back to file
-save(file, benchmarks)
-
-include("plot_benchmarks.jl")
+# save to file
+jldopen("bm_results.jld2", "a+") do file
+    file[unitname] = dic
+end
