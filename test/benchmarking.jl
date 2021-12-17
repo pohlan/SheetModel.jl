@@ -20,21 +20,21 @@ end
 test_sets = Dict(# test case A1, 900 iterations not reaching steady-state, no error calculation; for T_eff vs. dof plot
                 "Teff"      => [(nx=128,   ny=128,  itMax=900, warmup=10),
                                 (nx=256,   ny=256,  itMax=900, warmup=10),
-                                #(nx=1024,  ny=1024, itMax=900, warmup=10),
-                                #(nx=2048,  ny=2048, itMax=900, warmup=10),
-                                #(nx=4096,  ny=4096, itMax=900, warmup=10),
-                                #(nx=8192,  ny=4096, itMax=900, warmup=10),
+                                (nx=1024,  ny=1024, itMax=900, warmup=10),
+                                (nx=2048,  ny=2048, itMax=900, warmup=10),
+                                (nx=4096,  ny=4096, itMax=900, warmup=10),
+                                (nx=8192,  ny=4096, itMax=900, warmup=10),
                                 ],
 
                 # test case A1, going into steady state; for wall time/#it vs. dof plot
-                "std-state" => [(nx=32,  ny=32,  dτ_h_=1e-5, itMax=2*10^4),
-                                (nx=64,  ny=32,  dτ_h_=1e-5, itMax=2*10^4),
-                                #(nx=64,  ny=64,  dτ_h_=1e-5),
-                                #(nx=128, ny=64,  dτ_h_=1e-5),
-                                #(nx=128, ny=128, dτ_h_=7e-6),
-                                #(nx=256, ny=128, dτ_h_=7e-6),
-                                #(nx=256, ny=256, dτ_h_=6e-6),
-                                #(nx=512, ny=256, dτ_h_=6e-6)
+                "std-state" => [(nx=32,  ny=32,  dτ_h_=1e-5),
+                                (nx=64,  ny=32,  dτ_h_=1e-5),
+                                (nx=64,  ny=64,  dτ_h_=1e-5),
+                                (nx=128, ny=64,  dτ_h_=1e-5),
+                                (nx=128, ny=128, dτ_h_=7e-6),
+                                (nx=256, ny=128, dτ_h_=7e-6),
+                                (nx=256, ny=256, dτ_h_=6e-6),
+                                (nx=512, ny=256, dτ_h_=6e-6)
                                 ]
 )
 
