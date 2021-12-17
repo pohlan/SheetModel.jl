@@ -33,7 +33,6 @@ test_sets = Dict(# test case A1, 900 iterations not reaching steady-state, no er
                                 (nx=128, ny=64,  dτ_h_=1e-5),
                                 (nx=128, ny=128, dτ_h_=7e-6),
                                 (nx=256, ny=128, dτ_h_=7e-6),
-                                (nx=256, ny=256, dτ_h_=6e-6),
                                 (nx=512, ny=256, dτ_h_=6e-6)
                                 ]
 )

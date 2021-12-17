@@ -1,4 +1,4 @@
-using JLD2, PyPlot, LaTeXStrings, Parameters
+using JLD2, PyPlot, LaTeXStrings, Parameters, DataFrames
 
 rcParams = PyPlot.PyDict(PyPlot.matplotlib."rcParams")
 rcParams["font.size"] = 26
@@ -82,32 +82,31 @@ function plot_fieldresults(;inputs, outputs)
     fig.suptitle("cross-sections")
 end
 
-plot_fieldresults(;inputs, outputs)
+#plot_fieldresults(;inputs, outputs)
 
 
 function plot_benchmarks()
-    file = joinpath(@__DIR__, "benchmarks_old.jld2")
-    benchmarks = load(file)
+    file = "test/bm_results.jld2"
+    bm = load(file)
 
-    glads = Dict("ode15s" => (t_tot = [2.64, 31.42, 59.9, 116.58, 314.5, 627.86],
-                              res   = [0.087, 0.701, 1.359, 2.65, 6.586, 12.9780].*1e3),
+    glads = Dict("ode15s" => (wt  = [2.64, 31.42, 59.9, 116.58, 314.5, 627.86],
+                              dof = [0.087, 0.701, 1.359, 2.65, 6.586, 12.9780].*1e3),
                 #"ode113"  => (t_tot = [586, 7665, 11956, 19368, 48391, 90473],
                 #              res   = [0.087, 0.701, 1.359, 2.65, 6.586, 12.978].*1e3)
     )
-    commits = ["aba611ca46563ed1340675245febae8c714520ba"]#, "cceaa1b7d6913f66b04baaefaf492f91fd54bf04"]
 
     colors = Dict("achtzack01_GPU" => "deepskyblue",
-                  "achtzack01_CPU-32threads" => "darkorange",
-                  "achtzack01_CPU-16threads" => "darkorange",#"purple",
-                  "achtzack01_CPU-4threads" => "darkorange",#"green",
+                  "achtzack01_CPU_32_threads" => "darkorange",
+                  "achtzack01_CPU_16_threads" => "darkorange",#"purple",
+                  "achtzack01_CPU_4_threads" => "darkorange",#"green",
                   "node35.octopoda_GPU" => "black")
 
     function get_ls(kw)
-        if endswith(kw, "32threads")
+        if endswith(kw, "32_threads")
             style = "--"
-        elseif endswith(kw, "16threads") || kw == "ode113"
+        elseif endswith(kw, "16_threads") || kw == "ode113"
             style = ":"
-        elseif endswith(kw, "4threads")
+        elseif endswith(kw, "4_threads")
             style = "-."
         else
             style = "-"
@@ -125,68 +124,58 @@ function plot_benchmarks()
         end
     end
 
-    lw = 3
+    lw = 3 # linewidth
+    ms = 6 # markersize
 
+    # going into steady state #
+    # ------------------------#
     fig, axs = subplots(1, 2, figsize=(22,12))
     fig.subplots_adjust(hspace=0.3, wspace=0.35)
 
-    for gitcommit in commits
-        for unit in ["node35.octopoda_GPU", "achtzack01_GPU", "achtzack01_CPU-32threads", "achtzack01_CPU-16threads", "achtzack01_CPU-4threads"]
-            if haskey(benchmarks[unit], gitcommit)
-                (host, PU) = split(unit, "_")
-                case = benchmarks[unit][gitcommit][:SHMIP_case]
-                steadyst = benchmarks[unit][gitcommit][:iterations] .> 10^3
-                res = benchmarks[unit][gitcommit][:nx] .* benchmarks[unit][gitcommit][:ny]
-                t_tot = benchmarks[unit][gitcommit][:run_time]
-                T_eff = benchmarks[unit][gitcommit][:T_eff]
-                #nx = benchmarks[unit][gitcommit][:nx][steadyst]
-                its = benchmarks[unit][gitcommit][:iterations][steadyst]
+    unit = "achtzack01_GPU"
+    key  = "std-state"
+    dof   = bm[unit][key].dof
+    wt    = bm[unit][key].wall_time
+    T_eff = bm[unit][key].T_eff
+    nit   = bm[unit][key].nit
 
-                # if any(steadyst) && !startswith(unit, "node")
-                #     axs[1].plot(res[steadyst], t_tot[steadyst], "o", ls=get_ls(unit), ms=5, color=colors[unit], label=get_lab(unit); lw) #marker="x", markersize=5,
-                #     #axs[1].set_ylim(0, 400)
-                #     axs[1].set_xscale("log")
-                #     axs[1].set_yscale("log")
-                #     axs[1].set_xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
-                #     axs[1].set_ylabel("Wall time (s)", labelpad=10)
-                # end
-                axs[2].plot(res[.!steadyst], T_eff[.!steadyst], marker="o", ls=get_ls(unit), color=colors[unit], label=get_lab(unit); lw)
-                #axs[2].set_ylim(1, 500)
-                axs[2].set_xscale("log")
-                axs[2].set_yscale("log")
-                axs[2].set_xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
-                axs[2].set_ylabel(L"$\mathrm{T_{eff}}$ (GB/s)", labelpad=10)
-                axs[2].legend()
-            end
-        end
-    end
-
-    # hack for plotting steady states
-    file = joinpath(@__DIR__, "benchmarks_steadyst.jld2")
-    benchmarks = load(file)
-
-    for unit in keys(benchmarks)
-        for gitcommit in keys(benchmarks[unit])
-            res = benchmarks[unit][gitcommit][:nx] .* benchmarks[unit][gitcommit][:ny]
-            #push!(res, 512)
-            #push!(res, 640)
-            t_tot = benchmarks[unit][gitcommit][:run_time]
-            #push!(t_tot, 89.4)
-            #push!(t_tot, 63.714)
-
-            axs[1].plot(res, t_tot, "o", ls=get_ls(unit), ms=5, color=colors[unit], label=get_lab(unit); lw) #marker="x", markersize=5,
-            #axs[1].set_ylim(0, 400)
-            axs[1].set_xscale("log")
-            axs[1].set_yscale("log")
-            axs[1].set_xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
-            axs[1].set_ylabel("Wall time (s)", labelpad=10)
-        end
-    end
-
+    axs[1].plot(dof, wt, "o", ls=get_ls(unit), ms=5, color=colors[unit], label=get_lab(unit); lw) #marker="x", markersize=5,
+    #axs[1].set_ylim(0, 400)
+    axs[1].set_xscale("log")
+    axs[1].set_yscale("log")
+    axs[1].set_xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
+    axs[1].set_ylabel("Wall time (s)", labelpad=10)
     for k in keys(glads)
-        axs[1].plot(glads[k].res, glads[k].t_tot, marker="o", ls=get_ls(k), ms=5, color="purple", label="GlaDS " * k; lw)
+        axs[1].plot(glads[k].dof, glads[k].wt, marker="o", ls=get_ls(k), color="purple", label="GlaDS " * k; lw, ms)
         axs[1].legend()
+    end
+
+    axs[2].plot(dof, nit, marker="o", ls=get_ls(unit), color=colors[unit], label=get_lab(unit); lw, ms)
+    #axs[2].set_ylim(1, 500)
+    axs[2].set_xscale("log")
+    axs[2].set_yscale("log")
+    axs[2].set_xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
+    axs[2].set_ylabel("Number of iterations", labelpad=10)
+
+    #            T_eff        #
+    # ------------------------#
+
+    figure(figsize=(12,12))
+    key = "Teff"
+    for unit in keys(bm)
+        dof   = bm[unit][key].dof
+        wt    = bm[unit][key].wall_time
+        T_eff = bm[unit][key].T_eff
+        nit   = bm[unit][key].nit
+
+        plot(dof, T_eff, "x", ls=get_ls(unit), color=colors[unit], label=get_lab(unit); lw, ms)
+        #ylim(0, 400)
+        xscale("log")
+        yscale("log")
+        xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
+        ylabel(L"$T_{eff}$ (GB/s)", labelpad=10)
+        legend()
     end
 end
 
-#plot_benchmarks()
+plot_benchmarks()
