@@ -96,18 +96,21 @@ function plot_benchmarks()
     )
 
     colors = Dict("achtzack01_GPU" => "deepskyblue",
-                  "achtzack01_CPU_32_threads" => "darkorange",
-                  "achtzack01_CPU_16_threads" => "darkorange",#"purple",
-                  "achtzack01_CPU_4_threads" => "darkorange",#"green",
+                  "achtzack01_CPU_32threads" => "darkorange",
+                  "achtzack01_CPU_16threads" => "darkorange",#"purple",
+                  "achtzack01_CPU_8threads" => "darkorange",
+                  "achtzack01_CPU_4threads" => "darkorange",#"green",
                   "node35.octopoda_GPU" => "black")
 
     function get_ls(kw)
-        if endswith(kw, "32_threads")
+        if endswith(kw, "32threads")
             style = "--"
-        elseif endswith(kw, "16_threads") || kw == "ode113"
+        elseif endswith(kw, "16threads") || kw == "ode113"
             style = ":"
-        elseif endswith(kw, "4_threads")
+        elseif endswith(kw, "4threads")
             style = "-."
+        elseif endswith(kw, "8threads")
+            style = (0, (5, 10))
         else
             style = "-"
         end
@@ -116,21 +119,20 @@ function plot_benchmarks()
 
     function get_lab(unit)
         if startswith(unit, "node")
-            lab = "Octopus GPU (Tesla V100)"
+            lab = "GPU (Tesla V100)"
         elseif unit == "achtzack01_GPU"
-            lab = "Achtzack GPU (RTX 2070)"
+            lab = "GPU (RTX 2070)"
         else
-            lab = "Achtzack CPU " * split(split(unit, "-")[2], "thr")[1] * " threads"
+            lab = "CPU " * split(split(unit, "_")[3], "thr")[1] * " threads"
         end
     end
 
     lw = 3 # linewidth
-    ms = 6 # markersize
+    ms = 7 # markersize
 
     # going into steady state #
     # ------------------------#
-    fig, axs = subplots(1, 2, figsize=(22,12))
-    fig.subplots_adjust(hspace=0.3, wspace=0.35)
+    fig, axs = subplots(1, 3, figsize=(23,10), gridspec_kw=Dict(:width_ratios => [1,1,0.4], :wspace=>0.45, :hspace=>0.3))
 
     unit = "achtzack01_GPU"
     key  = "std-state"
@@ -150,32 +152,34 @@ function plot_benchmarks()
         axs[1].legend()
     end
 
-    axs[2].plot(dof, nit, marker="o", ls=get_ls(unit), color=colors[unit], label=get_lab(unit); lw, ms)
-    #axs[2].set_ylim(1, 500)
-    axs[2].set_xscale("log")
-    axs[2].set_yscale("log")
-    axs[2].set_xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
-    axs[2].set_ylabel("Number of iterations", labelpad=10)
+    # axs[2].plot(dof, nit, marker="o", ls=get_ls(unit), color=colors[unit], label=get_lab(unit); lw, ms)
+    # #axs[2].set_ylim(1, 500)
+    # axs[2].set_xscale("log")
+    # axs[2].set_yscale("log")
+    # axs[2].set_xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
+    # axs[2].set_ylabel("Number of iterations", labelpad=10)
 
     #            T_eff        #
     # ------------------------#
 
-    figure(figsize=(12,12))
     key = "Teff"
-    for unit in keys(bm)
+    for unit in ["achtzack01_GPU", "achtzack01_CPU_32threads", "achtzack01_CPU_16threads", "achtzack01_CPU_8threads", "achtzack01_CPU_4threads"] #, "node35.octopoda_GPU"]
         dof   = bm[unit][key].dof
         wt    = bm[unit][key].wall_time
         T_eff = bm[unit][key].T_eff
         nit   = bm[unit][key].nit
 
-        plot(dof, T_eff, "x", ls=get_ls(unit), color=colors[unit], label=get_lab(unit); lw, ms)
-        #ylim(0, 400)
-        xscale("log")
-        yscale("log")
-        xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
-        ylabel(L"$T_{eff}$ (GB/s)", labelpad=10)
-        legend()
+        axs[2].plot(dof, T_eff, "o", ls=get_ls(unit), color=colors[unit], label=get_lab(unit); lw, ms=10)
+        axs[2].set_xscale("log")
+        axs[2].set_yscale("log")
+        axs[2].set_xlabel(L"Degrees of freedom (nx $\cdot$ ny)", labelpad=10)
+        axs[2].set_ylabel(L"$T_{eff}$ (GB/s)", labelpad=10)
     end
+    axs[2].hlines(900, dof[1], dof[end], color=colors["node35.octopoda_GPU"], ls=":", label="Tesla V100 bandwidth"; lw)
+    axs[2].hlines(448, dof[1], dof[end], color=colors["achtzack01_GPU"], ls=":", label="RTX2070 bandwidth"; lw)
+    axs[2].legend(handlelength=4, fontsize="small",bbox_to_anchor=(1.1,1), loc="upper left")
+
+    axs[3].axis("off")
 end
 
 plot_benchmarks()
