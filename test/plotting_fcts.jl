@@ -80,10 +80,14 @@ function shmip_results(case, model, x)
     coords1 = ncread(path * case * "_" * model * ".nc", "coords1")
     x1 = coords1[:, 1]
     y1 = coords1[:, 2]
+    i_cross = abs.(mean(y1).-y1) .< 30
+
+    h_cross = h_shmip[i_cross]
+    ϕ_cross = ϕ_shmip[i_cross]
 
     # get an interpolated cross-section averaged over all y coordinates
-    spl_h = fit(SmoothingSpline, x1, vec(h_shmip), 250.0) # λ=250.0
-    spl_ϕ = fit(SmoothingSpline, x1, vec(ϕ_shmip), 250.0)
+    spl_h = fit(SmoothingSpline, x1[i_cross], vec(h_cross), 250.0) # λ=250.0
+    spl_ϕ = fit(SmoothingSpline, x1[i_cross], vec(ϕ_cross), 250.0)
     ϕ_ref = predict(spl_ϕ, x)
     h_ref = predict(spl_h, x)
     return ϕ_ref, h_ref
