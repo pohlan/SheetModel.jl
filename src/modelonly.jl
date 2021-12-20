@@ -94,7 +94,7 @@ Calculate residual of ϕ; input coordinates on ϕ/h grid (but only defined on in
 Needs access to ϕ, ϕ_old, h, H, k, α, β, small, dx_, dy_, min_dxy2, dt, dt_, Λ_m, hr, zb, n, Ψ, Σ, ub, lr
 """
 macro Res_ϕ(ix, iy) esc(:(  ice_mask[$ix, $iy] == 1 ? (                                                      # only calculate at points with non-zero ice thickness
-                                                # - Ψ * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) * dt_                                                                # dϕ/dt
+                                                 - Ψ * (ϕ[$ix, $iy] - ϕ_old[$ix, $iy]) * dt_                                                                # dϕ/dt
                                                  - ( (@qx($ix, $iy) - @qx($ix-1, $iy)) * dx_ + (@qy($ix, $iy) - @qy($ix, $iy-1)) * dy_ )    # divergence
                                                  - (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))                                                                          # dh/dt
                                                  + Λ_m[$ix, $iy]                                                                                            # source term Λ * m
@@ -106,7 +106,7 @@ Calculate residual of h; input coordinates on ϕ/h grid.
 Needs access to ϕ, h, h_old, H, dt_, ub, lr, hr, zb, n, Σ, Γ
 """
 macro Res_h(ix, iy) esc(:(  ice_mask[$ix, $iy] == 1 ? (
-                                                # - (h[$ix, $iy] - h_old[$ix, $iy]) * dt_ +
+                                                 - (h[$ix, $iy] - h_old[$ix, $iy]) * dt_ +
                                                  (Σ * @vo($ix, $iy) - Γ * @vc($ix, $iy))
                                                 ) : 0.0
 )) end
@@ -329,7 +329,7 @@ Run the model with scaled parameters.
     A_eff = (5+10)/1e9*nx*ny*sizeof(Float64)   # effective main memory access per iteration [GB];
                                                # 5 write arrays (dϕ_dτ, ϕ2, dh_dτ, h2, d_eff)
                                                # 10 read arrays (ϕ, ϕ_old, dϕ_dτ, h, h_old, dh_dτ, H, zb, m, d_eff)
-    t_it  = t_toc/(ittot-10)                   # execution time per iteration, s
+    t_it  = t_toc/(ittot-warmup)               # execution time per iteration, s
     T_eff = A_eff/t_it                         # effective memory throughput, GB/s
     if do_print @printf("Time = %1.3f sec, T_eff = %1.1f GB/s, iterations total = %d, (nx, ny) = (%d, %d)\n", t_toc, round(T_eff, sigdigits=3), ittot, nx, ny) end
 

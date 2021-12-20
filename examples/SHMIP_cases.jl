@@ -6,12 +6,11 @@ using SheetModel, Parameters, Infiltrator
 using PyPlot
 const S = SheetModel
 
-s_per_day  = 24 * 60 * 60
-s_per_year = 365 * s_per_day
+const day  = 24 * 60 * 60
+const year = 365day
 
 # water input function for suite D
 function make_runoff_fct(zs, DT)
-    year  = 31536000.0   # number of seconds per year
     lapse = -0.0075      # lapse rate, K/m
     DDF   = 0.01 / 86400 # degree day factor, m/(K*s)
     basal = 7.93e-11     # basal melt rate, m/s, equal to the source of scenario A1
@@ -121,7 +120,7 @@ function plot_output(xc, yc, H, ϕ, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, err
 end
 
 function run_SHMIP(;test_case="A1", nx=64, ny=32, itMax=10^7, tol=1e-6, make_plot=false, update_h_only=false, do_print=true, warmup=0,
-                   dt=8e3*s_per_day, tsteps=1, γ_ϕ= 0.8, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6)      # parameters for pseudo-transient time stepping
+                   dt=1e7day, tsteps=1, γ_ϕ= 0.8, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6)      # parameters for pseudo-transient time stepping
 
     # suite A: use different steady and spatially uniform water inputs
     runoff = Dict("A1" => (x, y, t) -> 7.93e-11,
@@ -131,11 +130,11 @@ function run_SHMIP(;test_case="A1", nx=64, ny=32, itMax=10^7, tol=1e-6, make_plo
                   "A5" => (x, y, t) -> 4.5e-8,
                   "A6" => (x, y, t) -> 5.79e-7,
                   # suite E
-                  "E1"  => (x, y, t) -> 1.158e-6,
-                  "E2"  => (x, y, t) -> 1.158e-6,
-                  "E3"  => (x, y, t) -> 1.158e-6,
-                  "E4"  => (x, y, t) -> 1.158e-6,
-                  "E5"  => (x, y, t) -> 1.158e-6
+                  "E1"  => (x, y, t) -> 1.158e-6, # 5e-10
+                  "E2"  => (x, y, t) -> 1.158e-6, # 5e-10
+                  "E3"  => (x, y, t) -> 1.158e-6, # 5e-10
+                  "E4"  => (x, y, t) -> 1.158e-6, # 5e-10
+                  "E5"  => (x, y, t) -> 1.158e-6  # 5e-10
               )
 
     # suite D: seasonally changing water input with constant shift DT

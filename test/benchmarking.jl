@@ -102,6 +102,6 @@ for set in keys(test_sets)
 end
 
 # save to file
-jldopen("test/bm_results2.jld2", "a+") do file
+jldopen("test/bm_results.jld2", "a+") do file
     file[unitname] = dic
 end
