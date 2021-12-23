@@ -71,5 +71,5 @@ function run_example(;dt,
     #end
 end
 
-run_example(dt=1e8, tsteps=1, Nx=64, Ny=64, plotting=false)
+run_example(dt=1e8, tsteps=1, Nx=1024, Ny=1024, plotting=false)
 #run_example(dt=2e7, tsteps=5, plotting=true)

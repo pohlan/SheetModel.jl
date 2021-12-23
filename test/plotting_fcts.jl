@@ -1,7 +1,7 @@
 using JLD2, PyPlot, LaTeXStrings, Parameters, DataFrames, NetCDF, Statistics, SmoothingSplines
 
 rcParams = PyPlot.PyDict(PyPlot.matplotlib."rcParams")
-rcParams["font.size"] = 27
+rcParams["font.size"] = 30
 
 L2D = PyPlot.matplotlib.lines.Line2D
 
@@ -80,14 +80,22 @@ function shmip_results(case, model, x)
     coords1 = ncread(path * case * "_" * model * ".nc", "coords1")
     x1 = coords1[:, 1]
     y1 = coords1[:, 2]
-    i_cross = abs.(mean(y1).-y1) .< 30
+    i_cross = abs.(mean(y1).-y1) .< 10
 
-    h_cross = h_shmip[i_cross]
-    ϕ_cross = ϕ_shmip[i_cross]
+    if model == "jsb"
+        h_shmip = h_shmip[:,end]
+        ϕ_shmip = ϕ_shmip[:,end]
+    end
+
+    #else
+        h_cross = vec(Float64.(h_shmip[i_cross]))
+        ϕ_cross = vec(Float64.(ϕ_shmip[i_cross]))
+        x1 = x1[i_cross]
+    #end
 
     # get an interpolated cross-section averaged over all y coordinates
-    spl_h = fit(SmoothingSpline, x1[i_cross], vec(h_cross), 250.0) # λ=250.0
-    spl_ϕ = fit(SmoothingSpline, x1[i_cross], vec(ϕ_cross), 250.0)
+    spl_h = fit(SmoothingSpline, x1, h_cross, 250.0) # λ=250.0
+    spl_ϕ = fit(SmoothingSpline, x1, ϕ_cross, 250.0)
     ϕ_ref = predict(spl_ϕ, x)
     h_ref = predict(spl_h, x)
     return ϕ_ref, h_ref
@@ -96,7 +104,7 @@ end
 function plot_error()
     inout = load("test/error_count.jld2", "inout")
     lw = 2.5
-    figure(figsize=(13,10))
+    figure(figsize=(15,10))
     for (n, ((inputs, outputs), color)) in enumerate(zip(inout, ["blue", "purple"]))
         @unpack ϕ, iters, errs_ϕ, errs_h = outputs
         nx, ny = size(ϕ)
@@ -113,7 +121,7 @@ function plot_error()
     end
 end
 
-function plot_fieldresults()
+function plot_fieldresults(ref_model)
     bm = load("test/bm_results.jld2")
 
     key = "A-suite"
@@ -123,28 +131,49 @@ function plot_fieldresults()
     tcs = bm[unit][key].test_case
     xs     = LinRange(0, 100e3, length(ϕs[1]))
 
-    fig, axs = subplots(1, 2, figsize=(20,12), gridspec_kw=Dict(:wspace=>0.4, :hspace=>0.3))
+    fig, axs = subplots(2, 2, figsize=(24,18), gridspec_kw=Dict(:wspace=>0.4, :hspace=>0.3))
     lw = 1.5
     lw_ref = 2
 
     custom_legend = [L2D([0], [0], color="black", lw=lw_ref)]
 
+    colors = Dict("A1" => "gold",
+                  "A2" => "orange",
+                  "A3" => "indianred",
+                  "A4" => "blueviolet",
+                  "A5" => "royalblue"
+    )
+
     for (n, (ϕ, h, tc)) in enumerate(zip(ϕs, hs, tcs))
-        ϕ_ref, h_ref = shmip_results(tc, "jd", xs)
+        ϕ_ref, h_ref = shmip_results(tc, ref_model, xs)
 
-        axs[1].plot(xs.*1e-3, ϕ, zorder=2; lw)
-        axs[1].plot(xs.*1e-3, ϕ_ref, color="black", zorder=1; lw=lw_ref)
+        axs[1].plot(xs.*1e-3, ϕ./1e6, color=colors[tc], zorder=2; lw)
+        axs[1].plot(xs.*1e-3, ϕ_ref./1e6, color="black", zorder=1; lw=lw_ref)
         axs[1].set_xlabel("x-coordinate (km)", labelpad=10)
-        axs[1].set_ylabel("ϕ (Pa)", labelpad=10)
-        axs[1].legend(custom_legend, ["Reference ('jd')"], fontsize="small")
-        axs[1].text(-0.2, 1., L"\bf{a}", transform=axs[1].transAxes, ha="right", va="top", fontsize=27)
+        axs[1].set_ylabel("ϕ (MPa)", labelpad=10)
+        axs[1].legend(custom_legend, ["Reference ('" * ref_model * "')"], fontsize="small")
+        axs[1].text(-0.2, 1., L"\bf{a}", transform=axs[1].transAxes, ha="right", va="top", fontsize=30)
 
-        axs[2].plot(xs.*1e-3, h, label=tc, zorder=2; lw)
-        axs[2].plot(xs.*1e-3, h_ref, color="black", zorder=1; lw=lw_ref)
+        axs[2].plot(xs.*1e-3, abs.(ϕ_ref.-ϕ)./1e6, label=tc, color=colors[tc], zorder=1; lw=lw_ref)
+        axs[2].set_yscale("log")
         axs[2].set_xlabel("x-coordinate (km)", labelpad=10)
-        axs[2].set_ylabel("h (m)", labelpad=10)
-        axs[2].legend(title="GPU sheet model", fontsize="small")
-        axs[2].text(-0.2, 1., L"\bf{b}", transform=axs[2].transAxes, ha="right", va="top", fontsize=27)
+        axs[2].set_ylabel(L"$|ϕ_\mathrm{ref} - ϕ_\mathrm{test}|$ (MPa)", labelpad=10)
+        axs[2].legend(fontsize="small")
+        axs[2].text(-0.2, 1., L"\bf{c}", transform=axs[2].transAxes, ha="right", va="top", fontsize=30)
+
+        axs[3].plot(xs.*1e-3, h, label=tc, color=colors[tc], zorder=2; lw)
+        axs[3].plot(xs.*1e-3, h_ref, color="black", zorder=1; lw=lw_ref)
+        axs[3].set_xlabel("x-coordinate (km)", labelpad=10)
+        axs[3].set_ylabel("h (m)", labelpad=10)
+        axs[3].legend(title="GPU sheet model", fontsize="small")
+        axs[3].text(-0.2, 1., L"\bf{b}", transform=axs[3].transAxes, ha="right", va="top", fontsize=30)
+
+        axs[4].plot(xs.*1e-3, abs.(h_ref.-h), color=colors[tc], label=tc, zorder=2; lw)
+        axs[4].set_yscale("log")
+        axs[4].set_xlabel("x-coordinate (km)", labelpad=10)
+        axs[4].set_ylabel(L"$|h_\mathrm{ref} - h_\mathrm{test}|$ (m)", labelpad=10)
+        #axs[4].legend(title="GPU sheet model", fontsize="small")
+        axs[4].text(-0.2, 1., L"\bf{d}", transform=axs[4].transAxes, ha="right", va="top", fontsize=30)
     end
 end
 
@@ -216,7 +245,7 @@ function plot_benchmarks()
         axs[1].plot(glads[k].dof, glads[k].wt, marker="o", ls=get_ls(k), color="purple", label="GlaDS " * k; lw, ms)
         axs[1].legend()
     end
-    axs[1].text(-0.2, 1., L"\bf{a}", transform=axs[1].transAxes, ha="right", va="top", fontsize=27)
+    axs[1].text(-0.2, 1., L"\bf{a}", transform=axs[1].transAxes, ha="right", va="top", fontsize=30)
 
     #            T_eff        #
     # ------------------------#
@@ -238,7 +267,7 @@ function plot_benchmarks()
     axs[2].hlines(900, dof[1], dof[end], color=colors["node35.octopoda_GPU"], ls=":", label="Tesla V100 bandwidth"; lw)
     axs[2].hlines(448, dof[1], dof[end], color=colors["achtzack01_GPU"], ls=":", label="RTX2070 bandwidth"; lw)
     axs[2].legend(handlelength=4, fontsize="small",bbox_to_anchor=(1.1,1), loc="upper left")
-    axs[2].text(-0.2, 1., L"\bf{b}", transform=axs[2].transAxes, ha="right", va="top", fontsize=27)
+    axs[2].text(-0.2, 1., L"\bf{b}", transform=axs[2].transAxes, ha="right", va="top", fontsize=30)
 
     axs[3].axis("off") # trick to make legend fit in the figure
 end
