@@ -11,16 +11,24 @@ To see the plots, one must run the script from the Julia REPL:
 ../SheetModel.jl$ julia -t16
 julia> include("examples/run_SHMIP.jl")
 ```
-(Note: I don't know yet how this works with -gpu as this is an input to the script and not to julia in general.)
+(Note: I don't know yet how this works with -gpu as this is an input to the script and not to julia in general. One can manually set const USE_GPU = true in `src/SheetModel.jl`.)
 
 To get optimal performance, one can replace `julia` by `julia -O3 --check-bounds=no`.
 
-### Benchmark the current version
-Execute the script `test/benchmarking.jl`, in the same manner as above.
-This script will automatically call `test/plot_benchmarks.jl`, which produces Unicode plots of all the results from the current commit. Since these plots are Unicode they can also be shown when the script is called from the shell.
-If the benchmarking has already been done and one just wants to plot the results, `test/plot_benchmarks.jl` can be executed directly.
-
 ### Where to find what
-All the physics and numerics of the model is described in `src/modelonly.jl`.
+**src/**
+- All the physics and numerics of the model is described in `src/modelonly.jl`.
+- Helper functions defining struct types, performing the scaling etc. are in `src/helpers.jl`
 
-**Documentation** can be found at https://github.com/pohlan/MA-notes. In particular, the `spatial_discretisation.tex` explains which grids are used, how derivatives, gradients etc. are discretised and how boundary conditions are imposed.
+**examples/**
+- `examples/run_SHMIP.jl` calls `examples/SHMIP_cases.jl`, where all the SHMIP cases are defined.
+- Note that `examples/Antarctica_case.jl` and `examples/minimal_example` are not working currently.
+
+**test/**
+- `test/runtests.jl` tests whether the current implementation agrees with a reference solution that has been saved using `test/test_references.jl` in an earlier commit
+- `test/benchmarking.jl` produces the results for Fig. 3.2 and 3.4 in the thesis
+- `test/compare_params.jl` performs a systematic search of gamma and dtau_h parameter space
+- `test/thesis_results.jl` calls the plotting functions defined in `test/plotting_fcts.jl` to produce Figures 3.2, 3.3 and 3.4 from the thesis
+
+### Documentation
+The thesis can be found here https://github.com/pohlan/MA-notes/tree/main/main_document

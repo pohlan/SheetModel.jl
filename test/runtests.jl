@@ -18,20 +18,20 @@ h_test = Dict()
 δy     = Dict()
 
 # A1 test case: sqrt geometry
-inputs, outputs = run_SHMIP(test_case="A1", nx=128, ny=128, dt = 1e9,
-                            γ_ϕ= 0.9, γ_h=0.8, dτ_ϕ_=1.0, dτ_h= 6e-6)
+inputs, outputs = run_SHMIP(test_case="A1", nx=64, ny=32, dt = 1e9,
+                            γ_ϕ= 0.8, γ_h=0.8, dτ_ϕ_=1.0, dτ_h= 1e-5)
 ϕ_test["A1"] = outputs.ϕ
 h_test["A1"] = outputs.h
-δx["A1"]     = fld((inputs.input_params.nx-3), (size(ϕ_ref["A1"], 1) - 1))
-δy["A1"]     = fld((inputs.input_params.ny-3), (size(ϕ_ref["A1"], 2) - 1))
+δx["A1"]     = fld((size(outputs.h, 1)-3), (size(ϕ_ref["A1"], 1) - 1))
+δy["A1"]     = fld((size(outputs.h, 2)-3), (size(ϕ_ref["A1"], 2) - 1))
 
 # E1 test case: valley geometry
 #inputs, outputs = run_SHMIP(test_case="E1", nx=256, ny=256, dt = 1e9,
 #                            γ_ϕ= 0.7, γ_h=0.5, dτ_ϕ_= 1.0, dτ_h= 7e-4)
 #ϕ_test["E1"] = outputs.ϕ
 #h_test["E1"] = outputs.h
-#δx["E1"]     = fld((inputs.input_params.nx-3), (size(ϕ_ref["A1"], 1) - 1))
-#δy["E1"]     = fld((inputs.input_params.ny-3), (size(ϕ_ref["A1"], 2) - 1))
+#δx["E1"]     = fld((size(outputs.h, 1)-3), (size(ϕ_ref["A1"], 1) - 1))
+#δy["E1"]     = fld((size(outputs.h, 2)-3), (size(ϕ_ref["A1"], 2) - 1))
 
 # test whether the runs agree with the references
 @testset "Model runs" begin

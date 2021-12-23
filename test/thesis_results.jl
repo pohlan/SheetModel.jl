@@ -1,6 +1,6 @@
 # Reproducing the figures from the Master thesis
 
-## produce the results for Fig. 3.2 and 3.5 (takes > 1h)
+## produce the results for Fig. 3.2 and 3.4 (takes > 1h)
 #include(joinpath(@__DIR__, "../test/benchmarking.jl"))
 
 ## produce the results for Fig. 3.3

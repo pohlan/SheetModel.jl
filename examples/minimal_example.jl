@@ -5,14 +5,14 @@
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "../"))
-using SheetModel, Parameters, ProfileView, ParallelStencil # for ProfileView, gtk needs to be installed
+using SheetModel, Parameters, ParallelStencil # for ProfileView, gtk needs to be installed
 const S = SheetModel
 
 function run_example(;dt,
-                      Nx, Ny,
-                      tsteps,               # number of timesteps
-                      plotting=true)     # whether to produce plots from model output
-    input_params = S.Para(
+                      nx, ny,
+                      tsteps)         # number of timesteps
+
+    input_params = S.model_input(
             g     = 1.0,              # gravitational acceleration
             ρw    = 1.0,              # water density
             ρi    = 0.91,             # ice density
@@ -28,8 +28,8 @@ function run_example(;dt,
 
             xrange = (0.0, 1.0),  # domain length in x-direction
             yrange = (0.0, 1.5),  # domain length in y-direction
-            nx = Nx,
-            ny = Ny,
+            nx = nx,
+            ny = ny,
 
             calc_zs =  (x, y) -> 0.5 * sqrt(x+0.05),    # surface elevation (SHMIP)
             calc_zb = (x, y) -> 0.0,                    # bed elevation
@@ -45,21 +45,34 @@ function run_example(;dt,
             dτ_h = 3e-3,   # scaling factor for dτ_h
 
             # Dimensionless numbers
+            Ψ   = 1.0,
             Σ   = 2.0,
             Γ   = 6e3,
             Λ   = 3e-3
         )
 
-    ϕ_init = 0.5 * ones(Nx, Ny)
-    h_init = 0.5 * ones(Nx, Ny)
+    calc_Λ_m! = @parallel_indices (ix,iy)   function calc_Λ_m!(Λ_m, Λ, t)
+                                                if (ix <= size(Λ_m, 1) && iy <= size(Λ_m, 2))
+                                                    Λ_m[ix, iy] = Λ * 1
+                                                end
+                                                return
+                                            end
+
+    ϕ_init = 0.5 * ones(nx, ny)
+    h_init = 0.5 * ones(nx, ny)
+
+    ice_mask = ϕ_init .> 0.
+    bc_diric    = falses(nx, ny); bc_diric[2, :] .= true
+    bc_no_xflux = diff(ice_mask, dims=1) .!= 0
+    bc_no_yflux = diff(ice_mask, dims=2) .!= 0
 
     #ProfileView.@profview S.runthemodel_scaled(input_params, ϕ_init, h_init, S.CuParams(nx=Nx, ny=Ny), 1000) # for profiling
     # In VSCode, ProfileView.xx is necessary (https://github.com/timholy/ProfileView.jl/pull/172/commits/5ea809fe6409a41b96cfba0800b78d708f1ad604)
 
-    output = S.runthemodel_scaled(input_params, ϕ_init, h_init, 1000, 1)
+    inputs, outputs = S.runthemodel_scaled(scaled_params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, do_print=true, warmup=0)
 
     # plot output
-    #@unpack xc, yc, H = input_params
+    #@unpack xc, yc, H = params_struct
     #@unpack N, ϕ, h, qx, qy,
     #        ittot, iters, Err_ϕ, Err_h, Res_ϕ, Res_h,
     #        errs_ϕ, errs_h, errs_ϕ_rel, errs_h_rel,
@@ -71,5 +84,5 @@ function run_example(;dt,
     #end
 end
 
-run_example(dt=1e8, tsteps=1, Nx=1024, Ny=1024, plotting=false)
-#run_example(dt=2e7, tsteps=5, plotting=true)
+run_example(dt=1e8, tsteps=1, nx=1024, ny=1024)
+#run_example(dt=2e7, tsteps=5)
