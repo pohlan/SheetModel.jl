@@ -141,17 +141,6 @@ Used for error calculation and only to be carried out every xx iterations, e.g. 
     return
 end
 
-@parallel_indices (ix, iy) function update_h_only!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                                   dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, A, n, H, zb, small,
-                                                   dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
-    nx, ny = size(ϕ)
-    if (1 < ix < nx && 1 < iy < ny)
-        dh_dτ[ix, iy] = @Res_h(ix, iy) + γ_h * dh_dτ[ix, iy]
-        h2[ix, iy] = h[ix, iy] + dτ_h * dh_dτ[ix, iy]
-    end
-    return
-end
-
 """
 Update the fields of ϕ and h using the pseudo-transient method with damping.
 """
@@ -228,9 +217,9 @@ end
 """
 Run the model with scaled parameters.
 """
-@views function runthemodel_scaled(params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only, do_print, warmup)
+@views function runthemodel_scaled(params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, do_print, warmup)
     @unpack ev, n, A, Ψ, Σ, Γ, Λ, dx, dy, k, α, β,
-            H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_ = params
+            H, zb, ub, hr, lr, dt, ttot, tol, itMax, γ_ϕ, γ_h, dτ_ϕ_, dτ_h = params
 
     # Pre-calculate reciprocals for better performance
     min_dxy2 = min(dx, dy)^2
@@ -269,27 +258,14 @@ Run the model with scaled parameters.
         # Pseudo-transient iteration
         while !(max(err_ϕ, err_h) < tol) && iter<itMax && !any(isnan.([err_ϕ, err_h]))
 
-            if  err_h > 1e-3 && update_h_only # once update_h_only = false it cannot go back
-                dτ_h = 1e-3
-            else
-                dτ_h = dτ_h_
-                update_h_only = false
-            end
-
             # don't consider first ten iterations for performance measure
             if (iter == warmup) t_tic = Base.time() end
 
-            if update_h_only
-                @parallel update_h_only!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
+            # update ϕ and h
+            @parallel update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Σ, Γ, ub, lr, hr, n, H, zb, small, bc_no_xflux, bc_no_yflux)
+            @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
                                          dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, A, n, H, zb, small,
                                          dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
-            else
-                # update ϕ and h
-                @parallel update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Σ, Γ, ub, lr, hr, n, H, zb, small, bc_no_xflux, bc_no_yflux)
-                @parallel update_fields!(ϕ, ϕ2, ϕ_old, h, h2, h_old, Λ_m, d_eff, iter, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
-                                         dx_, dy_, min_dxy2, k, α, β, dt, dt_, ub, lr, hr, Ψ, Σ, Γ, A, n, H, zb, small,
-                                         dϕ_dτ, dh_dτ, γ_ϕ, γ_h, dτ_h, dτ_ϕ_)
-            end
 
             # pointer swap
             ϕ, ϕ2 = ϕ2, ϕ
@@ -298,7 +274,7 @@ Run the model with scaled parameters.
             iter += 1
 
             # determine the errors
-            if (update_h_only || iter % 1000 == 0) && itMax > 10^4     # only calculate errors every 1000 time steps
+            if iter % 1000 == 0 && itMax > 10^4     # only calculate errors every 1000 time steps
                                                                        # and if itMax is high, i.e. if convergence is the goal
                 # update the residual arrays
                 @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
@@ -344,7 +320,7 @@ end
 """
 Scale the parameters and call the model run function.
 """
-@views function runthemodel(;params_struct::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only, do_print=true, warmup=10)
+@views function runthemodel(;params_struct::model_input, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, do_print=true, warmup=10)
     scaled_params, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, ϕ_, N_, h_, q_ = scaling(params_struct, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux)
     calc_Λ_m! = @parallel_indices (ix,iy)   function calc_Λ_m!(Λ_m, Λ, t)
                                                 if (ix <= size(Λ_m, 1) && iy <= size(Λ_m, 2))
@@ -352,7 +328,7 @@ Scale the parameters and call the model run function.
                                                 end
                                                 return
                                             end
-    output = runthemodel_scaled(scaled_params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only, do_print, warmup)
+    output = runthemodel_scaled(scaled_params, ϕ_init, h_init, calc_Λ_m!, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, do_print, warmup)
     output_descaled = descale(output, N_, ϕ_, h_, q_)
     return output_descaled
 end

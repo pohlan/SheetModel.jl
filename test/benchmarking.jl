@@ -27,21 +27,21 @@ test_sets = Dict(# test case A1, 900 iterations not reaching steady-state, no er
                                 ],
 
                 # test case A1, going into steady state; for wall time/#it vs. dof plot
-                "std-state" => [(nx=32,  ny=32,  dτ_h_=1e-5),
-                                (nx=64,  ny=32,  dτ_h_=1e-5),
-                                (nx=64,  ny=64,  dτ_h_=1e-5),
-                                (nx=128, ny=64,  dτ_h_=1e-5),
-                                (nx=128, ny=128, dτ_h_=7e-6),
-                                (nx=256, ny=128, dτ_h_=7e-6),
-                                (nx=512, ny=256, dτ_h_=6e-6)
+                "std-state" => [(nx=32,  ny=32,  dτ_h=1e-5),
+                                (nx=64,  ny=32,  dτ_h=1e-5),
+                                (nx=64,  ny=64,  dτ_h=1e-5),
+                                (nx=128, ny=64,  dτ_h=1e-5),
+                                (nx=128, ny=128, dτ_h=7e-6),
+                                (nx=256, ny=128, dτ_h=7e-6),
+                                (nx=512, ny=256, dτ_h=6e-6)
                                 ],
 
                 # run different shmip cases to compare with reference from other models
-                "A-suite"   => [(test_case="A1", dτ_h_=1e-5),
-                                (test_case="A2", dτ_h_=1e-5),
-                                (test_case="A3", dτ_h_=1e-5),
-                                (test_case="A4", dτ_h_=1e-5),
-                                (test_case="A5", dτ_h_=1e-5)
+                "A-suite"   => [(test_case="A1", dτ_h=1e-5),
+                                (test_case="A2", dτ_h=1e-5),
+                                (test_case="A3", dτ_h=1e-5),
+                                (test_case="A4", dτ_h=1e-5),
+                                (test_case="A5", dτ_h=1e-5)
                                 ]
 )
 

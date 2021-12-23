@@ -42,7 +42,7 @@ function run_example(;dt,
             γ_ϕ  = 0.6,     # damping parameter for ϕ
             γ_h  = 0.8,     # damping parameter for h
             dτ_ϕ_ = 1.0,    # scaling factor for dτ_ϕ
-            dτ_h_ = 3e-3,   # scaling factor for dτ_h
+            dτ_h = 3e-3,   # scaling factor for dτ_h
 
             # Dimensionless numbers
             Σ   = 2.0,

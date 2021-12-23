@@ -119,8 +119,8 @@ function plot_output(xc, yc, H, ϕ, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, err
     legend()
 end
 
-function run_SHMIP(;test_case="A1", nx=64, ny=32, itMax=10^7, tol=1e-6, make_plot=false, update_h_only=false, do_print=true, warmup=0,
-                   dt=1e20day, tsteps=1, γ_ϕ= 0.8, γ_h=0.8, dτ_ϕ_=1.0, dτ_h_=6e-6)      # parameters for pseudo-transient time stepping
+function run_SHMIP(;test_case="A1", nx=64, ny=32, itMax=10^7, tol=1e-6, make_plot=false, do_print=true, warmup=0,
+                   dt=1e20day, tsteps=1, γ_ϕ= 0.8, γ_h=0.8, dτ_ϕ_=1.0, dτ_h=6e-6)      # parameters for pseudo-transient time stepping
 
     # suite A: use different steady and spatially uniform water inputs
     runoff = Dict("A1" => (x, y, t) -> 7.93e-11,
@@ -225,10 +225,10 @@ function run_SHMIP(;test_case="A1", nx=64, ny=32, itMax=10^7, tol=1e-6, make_plo
     bc_no_yflux = diff(ice_mask, dims=2) .!= 0
 
     # struct of input parameters
-    params_struct = S.model_input(;H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, tol, γ_ϕ, γ_h, dτ_ϕ_, dτ_h_, ev)
+    params_struct = S.model_input(;H, zb, Lx, Ly, dx, dy, ttot, dt, itMax, tol, γ_ϕ, γ_h, dτ_ϕ_, dτ_h, ev)
 
     # call the SheetModel
-    input = (;params_struct, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, update_h_only, do_print, warmup)
+    input = (;params_struct, ϕ_init, h_init, calc_m, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux, do_print, warmup)
     output = runthemodel(;input...);
 
     # plotting

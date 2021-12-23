@@ -40,7 +40,7 @@ Create struct including all model parameters, physical and numerical
     γ_ϕ   = 1e-3              # damping parameter for ϕ update
     γ_h   = 0.8               # damping parameter for h update
     dτ_ϕ_ = 1e6               # scaling factor for dτ_ϕ
-    dτ_h_ = 50.0              # scaling factor for dτ_h
+    dτ_h = 50.0              # scaling factor for dτ_h
 
     # Dimensionless numbers
     Ψ   = NaN
