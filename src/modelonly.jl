@@ -259,7 +259,7 @@ Run the model with scaled parameters.
         while !(max(err_ϕ, err_h) < tol) && iter<itMax && !any(isnan.([err_ϕ, err_h]))
 
             # don't consider first ten iterations for performance measure
-            if (iter == warmup) t_tic = Base.time() end
+            if (iter == warmup && tstep==0) t_tic = Base.time() end
 
             # update ϕ and h
             @parallel update_deff!(d_eff, ϕ, h, dx_, dy_, k, α, β, dt, Σ, Γ, ub, lr, hr, n, H, zb, small, bc_no_xflux, bc_no_yflux)
@@ -274,7 +274,7 @@ Run the model with scaled parameters.
             iter += 1
 
             # determine the errors
-            if iter % 1000 == 0 && itMax > 10^4     # only calculate errors every 1000 time steps
+            if iter % 100 == 0 && itMax > 10^4     # only calculate errors every 1000 time steps
                                                                        # and if itMax is high, i.e. if convergence is the goal
                 # update the residual arrays
                 @parallel residuals!(ϕ, ϕ_old, h, h_old, Res_ϕ, Res_h, Λ_m, d_eff, ice_mask, bc_diric, bc_no_xflux, bc_no_yflux,
@@ -295,7 +295,8 @@ Run the model with scaled parameters.
 
 
         end
-        ittot += iter; tstep += 1; t += dt
+        ittot += iter; tstep += 1; t += dt; err_h=1e10; err_ϕ=1e10
+        println(tstep)
 
         @parallel old2new!(ϕ, ϕ_old, h, h_old)
     end

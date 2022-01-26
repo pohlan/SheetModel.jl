@@ -120,7 +120,7 @@ function plot_output(xc, yc, H, ϕ, h, qx, qy, Res_ϕ, Res_h, iters, errs_h, err
 end
 
 function run_SHMIP(;test_case="A1", nx=64, ny=32, itMax=10^7, tol=1e-6, make_plot=false, do_print=true, warmup=0,
-                   dt=1e20day, tsteps=1, γ_ϕ= 0.8, γ_h=0.8, dτ_ϕ_=1.0, dτ_h=6e-6)      # parameters for pseudo-transient time stepping
+                   ttot=1e5day, tsteps=1, γ_ϕ= 0.8, γ_h=0.8, dτ_ϕ_=1.0, dτ_h=6e-6)      # parameters for pseudo-transient time stepping
 
     # suite A: use different steady and spatially uniform water inputs
     runoff = Dict("A1" => (x, y, t) -> 7.93e-11,
@@ -204,7 +204,8 @@ function run_SHMIP(;test_case="A1", nx=64, ny=32, itMax=10^7, tol=1e-6, make_plo
     yc                = LinRange(y1-dy, yend+dy, ny)
     zb                = ghost(topo.bed.(xc, yc'))
     H                 = ghost(pos.(topo.surf.(xc, yc') .- zb))
-    ttot              = tsteps * dt
+    #ttot              = tsteps * dt
+    dt                = ttot
 
     # definition of function calc_m (calculating the source term)
     # (doing calc_m(ix, iy, t) =  water_input(xc[ix], yc[iy], t) directly gives an error as xc and yc are not accessible anymore later)
@@ -215,8 +216,10 @@ function run_SHMIP(;test_case="A1", nx=64, ny=32, itMax=10^7, tol=1e-6, make_plo
     calc_m = make_calc_m(xc, yc, water_input)
 
     # initial conditions
-    ϕ_init = 100. * ones(nx, ny)
-    h_init = 0.04 * ones(nx, ny)
+    h0(x, y) = 0.05 * exp(-(x-dx)^2/(2*0.07Lx^2))
+    h_init = h0.(xc, yc')
+    #h_init = 0.04 * ones(nx, ny)
+    ϕ_init = 0.5 * 910 * 9.81 * H
 
     # masks for ice domain and boundary conditions
     ice_mask    = H .> 0.
