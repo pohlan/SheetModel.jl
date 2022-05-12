@@ -36,7 +36,7 @@ h_test["A1"] = outputs.h
 # test whether the runs agree with the references
 @testset "Model runs" begin
     for test_case in keys(ϕ_test)
-        @test all((ϕ_test[test_case][2:δx[test_case]:end-1, 2:δy[test_case]:end-1] .- ϕ_ref[test_case]) ./ (ϕ_ref[test_case] .+ eps(Float64)) .< 1e-2) # add an eps(Float64) in case ϕ_ref is zero
-        @test all((h_test[test_case][2:δx[test_case]:end-1, 2:δy[test_case]:end-1] .- h_ref[test_case]) ./ (h_ref[test_case] .+ eps(Float64)) .< 1e-2)
+        @test all(abs.((ϕ_test[test_case][2:δx[test_case]:end-1, 2:δy[test_case]:end-1] .- ϕ_ref[test_case]) ./ (ϕ_ref[test_case] .+ eps(Float64))) .< 1e-2) # add an eps(Float64) in case ϕ_ref is zero
+        @test all(abs.((h_test[test_case][2:δx[test_case]:end-1, 2:δy[test_case]:end-1] .- h_ref[test_case]) ./ (h_ref[test_case] .+ eps(Float64))) .< 1e-2)
     end
 end
